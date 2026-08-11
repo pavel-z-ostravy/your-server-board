@@ -1,43 +1,43 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="images/banner_light@2x.png">
-    <img src="images/banner_dark@2x.png" width="65%">
-  </picture>
+  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-blue"></a>
+  &nbsp;
+  <a href="https://github.com/gethomepage/homepage"><img alt="Fork of gethomepage/homepage" src="https://img.shields.io/badge/fork%20of-gethomepage%2Fhomepage-7c6ff7"></a>
+  &nbsp;
+  <a href="https://github.com/pavel-z-ostravy/your-server-board/commits/dev"><img alt="Last commit" src="https://img.shields.io/github/last-commit/pavel-z-ostravy/your-server-board"></a>
 </p>
 
-<p align="center">
-  A modern, <em>fully static, fast</em>, secure <em>fully proxied</em>, highly customizable application dashboard with integrations for over 100 services and translations into multiple languages. Easily configured via YAML files or through docker label discovery.
-</p>
+# your-server-board
 
-<p align="center">
-  <img src="images/1.png?v=2" />
-</p>
+A self-hosted homelab dashboard for Proxmox — forked from [Homepage](https://github.com/gethomepage/homepage)
+and extended with real disk-health monitoring and Proxmox backup lifecycle
+management, the two things a homelab operator actually needs from a status
+dashboard that Homepage doesn't provide out of the box. Everything Homepage
+already does — 100+ service widgets, bookmarks, search, weather, full
+theming — still works, unmodified.
 
-<p align="center">
-  <a href="https://github.com/gethomepage/homepage/actions/workflows/docker-publish.yml"><img alt="GitHub Workflow Status (with event)" src="https://img.shields.io/github/actions/workflow/status/gethomepage/homepage/docker-publish.yml"></a>
-  &nbsp;
-  <a href="https://codecov.io/gh/gethomepage/homepage"><img src="https://codecov.io/gh/gethomepage/homepage/graph/badge.svg?token=7SKFL4D9K7"/></a>
-  &nbsp;
-  <a href="https://crowdin.com/project/gethomepage" target="_blank"><img src="https://badges.crowdin.net/gethomepage/localized.svg"></a>
-  &nbsp;
-  <a href="https://discord.gg/k4ruYNrudu"><img alt="Discord" src="https://img.shields.io/discord/1019316731635834932"></a>
-  &nbsp;
-  <a href="https://gethomepage.dev/" title="Docs"><img title="Docs" src="https://github.com/gethomepage/homepage/actions/workflows/docs-publish.yml/badge.svg"/></a>
-  &nbsp;
-  <a href="https://paypal.me/phelpsben" title="Donate"><img alt="GitHub Sponsors" src="https://img.shields.io/github/sponsors/benphelps"></a>
-</p>
+License: **GPL-3.0**, inherited from upstream. See [`NOTICE.md`](NOTICE.md)
+for exactly what in this repo is original vs. derivative.
 
-# Status
+## Status
 
-This is `your-server-board`, a fork of [gethomepage/homepage](https://github.com/gethomepage/homepage), extended with a live Proxmox integration for a real homelab host.
-
-- **Foundation deployed and live.** The app is deployed as a Docker container on the target host, connected to a real Proxmox cluster via API token, and the Proxmox VE widget renders real VM/CT/CPU/memory data (not placeholder values).
-- **Restricted SSH SMART/disk client built and verified end-to-end.** `src/utils/ssh/smartClient.js` (`listBlockDevices`, `getSmartData`) has been confirmed to work from inside the running container against the real restricted-command SSH key, returning real block device and SMART data from the Proxmox host. It is not yet wired into any API route or UI — no disks/SMART feature is exposed to users yet.
-- **Not yet implemented — tracked as separate follow-up plans** (see `docs/superpowers/plans/`):
+- **Foundation deployed and live.** The app runs as a Docker container on a
+  real homelab host, connected to a real Proxmox cluster via API token, and
+  the Proxmox VE widget renders real VM/CT/CPU/memory data.
+- **Restricted SSH SMART/disk client built and verified end-to-end.**
+  `src/utils/ssh/smartClient.js` (`listBlockDevices`, `getSmartData`) is
+  confirmed working against a real restricted-command SSH key on a real
+  Proxmox host. It is not yet wired into any API route or UI — no
+  disks/SMART feature is exposed to users yet, and because nothing imports
+  it, Next.js's standalone build currently excludes it from the deployed
+  container image (expected — resolves automatically once a route imports
+  it).
+- **Not yet implemented — tracked as separate follow-up plans**
+  (see `docs/superpowers/plans/`):
   - Disks & SMART health monitoring (UI/API on top of the client above)
-  - Backup lifecycle management for Proxmox VMs/CTs
+  - Backup lifecycle management for Proxmox VMs/CTs (list/run/download/delete, retention)
+  - Quick VM/CT actions (start/stop/reboot)
   - TOTP-based 2FA login
-  - SMART/disk/backup-failure alerting and history
+  - SMART/disk/backup-failure alerting and load history
 
 ## Getting Started (your own server)
 
@@ -59,155 +59,71 @@ This is `your-server-board`, a fork of [gethomepage/homepage](https://github.com
    than guessing them.
 4. `docker compose restart`
 
-# Features
+Prefer to do it by hand instead of `./install.sh`? See
+[`deploy/SSH_SETUP.md`](deploy/SSH_SETUP.md) for the manual restricted-key
+setup, and `docker-compose.yml` + `.env.example` for the raw Docker Compose
+invocation (`docker compose up -d --build` once `.env` is filled in).
 
-With features like quick search, bookmarks, weather support, a wide range of integrations and widgets, an elegant and modern design, and a focus on performance, Homepage is your ideal start to the day and a handy companion throughout it.
+**Security note:** by default the dashboard has no login at all — anyone who
+can reach the port can use it. Homepage's own optional password gate
+(`HOMEPAGE_AUTH_ENABLED`/`HOMEPAGE_AUTH_PASSWORD`) works today; TOTP 2FA on
+top of it is planned (see Status above) but not built yet. Don't expose this
+past your LAN without at least the password gate, and ideally an
+authenticating reverse proxy or tunnel (Cloudflare Access, Authelia, etc.)
+in front of it too.
 
-- **Fast** - The site is statically generated at build time for instant load times.
-- **Secure** - All API requests to backend services are proxied, keeping your API keys hidden. Constantly reviewed for security by the community.
-- **For Everyone** - Images built for AMD64, ARM64.
-- **Full i18n** - Support for over 40 languages.
-- **Service & Web Bookmarks** - Add custom links to the homepage.
-- **Docker Integration** - Container status and stats. Automatic service discovery via labels.
-- **Service Integration** - Over 100 service integrations, including popular starr and self-hosted apps.
-- **Information & Utility Widgets** - Weather, time, date, search, and more.
-- **And much more...**
+## What this fork adds on top of Homepage
 
-## Docker Integration
+| Area | Upstream Homepage | This fork |
+|---|---|---|
+| Service widgets, bookmarks, search, theming, i18n | ✅ full support | unchanged |
+| Proxmox VM/CT status widget | ✅ read-only | unchanged (used for the live data above) |
+| Disk health (SMART) | ❌ none | restricted-SSH client built, UI planned |
+| Backup lifecycle (list/run/download/delete/retention) | ❌ none | planned |
+| VM/CT power actions | ❌ none | planned |
+| Login | optional password only | password today, TOTP 2FA planned |
+| Alerting | ❌ none | planned (SMART/disk/backup-failure via email) |
 
-Homepage has built-in support for Docker, and can automatically discover and add services to the homepage based on labels. See the [Docker Service Discovery](https://gethomepage.dev/configs/docker/#automatic-service-discovery) page for more information.
+For everything in the "unchanged" row — the config format, the 100+
+third-party service integrations, custom CSS/JS, layout options — the
+[official Homepage documentation](https://gethomepage.dev/) is accurate and
+still applies; this fork hasn't touched any of it.
 
-## Service Widgets
+## Development
 
-Homepage also has support for hundreds of 3rd-party services, including all popular \*arr apps, and most popular self-hosted apps. Some examples include: Radarr, Sonarr, Lidarr, Bazarr, Ombi, Tautulli, Plex, Jellyfin, Emby, Transmission, qBittorrent, Deluge, Jackett, NZBGet, SABnzbd, etc. As well as service integrations, Homepage also has a number of information providers, sourcing information from a variety of external 3rd-party APIs. See the [Service](https://gethomepage.dev/widgets/) page for more information.
-
-## Information Widgets
-
-Homepage has built-in support for a number of information providers, including weather, time, date, search, glances and more. System and status information presented at the top of the page. See the [Information Providers](https://gethomepage.dev/widgets/) page for more information.
-
-## Customization
-
-Homepage is highly customizable, with support for custom themes, custom CSS & JS, custom layouts, formatting, localization and more. See the [Settings](https://gethomepage.dev/configs/settings/) page for more information.
-
-# Getting Started
-
-For configuration options, examples and more, [please check out the homepage documentation](http://gethomepage.dev).
-
-## Security Notice 🔒
-
-Please note that when using features such as widgets, Homepage can access personal information (for example from your home automation system). To keep your information private, if Homepage is reachable from any untrusted network, it:
-
-1. **must** sit behind a reverse proxy (and/or VPN) that enforces authentication, TLS, and strictly validates Host headers.
-2. An optional built-in OIDC login flow or simple password login is available (opt-in) offering a simple “authenticated or not” guard.
-
-## With Docker
-
-Using docker compose:
-
-```yaml
-services:
-  homepage:
-    image: ghcr.io/gethomepage/homepage:latest
-    container_name: homepage
-    environment:
-      HOMEPAGE_ALLOWED_HOSTS: gethomepage.dev # required, may need port. See gethomepage.dev/installation/#homepage_allowed_hosts
-      PUID: 1000 # optional, your user id
-      PGID: 1000 # optional, your group id
-    ports:
-      - 3000:3000
-    volumes:
-      - /path/to/config:/app/config # Make sure your local config directory exists
-      - /var/run/docker.sock:/var/run/docker.sock:ro # optional, for docker integrations
-    restart: unless-stopped
-```
-
-or docker run:
+Next.js app, **pnpm only** (`npx only-allow pnpm` blocks npm/yarn):
 
 ```bash
-docker run --name homepage \
-  -e HOMEPAGE_ALLOWED_HOSTS=gethomepage.dev \
-  -e PUID=1000 \
-  -e PGID=1000 \
-  -p 3000:3000 \
-  -v /path/to/config:/app/config \
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  --restart unless-stopped \
-  ghcr.io/gethomepage/homepage:latest
-```
-
-## From Source
-
-First, clone the repository:
-
-```bash
-git clone https://github.com/gethomepage/homepage.git
-```
-
-Then install dependencies and build the production bundle:
-
-```bash
+git clone https://github.com/pavel-z-ostravy/your-server-board.git
+cd your-server-board
 pnpm install
-pnpm build
-```
-
-If this is your first time starting, copy the `src/skeleton` directory to `config/` to populate initial example config files.
-
-Finally, run the server in production mode:
-
-```bash
-HOMEPAGE_ALLOWED_HOSTS=gethomepage.dev:1234 pnpm start
-```
-
-# Configuration
-
-Please refer to the [homepage documentation website](https://gethomepage.dev/) for more information. Everything you need to know about configuring Homepage is there. Please read everything carefully before asking for help, as most questions are answered there or are simple YAML configuration issues.
-
-# Development
-
-Install NPM packages, this project uses [pnpm](https://pnpm.io/) (and so should you!):
-
-```bash
-pnpm install
-```
-
-Start the development server:
-
-```bash
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to start.
-
-This is a [Next.js](https://nextjs.org/) application, see their documentation for more information.
-
-# Documentation
-
-The homepage documentation is available at [https://gethomepage.dev/](https://gethomepage.dev/).
-
-Homepage uses Zensical for documentation. To run the documentation locally, first install the dependencies:
+Open [http://localhost:3000](http://localhost:3000).
 
 ```bash
-uv sync
+pnpm test     # Vitest
+pnpm build    # next build --webpack
+pnpm lint
 ```
 
-Then run the development server:
+## Support
 
-```bash
-uv run zensical serve # or build, to build the static site
-```
+Bugs or questions about this fork's Proxmox/disk/backup features:
+[open an issue](https://github.com/pavel-z-ostravy/your-server-board/issues)
+on this repo.
 
-# Support & Suggestions
+Questions about the underlying Homepage config engine, widgets, or themes
+(anything in the "unchanged" row above) are better answered by the upstream
+project directly: their
+[documentation](https://gethomepage.dev/), [Discord](https://discord.gg/k4ruYNrudu),
+and [discussions](https://github.com/gethomepage/homepage/discussions) — this
+is a small personal fork, not a general Homepage support channel.
 
-If you have any questions, suggestions, or general issues, please start a discussion on the [Discussions](https://github.com/gethomepage/homepage/discussions) page.
+## License & Attribution
 
-## Troubleshooting
-
-In addition to the docs, the [troubleshooting guide](https://gethomepage.dev/troubleshooting/) can help reveal many basic config or network issues. If you're having a problem, it's a good place to start.
-
-## Contributing & Contributors
-
-Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) file for more information.
-
-Thanks to the over 200 contributors who have helped make this project what it is today!
-
-Especially huge thanks to [@shamoon](https://github.com/shamoon), who has been the backbone of this community from the very start.
+GPL-3.0, inherited from [gethomepage/homepage](https://github.com/gethomepage/homepage)
+— see [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md). Thanks to the
+Homepage project and its 200+ contributors; this fork exists because their
+dashboard was worth building on.
