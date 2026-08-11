@@ -19,18 +19,36 @@ if [ ! -f .env ]; then
   echo "Created .env from .env.example."
 fi
 
-# shellcheck disable=SC1091
-. ./.env
+# Read just the one variable we need out of .env without sourcing it as
+# shell — .env can contain user-supplied text (see the prompt below), and
+# `. ./.env` would execute anything written there as shell code on every
+# future run, not just this one.
+YSB_ALLOWED_HOSTS="$(grep '^YSB_ALLOWED_HOSTS=' .env 2>/dev/null | tail -n1 | cut -d= -f2-)"
 
-if [ -z "${YSB_ALLOWED_HOSTS:-}" ]; then
+if [ -z "$YSB_ALLOWED_HOSTS" ]; then
   printf "Which host:port will you browse this dashboard at? (e.g. 192.168.1.50:3050): "
   read -r allowed_hosts
   if [ -z "$allowed_hosts" ]; then
     echo "YSB_ALLOWED_HOSTS is required — edit .env and re-run this script." >&2
     exit 1
   fi
+  # Reject anything outside a safe host:port allowlist before it's ever
+  # written to .env. Without this, shell metacharacters typed here would be
+  # written verbatim to .env and then executed on the *next* run if .env
+  # were ever sourced — and even with sourcing removed above, an
+  # unvalidated value could still break out of the sed substitution below
+  # (delimiter collision, `&` = whole-match in sed) or corrupt the file.
+  case "$allowed_hosts" in
+    *[!A-Za-z0-9.:,-]*)
+      echo "YSB_ALLOWED_HOSTS may only contain letters, digits, '.', ':', ',', '-' — got: $allowed_hosts" >&2
+      exit 1
+      ;;
+  esac
+  trap 'rm -f .env.bak' EXIT
   sed -i.bak "s/^YSB_ALLOWED_HOSTS=.*/YSB_ALLOWED_HOSTS=${allowed_hosts}/" .env
   rm -f .env.bak
+  trap - EXIT
+  YSB_ALLOWED_HOSTS="$allowed_hosts"
 fi
 
 mkdir -p config/ssh
@@ -48,6 +66,8 @@ if [ ! -f config/proxmox.yaml ] && [ -f src/skeleton/proxmox.yaml ]; then
   mkdir -p config
   cp src/skeleton/proxmox.yaml config/proxmox.yaml
   echo "Created config/proxmox.yaml from the template."
+elif [ -f config/proxmox.yaml ]; then
+  echo "config/proxmox.yaml already exists, skipping template copy."
 fi
 
 echo

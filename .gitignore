@@ -60,3 +60,4 @@ CLAUDE.md
 config/proxmox.yaml
 config/ssh/
 .env
+.env.bak
