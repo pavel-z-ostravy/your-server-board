@@ -12,3 +12,8 @@ export function getProxmoxConfig() {
   const configData = substituteEnvironmentVars(rawConfigData);
   return yaml.load(configData);
 }
+
+export function getSmartConfig() {
+  const config = getProxmoxConfig();
+  return config?.smart ?? null;
+}
