@@ -3,7 +3,9 @@
 This key can only run `lsblk` or `smartctl -j -a <device>` — nothing else —
 enforced server-side by a forced command, not just by client-side discipline.
 
-If you ran `./install.sh`, it already did steps 1-2 for you — skip to step 3.
+If you ran `./install.sh`, it already did step 1 for you and printed the
+step 2/3 instructions on screen — it does not copy the script or edit
+`authorized_keys` itself, so do steps 2-3 manually before continuing.
 
 1. Generate a dedicated keypair (run on your workstation, not the Proxmox host).
    Generate it under `config/ssh/` (gitignored) — not the repo root, which is
