@@ -20,6 +20,9 @@
         "minutes": "m",
         "seconds": "s"
     },
+    "auth": {
+        "signout": "Sign out"
+    },
     "widget": {
         "missing_type": "Type de widget manquant : {{type}}",
         "api_error": "Erreur API",
@@ -70,6 +73,15 @@
         "healthy": "Sain",
         "degraded": "Dégradé",
         "no_data": "Aucune données de stockage disponible"
+    },
+    "duplicati": {
+        "jobs": "Tâches",
+        "stored": "Enregistrées",
+        "lastBackup": "Dernière exécution",
+        "nextRun": "Prochaine exécution",
+        "running": "Démarré",
+        "warnings": "Avertissements",
+        "errors": "Erreurs"
     },
     "docker": {
         "rx": "Rx",
@@ -465,6 +477,11 @@
         "cpu": "CPU",
         "lxc": "LXC",
         "vms": "VMs"
+    },
+    "pulse": {
+        "nodes": "Nœuds",
+        "vms": "Machines virtuelles",
+        "lxcs": "LXCs"
     },
     "glances": {
         "cpu": "CPU",
@@ -932,6 +949,17 @@
         "mails": "Courriels",
         "storage": "Stockage"
     },
+    "maintainerr": {
+        "itemsHandled": "Articles traités",
+        "episodesHandled": "Épisodes gérés",
+        "moviesHandled": "Films manipulés",
+        "showsHandled": "Montre géré",
+        "seasonsHandled": "Saisons gérées",
+        "reclaimable": "Récupérable",
+        "movieReclaimable": "Film Reclaimable",
+        "showReclaimable": "Voir réclamable",
+        "totalCapacity": "Capacité totale"
+    },
     "netdata": {
         "warnings": "Avertissements",
         "criticals": "Urgent"
@@ -1210,5 +1238,16 @@
         "burned": "Brûlé",
         "remaining": "Restant",
         "steps": "Pas"
+    },
+    "syncthing": {
+        "connected": "Connecté",
+        "synced": "Synchronisé",
+        "errors": "Erreurs",
+        "storage": "Stockage"
+    },
+    "sportarr": {
+        "wanted": "Recherché",
+        "queued": "En file d'attente",
+        "leagues": "Ligues"
     }
 }

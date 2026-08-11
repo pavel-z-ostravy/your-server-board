@@ -20,6 +20,9 @@
         "minutes": "m",
         "seconds": "s"
     },
+    "auth": {
+        "signout": "Sign out"
+    },
     "widget": {
         "missing_type": "Brakujący typ widżetu: {{type}}",
         "api_error": "Błąd API",
@@ -70,6 +73,15 @@
         "healthy": "Zdrowy",
         "degraded": "Zdegradowany",
         "no_data": "Brak danych o miejscu przechowywania"
+    },
+    "duplicati": {
+        "jobs": "Zadania",
+        "stored": "Przechowywane",
+        "lastBackup": "Ostatnie uruchomienie",
+        "nextRun": "Następne uruchomienie",
+        "running": "Działające",
+        "warnings": "Ostrzeżenia",
+        "errors": "Błędy"
     },
     "docker": {
         "rx": "Rx",
@@ -465,6 +477,11 @@
         "cpu": "Procesor",
         "lxc": "Kontenery LXC",
         "vms": "Maszyn wirtualnych"
+    },
+    "pulse": {
+        "nodes": "Węzły",
+        "vms": "Maszyny",
+        "lxcs": "Kontenery LXC"
     },
     "glances": {
         "cpu": "Procesor",
@@ -932,6 +949,17 @@
         "mails": "Poczta",
         "storage": "Pamięć"
     },
+    "maintainerr": {
+        "itemsHandled": "Obsługiwane elementy",
+        "episodesHandled": "Obsługiwane odcinki",
+        "moviesHandled": "Obsługiwane filmy",
+        "showsHandled": "Obsługiwane seriale",
+        "seasonsHandled": "Obsługiwane sezony",
+        "reclaimable": "Odzyskiwalne",
+        "movieReclaimable": "Odzyskiwalne z filmów",
+        "showReclaimable": "Odzyskiwalne z seriali",
+        "totalCapacity": "Całkowita pojemność"
+    },
     "netdata": {
         "warnings": "Ostrzeżenia",
         "criticals": "Krytyczny"
@@ -1210,5 +1238,16 @@
         "burned": "Spalone",
         "remaining": "Pozostało",
         "steps": "Kroki"
+    },
+    "syncthing": {
+        "connected": "Połączonych",
+        "synced": "Zsynchronizowane",
+        "errors": "Błędy",
+        "storage": "Pamięć"
+    },
+    "sportarr": {
+        "wanted": "Poszukiwane",
+        "queued": "W kolejce",
+        "leagues": "Ligi"
     }
 }

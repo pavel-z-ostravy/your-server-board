@@ -20,6 +20,9 @@
         "minutes": "m",
         "seconds": "s"
     },
+    "auth": {
+        "signout": "Sign out"
+    },
     "widget": {
         "missing_type": "Chybí typ widgetu: {{type}}",
         "api_error": "Chyba API",
@@ -70,6 +73,15 @@
         "healthy": "Zdravý",
         "degraded": "Degradováno",
         "no_data": "Nejsou k dispozici žádná data úložiště"
+    },
+    "duplicati": {
+        "jobs": "Jobs",
+        "stored": "Stored",
+        "lastBackup": "Last Run",
+        "nextRun": "Next Run",
+        "running": "Running",
+        "warnings": "Warnings",
+        "errors": "Errors"
     },
     "docker": {
         "rx": "RX",
@@ -465,6 +477,11 @@
         "cpu": "Využití procesoru",
         "lxc": "LXC",
         "vms": "Virtuální Stroje"
+    },
+    "pulse": {
+        "nodes": "Uzly (Nody)",
+        "vms": "Virtuální Stroje",
+        "lxcs": "LXC"
     },
     "glances": {
         "cpu": "Využití procesoru",
@@ -932,6 +949,17 @@
         "mails": "Maily",
         "storage": "Úložiště"
     },
+    "maintainerr": {
+        "itemsHandled": "Items Handled",
+        "episodesHandled": "Episodes Handled",
+        "moviesHandled": "Movies Handled",
+        "showsHandled": "Shows Handled",
+        "seasonsHandled": "Seasons Handled",
+        "reclaimable": "Reclaimable",
+        "movieReclaimable": "Movie Reclaimable",
+        "showReclaimable": "Show Reclaimable",
+        "totalCapacity": "Total Capacity"
+    },
     "netdata": {
         "warnings": "Upozornění",
         "criticals": "Kritické"
@@ -1210,5 +1238,16 @@
         "burned": "Spáleno",
         "remaining": "Zbývá",
         "steps": "Kroky"
+    },
+    "syncthing": {
+        "connected": "Connected",
+        "synced": "Synced",
+        "errors": "Errors",
+        "storage": "Storage"
+    },
+    "sportarr": {
+        "wanted": "Wanted",
+        "queued": "Queued",
+        "leagues": "Leagues"
     }
 }
