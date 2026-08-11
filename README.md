@@ -23,17 +23,16 @@ for exactly what in this repo is original vs. derivative.
 - **Foundation deployed and live.** The app runs as a Docker container on a
   real homelab host, connected to a real Proxmox cluster via API token, and
   the Proxmox VE widget renders real VM/CT/CPU/memory data.
-- **Restricted SSH SMART/disk client built and verified end-to-end.**
-  `src/utils/ssh/smartClient.js` (`listBlockDevices`, `getSmartData`) is
-  confirmed working against a real restricted-command SSH key on a real
-  Proxmox host. It is not yet wired into any API route or UI — no
-  disks/SMART feature is exposed to users yet, and because nothing imports
-  it, Next.js's standalone build currently excludes it from the deployed
-  container image (expected — resolves automatically once a route imports
-  it).
+- **Disks & SMART health monitoring deployed and live.** The `/disks` page
+  and `/api/disks` route (built on top of the restricted-SSH
+  `src/utils/ssh/smartClient.js` client from Foundation) are live in the
+  deployed container, wired to a real restricted-command SSH key on a real
+  Proxmox host. `/api/disks` returns real per-drive SMART data — model,
+  size, temperature, health status — confirmed against real hardware (a
+  SATA SSD and a USB-enclosure NVMe drive), both reporting `"status": "ok"`.
+  Linked from the main dashboard's footer.
 - **Not yet implemented — tracked as separate follow-up plans**
   (see `docs/superpowers/plans/`):
-  - Disks & SMART health monitoring (UI/API on top of the client above)
   - Backup lifecycle management for Proxmox VMs/CTs (list/run/download/delete, retention)
   - Quick VM/CT actions (start/stop/reboot)
   - TOTP-based 2FA login
@@ -78,7 +77,7 @@ in front of it too.
 |---|---|---|
 | Service widgets, bookmarks, search, theming, i18n | ✅ full support | unchanged |
 | Proxmox VM/CT status widget | ✅ read-only | unchanged (used for the live data above) |
-| Disk health (SMART) | ❌ none | restricted-SSH client built, UI planned |
+| Disk health (SMART) | ❌ none | ✅ live (`/disks` page + `/api/disks`) |
 | Backup lifecycle (list/run/download/delete/retention) | ❌ none | planned |
 | VM/CT power actions | ❌ none | planned |
 | Login | optional password only | password today, TOTP 2FA planned |
