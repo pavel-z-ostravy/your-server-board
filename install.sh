@@ -58,7 +58,14 @@ echo "     ssh root@<your-proxmox-host> chmod 755 /usr/local/bin/your-server-boa
 echo
 echo "2. Append this line to /root/.ssh/authorized_keys on your Proxmox host:"
 echo
-printf '   command="/usr/local/bin/your-server-board-smart-helper.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty %s\n' "$(cat config/ssh/id_smart.pub)"
+if [ -f config/ssh/id_smart.pub ]; then
+  smart_pubkey="$(cat config/ssh/id_smart.pub)"
+else
+  # .pub may not have survived a copy/deploy of just the private key —
+  # it can always be re-derived from the private key itself.
+  smart_pubkey="$(ssh-keygen -y -f config/ssh/id_smart)"
+fi
+printf '   command="/usr/local/bin/your-server-board-smart-helper.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty %s\n' "$smart_pubkey"
 echo
 echo "   Full details, including why this is safe to expose publicly: deploy/SSH_SETUP.md"
 echo
