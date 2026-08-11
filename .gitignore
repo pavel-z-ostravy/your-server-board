@@ -53,3 +53,5 @@ site*/
 # venv
 .venv/
 .superpowers/
+AGENTS.md
+CLAUDE.md
