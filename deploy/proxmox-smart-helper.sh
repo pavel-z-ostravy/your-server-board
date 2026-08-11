@@ -19,9 +19,17 @@ case "$cmd" in
     device="/dev/sd${cmd##*/dev/sd}"
     exec smartctl -j -a "$device"
     ;;
-  "smartctl -j -a /dev/nvme"[0-9]n[0-9])
-    device="/dev/${cmd##*/dev/}"
-    exec smartctl -j -a "$device"
+  "smartctl -j -a /dev/nvme"*)
+    device="/dev/nvme${cmd##*/dev/nvme}"
+    case "$device" in
+      /dev/nvme[0-9]n[0-9]|/dev/nvme[0-9][0-9]n[0-9]|/dev/nvme[0-9]n[0-9][0-9]|/dev/nvme[0-9][0-9]n[0-9][0-9])
+        exec smartctl -j -a "$device"
+        ;;
+      *)
+        echo "refused: unsafe device path" >&2
+        exit 1
+        ;;
+    esac
     ;;
   *)
     echo "refused: command not permitted for this key" >&2

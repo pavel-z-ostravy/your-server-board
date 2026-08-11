@@ -52,11 +52,17 @@ site*/
 
 # venv
 .venv/
+
+# SDD (spec-driven development) task-tracking scaffolding — planning docs,
+# progress ledgers, etc. Not part of the shipped app.
 .superpowers/
 AGENTS.md
 CLAUDE.md
 
 # your-server-board: server-specific secrets, never commit
+# (config/proxmox.yaml and config/ssh/ are already covered by the broader
+# /config entry above — listed again here intentionally, belt-and-braces,
+# so they stay protected even if /config is ever narrowed or removed.)
 config/proxmox.yaml
 config/ssh/
 .env

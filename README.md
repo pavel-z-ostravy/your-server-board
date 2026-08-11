@@ -45,14 +45,18 @@ This is `your-server-board`, a fork of [gethomepage/homepage](https://github.com
 2. Run `./install.sh` — it walks you through the host/port you'll access it
    at, generates a restricted SSH key for disk-health queries, and tells you
    exactly what to add to your Proxmox host's `authorized_keys`.
+   (Optional: edit `.env` first if you want a port other than the default
+   3050 — `YSB_PORT` in `.env.example`.)
 3. Edit `config/proxmox.yaml` (created from a template on first run) with
    your Proxmox host URL and an API token. Create one with:
    ```bash
    pveum user token add root@pam your-server-board --privsep 0
    ```
-   (see `docs/superpowers/specs/2026-08-11-your-server-board-design.md` for
-   why this should later be scoped down to a custom least-privilege role
-   before exposing the dashboard publicly)
+   This token inherits full `root@pam` privileges. Before exposing this
+   dashboard publicly (e.g. via a Cloudflare Tunnel), replace it with a
+   token scoped to a custom least-privilege Proxmox role — verify exact
+   privilege names against current Proxmox ACL docs when doing so, rather
+   than guessing them.
 4. `docker compose restart`
 
 # Features

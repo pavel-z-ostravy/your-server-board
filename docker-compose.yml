@@ -8,4 +8,4 @@ services:
     volumes:
       - ./config:/app/config
     environment:
-      - HOMEPAGE_ALLOWED_HOSTS=${YSB_ALLOWED_HOSTS}
+      - HOMEPAGE_ALLOWED_HOSTS=${YSB_ALLOWED_HOSTS:?set YSB_ALLOWED_HOSTS in .env}

@@ -44,10 +44,14 @@ if [ -z "$YSB_ALLOWED_HOSTS" ]; then
       exit 1
       ;;
   esac
-  trap 'rm -f .env.bak' EXIT
-  sed -i.bak "s/^YSB_ALLOWED_HOSTS=.*/YSB_ALLOWED_HOSTS=${allowed_hosts}/" .env
-  rm -f .env.bak
-  trap - EXIT
+  # Rewrite via a filtered copy rather than `sed -i` in place: this works
+  # whether or not .env already has a YSB_ALLOWED_HOSTS= line (a plain sed
+  # substitution silently no-ops — and leaves an effectively-empty
+  # HOMEPAGE_ALLOWED_HOSTS — if the line is missing), and avoids `sed -i.bak`,
+  # which isn't portable to BusyBox sed.
+  grep -v '^YSB_ALLOWED_HOSTS=' .env > .env.tmp || true
+  echo "YSB_ALLOWED_HOSTS=${allowed_hosts}" >> .env.tmp
+  mv .env.tmp .env
   YSB_ALLOWED_HOSTS="$allowed_hosts"
 fi
 
