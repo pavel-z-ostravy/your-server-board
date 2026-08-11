@@ -27,6 +27,18 @@
   <a href="https://paypal.me/phelpsben" title="Donate"><img alt="GitHub Sponsors" src="https://img.shields.io/github/sponsors/benphelps"></a>
 </p>
 
+# Status
+
+This is `your-server-board`, a fork of [gethomepage/homepage](https://github.com/gethomepage/homepage), extended with a live Proxmox integration for a real homelab host.
+
+- **Foundation deployed and live.** The app is deployed as a Docker container on the target host, connected to a real Proxmox cluster via API token, and the Proxmox VE widget renders real VM/CT/CPU/memory data (not placeholder values).
+- **Restricted SSH SMART/disk client built and verified end-to-end.** `src/utils/ssh/smartClient.js` (`listBlockDevices`, `getSmartData`) has been confirmed to work from inside the running container against the real restricted-command SSH key, returning real block device and SMART data from the Proxmox host. It is not yet wired into any API route or UI — no disks/SMART feature is exposed to users yet.
+- **Not yet implemented — tracked as separate follow-up plans** (see `docs/superpowers/plans/`):
+  - Disks & SMART health monitoring (UI/API on top of the client above)
+  - Backup lifecycle management for Proxmox VMs/CTs
+  - TOTP-based 2FA login
+  - SMART/disk/backup-failure alerting and history
+
 # Features
 
 With features like quick search, bookmarks, weather support, a wide range of integrations and widgets, an elegant and modern design, and a focus on performance, Homepage is your ideal start to the day and a handy companion throughout it.
