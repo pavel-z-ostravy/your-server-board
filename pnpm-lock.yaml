@@ -83,6 +83,9 @@ importers:
       recharts:
         specifier: ^3.1.2
         version: 3.10.1(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react-is@16.13.1)(react@19.2.8)(redux@5.0.1)
+      ssh2:
+        specifier: ^1.17.0
+        version: 1.17.0
       swr:
         specifier: ^2.4.2
         version: 2.5.0(react@19.2.8)
