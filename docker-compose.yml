@@ -4,8 +4,8 @@ services:
     container_name: your-server-board
     restart: unless-stopped
     ports:
-      - "3050:3000"
+      - "${YSB_PORT:-3050}:3000"
     volumes:
       - ./config:/app/config
     environment:
-      - HOMEPAGE_ALLOWED_HOSTS=10.0.1.104:3050
+      - HOMEPAGE_ALLOWED_HOSTS=${YSB_ALLOWED_HOSTS}

@@ -59,3 +59,4 @@ CLAUDE.md
 # your-server-board: server-specific secrets, never commit
 config/proxmox.yaml
 config/ssh/
+.env

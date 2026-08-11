@@ -39,6 +39,22 @@ This is `your-server-board`, a fork of [gethomepage/homepage](https://github.com
   - TOTP-based 2FA login
   - SMART/disk/backup-failure alerting and history
 
+## Getting Started (your own server)
+
+1. Clone this repo onto the machine that will run the dashboard container.
+2. Run `./install.sh` — it walks you through the host/port you'll access it
+   at, generates a restricted SSH key for disk-health queries, and tells you
+   exactly what to add to your Proxmox host's `authorized_keys`.
+3. Edit `config/proxmox.yaml` (created from a template on first run) with
+   your Proxmox host URL and an API token. Create one with:
+   ```bash
+   pveum user token add root@pam your-server-board --privsep 0
+   ```
+   (see `docs/superpowers/specs/2026-08-11-your-server-board-design.md` for
+   why this should later be scoped down to a custom least-privilege role
+   before exposing the dashboard publicly)
+4. `docker compose restart`
+
 # Features
 
 With features like quick search, bookmarks, weather support, a wide range of integrations and widgets, an elegant and modern design, and a focus on performance, Homepage is your ideal start to the day and a handy companion throughout it.
