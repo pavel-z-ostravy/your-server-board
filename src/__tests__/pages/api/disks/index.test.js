@@ -56,6 +56,9 @@ describe("pages/api/disks", () => {
     listBlockDevices.mockResolvedValue({
       blockdevices: [
         { name: "loop0", size: "20G", type: "loop", model: null },
+        // type === "disk" but not a name the SMART client can query (a ZFS zvol,
+        // common on Proxmox) — must be silently excluded, not queried or errored.
+        { name: "zd0", size: "8G", type: "disk", model: null },
         {
           name: "sda",
           size: "238.5G",
@@ -119,8 +122,11 @@ describe("pages/api/disks", () => {
       device: "/dev/sdb",
       size: "1T",
       status: null,
-      error: "boom",
+      error: "SMART query failed",
     });
+    // The raw rejection reason must never reach the (potentially unauthenticated) HTTP response.
+    expect(JSON.stringify(res.body)).not.toContain("boom");
+    expect(logger.error).toHaveBeenCalledWith("SMART query failed for %s:", "/dev/sdb", expect.any(Error));
   });
 
   it("returns 500 when listBlockDevices itself fails", async () => {

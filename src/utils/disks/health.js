@@ -9,6 +9,23 @@ const SEVERITY_ORDER = ["ok", "warn", "critical"];
 export function computeDiskHealth(smartData) {
   const smartPassed = smartData?.smart_status?.passed ?? null;
   const temperature = smartData?.temperature?.current ?? null;
+
+  // Neither field is present — the SMART payload is absent or malformed (e.g. a
+  // USB enclosure that doesn't pass SMART through, or a smartctl error payload
+  // like { smartctl: { exit_status: 2, ... } } with no smart_status). We have no
+  // usable signal, so report "unknown" rather than defaulting to "ok" — a
+  // health-monitoring feature must never silently call "we don't know" healthy.
+  if (smartPassed === null && temperature === null) {
+    return {
+      status: "unknown",
+      temperature: null,
+      smartPassed: null,
+      reallocatedSectors: null,
+      wearPercentage: null,
+      mediaErrors: null,
+    };
+  }
+
   const tempWarnThreshold = smartData?.temperature?.op_limit_max ?? DEFAULT_TEMP_WARN_C;
   const tempCriticalThreshold = smartData?.temperature?.critical_limit_max ?? DEFAULT_TEMP_CRITICAL_C;
   const isNvme = smartData?.device?.protocol === "NVMe";

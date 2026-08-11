@@ -56,6 +56,12 @@ for exactly what in this repo is original vs. derivative.
    token scoped to a custom least-privilege Proxmox role — verify exact
    privilege names against current Proxmox ACL docs when doing so, rather
    than guessing them.
+
+   Also uncomment and fill in the `smart:` block in the same file, pointing
+   at the SSH key `install.sh` just generated — see
+   [`deploy/SSH_SETUP.md`](deploy/SSH_SETUP.md) for the remaining setup on
+   the Proxmox host. Without it, the `/disks` page shows an error instead of
+   disk health data.
 4. `docker compose restart`
 
 Prefer to do it by hand instead of `./install.sh`? See

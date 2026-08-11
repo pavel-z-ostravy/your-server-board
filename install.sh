@@ -103,6 +103,10 @@ echo "comments in that file for the format, and README.md for how to create a"
 echo "least-privilege API token with 'pveum'). The dashboard will pick it up"
 echo "on next restart (docker compose restart)."
 echo
+echo "Also uncomment and fill in the 'smart:' block in the same file, using the"
+echo "config/ssh/id_smart key generated above, to enable the /disks page — see"
+echo "deploy/SSH_SETUP.md for the remaining setup on the Proxmox host."
+echo
 
 echo "== Building and starting the container =="
 docker compose up -d --build

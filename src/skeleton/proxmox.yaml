@@ -4,10 +4,11 @@
 #   token: username@pam!Token ID
 #   secret: secret
 
-# Future: SMART/disk health monitoring will read its SSH connection details
-# from a block like this (not wired up yet — see src/utils/ssh/smartClient.js
-# and deploy/SSH_SETUP.md). install.sh already places the private key at
-# config/ssh/id_smart so this seam is ready for that future task to build on.
+# SMART/disk health monitoring reads its SSH connection details from a block
+# like this. Uncomment and fill it in to enable the /disks page — see
+# deploy/SSH_SETUP.md for the restricted SSH key setup this depends on.
+# install.sh already places the private key at config/ssh/id_smart, so most
+# installs only need to uncomment these three lines and set the right host.
 # smart:
 #   host: proxmox.host.or.ip
 #   username: root

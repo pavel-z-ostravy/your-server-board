@@ -83,6 +83,16 @@ describe("computeDiskHealth", () => {
     expect(computeDiskHealth(data).mediaErrors).toBe(1);
   });
 
+  it("reports unknown status when smart_status and temperature are both absent", () => {
+    expect(computeDiskHealth({}).status).toBe("unknown");
+    expect(computeDiskHealth(null).status).toBe("unknown");
+  });
+
+  it("reports unknown status for a smartctl error payload with no smart_status", () => {
+    const data = { smartctl: { exit_status: 2, messages: [{ string: "Unable to detect device type" }] } };
+    expect(computeDiskHealth(data).status).toBe("unknown");
+  });
+
   it("takes the worst of multiple simultaneous issues", () => {
     const data = {
       ...nvmeHealthy,

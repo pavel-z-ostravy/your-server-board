@@ -2,7 +2,7 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import DisksPage from "pages/disks";
 
@@ -12,8 +12,13 @@ function renderWithSWR(ui) {
 }
 
 describe("pages/disks", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("renders a card per disk with the correct status color", async () => {
     global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
       json: () =>
         Promise.resolve([
           {
@@ -62,6 +67,7 @@ describe("pages/disks", () => {
 
   it("shows the per-disk error message when a disk failed to query", async () => {
     global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
       json: () =>
         Promise.resolve([
           {
@@ -84,5 +90,16 @@ describe("pages/disks", () => {
     renderWithSWR(<DisksPage />);
 
     await waitFor(() => expect(screen.getByText("boom")).toBeInTheDocument());
+  });
+
+  it("shows a friendly error message and does not throw when the API responds with a non-ok status", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({ error: "boom" }),
+    });
+
+    renderWithSWR(<DisksPage />);
+
+    await waitFor(() => expect(screen.getByText("Failed to load disk data.")).toBeInTheDocument());
   });
 });

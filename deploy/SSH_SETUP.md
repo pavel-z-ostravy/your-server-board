@@ -34,17 +34,7 @@ step 2/3 instructions on screen — it does not copy the script or edit
    but it is *only* able to run the two whitelisted read-only commands above.
 
 4. The private key already lives at `config/ssh/id_smart` (gitignored — never
-   commit it) from step 1. A future update will read this from
-   `config/proxmox.yaml` (see the commented `smart:` block in
-   `src/skeleton/proxmox.yaml` for the intended shape) — for now, nothing
-   wires it into the app yet, so `install.sh` just places it there for that
-   future wiring to use. `src/utils/ssh/smartClient.js` (`listBlockDevices`,
-   `getSmartData`) already knows how to use a key at this path once called,
-   it just isn't called from anywhere yet.
-
-   Note: because nothing currently imports `smartClient.js`, Next.js's
-   standalone build output excludes it from the deployed container image —
-   this is expected and will resolve automatically once a future task wires
-   it into an API route. Don't be surprised if
-   `docker exec ... node -e "require('./smartClient')"` fails with
-   `MODULE_NOT_FOUND` in the meantime.
+   commit it) from step 1. Uncomment and fill in the `smart:` block in
+   `config/proxmox.yaml` (see `src/skeleton/proxmox.yaml` for the shape) to
+   point at this key — the `/disks` page reads that block and will show a
+   500/error state until it's filled in.
