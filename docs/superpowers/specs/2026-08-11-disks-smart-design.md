@@ -43,8 +43,8 @@ Computed server-side in the API route, from the parsed `smartctl -j` JSON:
 - **Temperature:** prefer the device's own reported thresholds when present (NVMe `smartctl -j` output includes `warning_temp`/`critical_temp` — real fields confirmed present in this host's own `sdc` NVMe SMART output during Foundation's research). Fall back to generic thresholds when the device doesn't report its own: `< 50°C` ok, `50–60°C` warn, `> 60°C` critical.
 - **Reallocated sectors (SATA, via SMART attribute 5 / "Reallocated_Sector_Ct"):** `0` → ok, `> 0` → warn. Any reallocated sector is treated as an early degradation signal, not waited-out until it's "bad enough."
 - **NVMe wear (`percentage_used` in the SMART JSON):** `< 80` ok, `80–95` warn, `> 95` critical. NVMe `media_errors > 0` also forces at least `warn` regardless of `percentage_used`.
-- **Capacity/usage** (from `lsblk`/filesystem usage, not SMART): `< 80%` ok, `80–90%` warn, `> 90%` critical — matches the `> 90%` alerting threshold already decided in the parent spec, so the two stay consistent when Alerting is built later.
-- **Overall disk status** shown on its card = the worst (highest-severity) of the above checks for that disk.
+- **Capacity/size:** shown as an informational stat (total disk size from `lsblk`), not a health threshold — a raw physical disk (e.g. `sda`) can have multiple partitions/LVs with independent usage, so "disk usage %" isn't a single well-defined number derivable from `lsblk`+`smartctl` alone. Filesystem-fullness monitoring (">90% used" on a mounted volume like `/mnt/storage`) is a Proxmox-storage-API concern, not a physical-disk-SMART concern — deferred to the Alerting plan, which will pull it from Proxmox's `/nodes/{node}/storage` endpoint instead of SSH.
+- **Overall disk status** shown on its card = the worst (highest-severity) of the SMART/temperature/wear checks above for that disk (capacity is informational only, doesn't factor into status).
 
 ## Refresh Behavior
 
