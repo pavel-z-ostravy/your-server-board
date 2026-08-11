@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up a working, deployed fork of gethomepage/homepage — connected to the real Proxmox host with live data — as the foundation the Disks & SMART, Backups, Auth/TOTP, and Alerting/History plans build on next.
+**Goal:** Stand up a working, deployed fork of gethomepage/homepage — connected to the real Proxmox host with live data — as the foundation the Disks & SMART, Backups, Auth/TOTP, and Alerting/History plans build on next. Also make the repo genuinely usable by other people: no homelab-specific values in anything committed to the public repo, plus a generic `install.sh` so a visitor can stand up their own instance against their own Proxmox host.
 
 **Architecture:** Fork gethomepage/homepage (Next.js Pages Router, GPL-3.0) on GitHub as `your-server-board`, merge in this project's planning docs, add a new restricted-SSH utility for SMART/disk data (nothing in upstream does this), and deploy as a Docker container on `lxc200` (10.0.1.104) via Dockge, wired to a real Proxmox API token and a forced-command-restricted SSH key.
 
@@ -18,6 +18,7 @@
 - No in-app settings UI — config is hand-edited YAML, matching every other Homepage integration.
 - Repo: public GitHub repo `your-server-board` under the `pavel-z-ostravy` account, forked from `gethomepage/homepage`.
 - Deploy target: Docker container on `lxc200` (10.0.1.104), managed via the existing Dockge instance, on port **3050** (host) → 3000 (container) — independent of the existing `lxc-automat` service on port 8091, no cutover.
+- No homelab-specific values (this deployment's IP, port, hostnames) in anything committed to the repo — including deployment artifacts like `docker-compose.yml`, not just application code. Host-specific values belong in a gitignored `.env`, with a committed `.env.example` documenting them.
 
 ---
 
@@ -525,5 +526,205 @@ Update the repo's `README.md` with a short "Status" section noting: Foundation d
 ```bash
 git add README.md
 git commit -m "docs: note foundation deployment status and upcoming plans"
+git push origin dev
+```
+
+---
+
+### Task 5: Generic installer for other users
+
+**Files:**
+- Modify: `docker-compose.yml` (created by Task 3) — replace hardcoded host-specific values with environment variable substitution
+- Create: `.env.example`
+- Create: `install.sh`
+- Modify: `.gitignore` (add `.env`)
+- Modify: `README.md` (add a "Getting Started" section pointing at `install.sh`)
+
+**Interfaces:**
+- Consumes: `deploy/proxmox-smart-helper.sh` and `deploy/SSH_SETUP.md` from Task 2 (the script prints the same authorized_keys line format `SSH_SETUP.md` documents, so they must stay consistent — if you change one, check the other).
+- Produces: a `./install.sh` a first-time visitor can run from a fresh clone to get their own instance running, without editing any file that has this deployment's IP address, port, or hostnames baked in.
+
+Nothing in this repo should assume it's running on `lxc200`/`10.0.1.104` once this task is done — including our own deployment. This task makes the installer real by using it to reconfigure our own already-running instance, not just writing it and hoping it works.
+
+- [ ] **Step 1: Genericize `docker-compose.yml`**
+
+Replace the file Task 3 created with an environment-variable-driven version:
+
+```yaml
+services:
+  your-server-board:
+    build: .
+    container_name: your-server-board
+    restart: unless-stopped
+    ports:
+      - "${YSB_PORT:-3050}:3000"
+    volumes:
+      - ./config:/app/config
+    environment:
+      - HOMEPAGE_ALLOWED_HOSTS=${YSB_ALLOWED_HOSTS}
+```
+
+- [ ] **Step 2: Write `.env.example`**
+
+```bash
+# Copy this file to .env and fill in your own values before running
+# `docker compose up -d --build` (or just run ./install.sh, which does this
+# for you interactively).
+
+# Host port to expose the dashboard on (the container always listens on
+# 3000 internally — this is only the host-side port mapping).
+YSB_PORT=3050
+
+# Comma-separated host:port combinations you'll access the dashboard
+# through. Homepage's own Host-header check (src/middleware.js) rejects any
+# request whose Host header isn't in this list — so include every address
+# you'll actually browse to: your LAN IP, a Cloudflare Tunnel hostname,
+# localhost for local testing, etc.
+# Example: YSB_ALLOWED_HOSTS=192.168.1.50:3050,dashboard.example.com
+YSB_ALLOWED_HOSTS=
+```
+
+- [ ] **Step 3: Write `install.sh`**
+
+```bash
+#!/bin/sh
+# install.sh — sets up your-server-board on this machine.
+# Run this from a clone of the repo, on whichever machine will run the
+# Docker container (it does not need to be your Proxmox host itself).
+set -eu
+
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$REPO_DIR"
+
+echo "== your-server-board setup =="
+echo
+
+command -v docker >/dev/null 2>&1 || { echo "docker is required but not found. Install Docker first." >&2; exit 1; }
+docker compose version >/dev/null 2>&1 || { echo "docker compose (v2 plugin) is required but not found." >&2; exit 1; }
+command -v ssh-keygen >/dev/null 2>&1 || { echo "ssh-keygen is required but not found." >&2; exit 1; }
+
+if [ ! -f .env ]; then
+  cp .env.example .env
+  echo "Created .env from .env.example."
+fi
+
+# shellcheck disable=SC1091
+. ./.env
+
+if [ -z "${YSB_ALLOWED_HOSTS:-}" ]; then
+  printf "Which host:port will you browse this dashboard at? (e.g. 192.168.1.50:3050): "
+  read -r allowed_hosts
+  if [ -z "$allowed_hosts" ]; then
+    echo "YSB_ALLOWED_HOSTS is required — edit .env and re-run this script." >&2
+    exit 1
+  fi
+  sed -i.bak "s/^YSB_ALLOWED_HOSTS=.*/YSB_ALLOWED_HOSTS=${allowed_hosts}/" .env
+  rm -f .env.bak
+fi
+
+mkdir -p config/ssh
+
+if [ ! -f config/ssh/id_smart ]; then
+  echo
+  echo "Generating a restricted SSH key for SMART/disk health queries..."
+  ssh-keygen -t ed25519 -f config/ssh/id_smart -N "" -C "your-server-board-smart-reader" >/dev/null
+  echo "Generated config/ssh/id_smart (private) and config/ssh/id_smart.pub (public)."
+else
+  echo "config/ssh/id_smart already exists, skipping key generation."
+fi
+
+if [ ! -f config/proxmox.yaml ] && [ -f src/skeleton/proxmox.yaml ]; then
+  mkdir -p config
+  cp src/skeleton/proxmox.yaml config/proxmox.yaml
+  echo "Created config/proxmox.yaml from the template."
+fi
+
+echo
+echo "== Manual step required on your Proxmox host =="
+echo "1. Copy deploy/proxmox-smart-helper.sh to your Proxmox host and make it executable:"
+echo "     scp deploy/proxmox-smart-helper.sh root@<your-proxmox-host>:/usr/local/bin/your-server-board-smart-helper.sh"
+echo "     ssh root@<your-proxmox-host> chmod 755 /usr/local/bin/your-server-board-smart-helper.sh"
+echo
+echo "2. Append this line to /root/.ssh/authorized_keys on your Proxmox host:"
+echo
+printf '   command="/usr/local/bin/your-server-board-smart-helper.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty %s\n' "$(cat config/ssh/id_smart.pub)"
+echo
+echo "   Full details, including why this is safe to expose publicly: deploy/SSH_SETUP.md"
+echo
+printf "Press Enter once you've completed the two steps above (or Ctrl+C to do it later and re-run this script): "
+read -r _
+
+echo
+echo "== Proxmox API connection =="
+echo "Edit config/proxmox.yaml with your Proxmox URL and API token (see the"
+echo "comments in that file for the format, and README.md for how to create a"
+echo "least-privilege API token with 'pveum'). The dashboard will pick it up"
+echo "on next restart (docker compose restart)."
+echo
+
+echo "== Building and starting the container =="
+docker compose up -d --build
+
+echo
+echo "Done. Dashboard starting at the host:port you set in YSB_ALLOWED_HOSTS."
+echo "Fill in config/proxmox.yaml, then: docker compose restart"
+```
+
+- [ ] **Step 4: Make it executable, update `.gitignore`**
+
+```bash
+chmod +x install.sh
+echo ".env" >> .gitignore
+```
+
+- [ ] **Step 5: Add a "Getting Started" section to `README.md`**
+
+```markdown
+## Getting Started (your own server)
+
+1. Clone this repo onto the machine that will run the dashboard container.
+2. Run `./install.sh` — it walks you through the host/port you'll access it
+   at, generates a restricted SSH key for disk-health queries, and tells you
+   exactly what to add to your Proxmox host's `authorized_keys`.
+3. Edit `config/proxmox.yaml` (created from a template on first run) with
+   your Proxmox host URL and an API token. Create one with:
+   ```bash
+   pveum user token add root@pam your-server-board --privsep 0
+   ```
+   (see `docs/superpowers/specs/2026-08-11-your-server-board-design.md` for
+   why this should later be scoped down to a custom least-privilege role
+   before exposing the dashboard publicly)
+4. `docker compose restart`
+```
+
+- [ ] **Step 6: Prove it works by re-provisioning our own instance through it**
+
+This is the actual verification for this task — not just "the script runs without error," but "our real deployment still works when driven through the generic path":
+
+```bash
+ssh lxc200 'cd /opt/your-server-board && git pull origin dev'
+ssh lxc200 'cd /opt/your-server-board && cp .env.example .env && \
+  sed -i "s/^YSB_ALLOWED_HOSTS=.*/YSB_ALLOWED_HOSTS=10.0.1.104:3050/" .env'
+```
+
+The restricted SSH key and `config/proxmox.yaml` already exist on lxc200 from Task 3 — `install.sh` must detect and skip regenerating them (its `[ ! -f ... ]` guards handle this), not overwrite working config. Run it non-interactively to confirm the skip logic:
+
+```bash
+ssh lxc200 'cd /opt/your-server-board && printf "\n" | ./install.sh'
+```
+
+Expected: reports the SSH key and `config/proxmox.yaml` already exist and skips regenerating them, rebuilds and restarts the container using the now env-var-driven `docker-compose.yml`.
+
+```bash
+curl -s http://10.0.1.104:3050/api/healthcheck
+```
+
+Expected: `up`, and the Proxmox VE widget still shows live data (same check as Task 4 Step 2) — proving the genericized compose file didn't break the working deployment.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add docker-compose.yml .env.example install.sh .gitignore README.md
+git commit -m "feat: add generic install.sh so other users can self-host this fork"
 git push origin dev
 ```
