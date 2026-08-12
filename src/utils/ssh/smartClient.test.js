@@ -59,10 +59,7 @@ class FakeClient extends EventEmitter {
         switch (smartBehavior) {
           case "nonzero-valid-json":
             // A drive that IS failing: non-zero exit, but complete JSON.
-            stream.emit(
-              "data",
-              Buffer.from('{"model_name":"Failing Disk","smartctl":{"exit_status":8}}'),
-            );
+            stream.emit("data", Buffer.from('{"model_name":"Failing Disk","smartctl":{"exit_status":8}}'));
             stream.emit("close", 8);
             break;
           case "nonzero-invalid":
@@ -108,9 +105,7 @@ class FakeClient extends EventEmitter {
         } else {
           stream.emit(
             "data",
-            Buffer.from(
-              "  data pve twi-aotz-- 63.09 151640866816\n" + "  root pve -wi-ao---- 91662319616\n",
-            ),
+            Buffer.from("  data pve twi-aotz-- 63.09 151640866816\n" + "  root pve -wi-ao---- 91662319616\n"),
           );
           stream.emit("close", 0);
         }

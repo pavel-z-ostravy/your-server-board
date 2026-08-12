@@ -3,7 +3,7 @@
 #
 # Installed at /usr/local/bin/your-server-board-smart-helper.sh on the Proxmox
 # host and bound to a dedicated SSH key via a forced `command=` entry in
-# authorized_keys. That key can NEVER run anything except the two exact
+# authorized_keys. That key can NEVER run anything except the exact
 # operations below, regardless of what the client requests — OpenSSH ignores
 # the client's requested command when `command=` is set and exposes it only
 # via $SSH_ORIGINAL_COMMAND, which this script validates before acting on it.

@@ -17,6 +17,11 @@ function collectMountpoints(node, acc) {
 // lsblk device node. Only partitions (lsblk type "part") can be LVM
 // physical volumes — pvs reports PVs as "/dev/<partition-name>", so this is
 // the full set of candidate device names to check against the PV mapping.
+//
+// Limitation: this only detects a PV that sits directly on a partition
+// (e.g. /dev/sda3). A PV on a whole, unpartitioned disk (/dev/sdb) or on a
+// mapper/crypt device (/dev/mapper/...) won't be found, silently yielding a
+// smaller (or null) capacity result rather than a wrong-and-loud one.
 function collectPartitionNames(node, acc) {
   if (node.type === "part") {
     acc.push(node.name);
@@ -48,6 +53,12 @@ export function computeDiskCapacity(disk, { dfRows, lvsRows, pvsRows }) {
   const thinUsed = thinPools.reduce((sum, lv) => sum + Math.round((lv.dataPercent / 100) * lv.lvSizeBytes), 0);
   const thinSize = thinPools.reduce((sum, lv) => sum + lv.lvSizeBytes, 0);
 
+  // Assumes df-mounted volumes and counted thin volumes never overlap: a
+  // logical volume that is both host-mounted (already in dfUsed) and inside
+  // a counted thin pool (already in thinUsed via data_percent) would be
+  // double-counted. Holds today because thin volumes are unmounted VM disk
+  // images, while host-mounted pools are excluded from thinPools by the
+  // lvAttr[0] === "t" filter — pools and their thin volumes don't overlap.
   const usedBytes = dfUsed + thinUsed;
   const totalBytes = dfSize + thinSize;
 

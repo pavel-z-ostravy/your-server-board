@@ -11,7 +11,13 @@ describe("computeDiskCapacity", () => {
       children: [{ name: "sdc_crypt", type: "crypt", mountpoint: "/mnt/storage" }],
     };
     const dfRows = [
-      { source: "/dev/mapper/sdc_crypt", target: "/mnt/storage", fstype: "ext4", usedBytes: 400000000000, sizeBytes: 2000000000000 },
+      {
+        source: "/dev/mapper/sdc_crypt",
+        target: "/mnt/storage",
+        fstype: "ext4",
+        usedBytes: 400000000000,
+        sizeBytes: 2000000000000,
+      },
       // Unrelated mountpoint on a different disk — must be ignored.
       { source: "/dev/sda2", target: "/boot/efi", fstype: "vfat", usedBytes: 10000000, sizeBytes: 1000000000 },
     ];
@@ -72,7 +78,9 @@ describe("computeDiskCapacity", () => {
       mountpoint: null,
       children: [{ name: "sda1", type: "lvm", mountpoint: "[SWAP]" }],
     };
-    const dfRows = [{ source: "/dev/mapper/pve-swap", target: "[SWAP]", fstype: "swap", usedBytes: 999, sizeBytes: 999 }];
+    const dfRows = [
+      { source: "/dev/mapper/pve-swap", target: "[SWAP]", fstype: "swap", usedBytes: 999, sizeBytes: 999 },
+    ];
 
     const result = computeDiskCapacity(disk, { dfRows, lvsRows: [], pvsRows: [] });
 

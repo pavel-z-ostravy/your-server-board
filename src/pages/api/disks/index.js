@@ -26,10 +26,14 @@ const EMPTY_HEALTH = {
 
 async function buildDiskEntry(sshConfig, device, capacityData) {
   const base = { name: device.name, device: `/dev/${device.name}`, model: device.model, size: device.size };
-  const capacity = capacityData ? computeDiskCapacity(device, capacityData) : null;
-  const capacityFields = { usedBytes: capacity?.usedBytes ?? null, totalBytes: capacity?.totalBytes ?? null };
+  // Fallback used if computeDiskCapacity itself throws before assigning below —
+  // the catch block still needs a value to spread into its response shape.
+  let capacityFields = { usedBytes: null, totalBytes: null };
 
   try {
+    const capacity = capacityData ? computeDiskCapacity(device, capacityData) : null;
+    capacityFields = { usedBytes: capacity?.usedBytes ?? null, totalBytes: capacity?.totalBytes ?? null };
+
     const smartData = await getSmartData(sshConfig, base.device);
     const health = computeDiskHealth(smartData);
     return {
