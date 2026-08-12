@@ -2,12 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import createMockRes from "test-utils/create-mock-res";
 
-const { getSmartConfig, listBlockDevices, getSmartData, logger } = vi.hoisted(() => ({
-  getSmartConfig: vi.fn(),
-  listBlockDevices: vi.fn(),
-  getSmartData: vi.fn(),
-  logger: { error: vi.fn() },
-}));
+const { getSmartConfig, listBlockDevices, getSmartData, getDiskUsage, getLvmReport, getPvMapping, logger } = vi.hoisted(
+  () => ({
+    getSmartConfig: vi.fn(),
+    listBlockDevices: vi.fn(),
+    getSmartData: vi.fn(),
+    getDiskUsage: vi.fn(),
+    getLvmReport: vi.fn(),
+    getPvMapping: vi.fn(),
+    logger: { error: vi.fn() },
+  }),
+);
 
 vi.mock("utils/config/proxmox", () => ({
   getSmartConfig,
@@ -16,6 +21,9 @@ vi.mock("utils/config/proxmox", () => ({
 vi.mock("utils/ssh/smartClient", () => ({
   listBlockDevices,
   getSmartData,
+  getDiskUsage,
+  getLvmReport,
+  getPvMapping,
 }));
 
 vi.mock("utils/logger", () => ({
@@ -36,6 +44,9 @@ const ataSmart = {
 describe("pages/api/disks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getDiskUsage.mockResolvedValue([]);
+    getLvmReport.mockResolvedValue([]);
+    getPvMapping.mockResolvedValue([]);
   });
 
   it("returns 500 when smart config is missing", async () => {
@@ -90,6 +101,8 @@ describe("pages/api/disks", () => {
         reallocatedSectors: 0,
         wearPercentage: null,
         mediaErrors: null,
+        usedBytes: null,
+        totalBytes: null,
         status: "ok",
         error: null,
       },
@@ -141,5 +154,65 @@ describe("pages/api/disks", () => {
     expect(logger.error).toHaveBeenCalled();
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({ error: "Failed to enumerate block devices" });
+  });
+
+  it("merges real capacity data into each disk entry", async () => {
+    getSmartConfig.mockReturnValue(sshConfig);
+    listBlockDevices.mockResolvedValue({
+      blockdevices: [
+        {
+          name: "sdc",
+          size: "1.9T",
+          type: "disk",
+          model: "Vi3000",
+          children: [{ name: "sdc_crypt", type: "crypt", mountpoint: "/mnt/storage" }],
+        },
+      ],
+    });
+    getSmartData.mockResolvedValue(ataSmart);
+    getDiskUsage.mockResolvedValue([
+      {
+        source: "/dev/mapper/sdc_crypt",
+        target: "/mnt/storage",
+        fstype: "ext4",
+        usedBytes: 400000000000,
+        sizeBytes: 2000000000000,
+      },
+    ]);
+    getLvmReport.mockResolvedValue([]);
+    getPvMapping.mockResolvedValue([]);
+
+    const req = { query: {} };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body[0]).toMatchObject({ name: "sdc", usedBytes: 400000000000, totalBytes: 2000000000000 });
+  });
+
+  it("returns usedBytes/totalBytes null for every disk, without failing the request, when the capacity SSH calls fail", async () => {
+    getSmartConfig.mockReturnValue(sshConfig);
+    listBlockDevices.mockResolvedValue({
+      blockdevices: [{ name: "sda", size: "238.5G", type: "disk", model: "A" }],
+    });
+    getSmartData.mockResolvedValue(ataSmart);
+    // Simulates the real operational sequencing risk this plan calls out: the
+    // app was redeployed with the new client code, but proxmox-smart-helper.sh
+    // on the host hasn't been re-copied yet, so the host refuses the new commands.
+    getDiskUsage.mockRejectedValue(new Error("refused: command not permitted for this key"));
+    getLvmReport.mockRejectedValue(new Error("refused: command not permitted for this key"));
+    getPvMapping.mockRejectedValue(new Error("refused: command not permitted for this key"));
+
+    const req = { query: {} };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body[0]).toMatchObject({ name: "sda", status: "ok", usedBytes: null, totalBytes: null });
+    // The capacity failure must not contaminate the unrelated SMART error message,
+    // and must not leak raw SSH error detail into the public response.
+    expect(JSON.stringify(res.body)).not.toContain("refused:");
   });
 });

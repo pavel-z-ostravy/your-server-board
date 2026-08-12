@@ -34,9 +34,7 @@ export function computeDiskCapacity(disk, { dfRows, lvsRows, pvsRows }) {
   collectPartitionNames(disk, partitionNames);
 
   const vgNames = new Set(
-    pvsRows
-      .filter((pv) => partitionNames.includes(pv.pvName.replace(/^\/dev\//, "")))
-      .map((pv) => pv.vgName),
+    pvsRows.filter((pv) => partitionNames.includes(pv.pvName.replace(/^\/dev\//, ""))).map((pv) => pv.vgName),
   );
 
   const relevantDf = dfRows.filter((row) => mountpoints.includes(row.target));

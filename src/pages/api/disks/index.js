@@ -1,7 +1,8 @@
 import { getSmartConfig } from "utils/config/proxmox";
-import createLogger from "utils/logger";
+import { computeDiskCapacity } from "utils/disks/capacity";
 import { computeDiskHealth } from "utils/disks/health";
-import { getSmartData, listBlockDevices } from "utils/ssh/smartClient";
+import createLogger from "utils/logger";
+import { getDiskUsage, getLvmReport, getPvMapping, getSmartData, listBlockDevices } from "utils/ssh/smartClient";
 
 const logger = createLogger("disksApi");
 
@@ -23,14 +24,17 @@ const EMPTY_HEALTH = {
   mediaErrors: null,
 };
 
-async function buildDiskEntry(sshConfig, device) {
+async function buildDiskEntry(sshConfig, device, capacityData) {
   const base = { name: device.name, device: `/dev/${device.name}`, model: device.model, size: device.size };
+  const capacity = capacityData ? computeDiskCapacity(device, capacityData) : null;
+  const capacityFields = { usedBytes: capacity?.usedBytes ?? null, totalBytes: capacity?.totalBytes ?? null };
 
   try {
     const smartData = await getSmartData(sshConfig, base.device);
     const health = computeDiskHealth(smartData);
     return {
       ...base,
+      ...capacityFields,
       protocol: smartData?.device?.protocol ?? null,
       temperature: health.temperature,
       smartPassed: health.smartPassed,
@@ -50,10 +54,30 @@ async function buildDiskEntry(sshConfig, device) {
     logger.error("SMART query failed for %s:", base.device, error);
     return {
       ...base,
+      ...capacityFields,
       ...EMPTY_HEALTH,
       status: null,
       error: "SMART query failed",
     };
+  }
+}
+
+// Capacity is an enrichment (see the plan's Global Constraints): if any of
+// the three new SSH calls fail — including the real deploy-ordering scenario
+// where the app ships before the updated proxmox-smart-helper.sh has been
+// re-copied to the host — every disk still returns its existing SMART data
+// with usedBytes/totalBytes: null, never a 500 for the whole route.
+async function fetchCapacityData(sshConfig) {
+  try {
+    const [dfRows, lvsRows, pvsRows] = await Promise.all([
+      getDiskUsage(sshConfig),
+      getLvmReport(sshConfig),
+      getPvMapping(sshConfig),
+    ]);
+    return { dfRows, lvsRows, pvsRows };
+  } catch (error) {
+    logger.error("Failed to fetch disk capacity data:", error);
+    return null;
   }
 }
 
@@ -72,10 +96,12 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Failed to enumerate block devices" });
   }
 
+  const capacityData = await fetchCapacityData(sshConfig);
+
   const physicalDisks = (blockDevices ?? [])
     .filter((device) => device.type === "disk")
     .filter((device) => QUERYABLE_DEVICE_NAME.test(device.name));
-  const entries = await Promise.all(physicalDisks.map((device) => buildDiskEntry(sshConfig, device)));
+  const entries = await Promise.all(physicalDisks.map((device) => buildDiskEntry(sshConfig, device, capacityData)));
 
   return res.status(200).json(entries);
 }

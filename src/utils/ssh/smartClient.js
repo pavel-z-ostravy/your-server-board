@@ -103,10 +103,7 @@ export async function getSmartData(sshConfig, devicePath) {
 }
 
 export async function getDiskUsage(sshConfig) {
-  const { stdout, stderr, code } = await execCommand(
-    sshConfig,
-    "df -B1 --output=source,target,fstype,used,size",
-  );
+  const { stdout, stderr, code } = await execCommand(sshConfig, "df -B1 --output=source,target,fstype,used,size");
   if (code !== 0) {
     throw new Error(`Command exited with code ${code}: ${stderr}`);
   }

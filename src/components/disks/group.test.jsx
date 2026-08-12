@@ -27,7 +27,25 @@ describe("components/disks/group", () => {
             reallocatedSectors: 0,
             wearPercentage: null,
             mediaErrors: null,
+            usedBytes: 25914707968,
+            totalBytes: 89628205056,
             status: "ok",
+            error: null,
+          },
+          {
+            name: "sdc",
+            device: "/dev/sdc",
+            model: "Vi3000",
+            size: "1.9T",
+            protocol: "NVMe",
+            temperature: 91,
+            smartPassed: true,
+            reallocatedSectors: null,
+            wearPercentage: 12,
+            mediaErrors: 0,
+            usedBytes: null,
+            totalBytes: null,
+            status: "warn",
             error: null,
           },
         ]),
@@ -37,8 +55,13 @@ describe("components/disks/group", () => {
 
     expect(screen.getByText("Disks")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("sda")).toBeInTheDocument());
-    const card = screen.getByText("sda").closest('[data-testid="disk-card"]');
-    expect(card).toHaveAttribute("data-status", "ok");
+    const sdaCard = screen.getByText("sda").closest('[data-testid="disk-card"]');
+    expect(sdaCard).toHaveAttribute("data-status", "ok");
+    expect(sdaCard).toHaveTextContent("25.9 GB / 89.6 GB");
+
+    const sdcCard = screen.getByText("sdc").closest('[data-testid="disk-card"]');
+    expect(sdcCard).toHaveAttribute("data-status", "warn");
+    expect(sdcCard).toHaveTextContent("-");
   });
 
   it("shows the per-disk error message when a disk failed to query", async () => {

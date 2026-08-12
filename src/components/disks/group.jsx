@@ -1,4 +1,5 @@
 import classNames from "classnames";
+import prettyBytes from "pretty-bytes";
 import { useContext } from "react";
 import useSWR from "swr";
 
@@ -32,6 +33,11 @@ const fetcher = (url) =>
     if (!r.ok) throw new Error("request failed");
     return r.json();
   });
+
+function formatCapacity(usedBytes, totalBytes) {
+  if (usedBytes == null || totalBytes == null) return null;
+  return `${prettyBytes(usedBytes)} / ${prettyBytes(totalBytes)}`;
+}
 
 function Stat({ value, label }) {
   return (
@@ -72,6 +78,7 @@ function DiskCard({ disk, cardClassName }) {
         <Stat value={disk.temperature != null ? `${disk.temperature}°C` : null} label="Temp" />
         <Stat value={disk.smartPassed == null ? null : disk.smartPassed ? "PASSED" : "FAILED"} label="SMART" />
         <Stat value={wearOrReallocated} label={disk.wearPercentage != null ? "Wear" : "Realloc"} />
+        <Stat value={formatCapacity(disk.usedBytes, disk.totalBytes)} label="Capacity" />
       </div>
     </div>
   );
