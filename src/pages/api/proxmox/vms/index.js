@@ -9,11 +9,10 @@ async function pveGet(pveConfig, path) {
   const url = `${pveConfig.url}/api2/json/${path}`;
   const headers = { Authorization: `PVEAPIToken=${pveConfig.token}=${pveConfig.secret}` };
   const [status, , data] = await httpProxy(url, { method: "GET", headers });
-  const parsed = JSON.parse(Buffer.from(data).toString());
   if (status !== 200) {
     throw new Error(`Proxmox API returned ${status} for ${path}`);
   }
-  return parsed.data;
+  return JSON.parse(Buffer.from(data).toString()).data;
 }
 
 function basicStatsFromResource(resource) {
@@ -98,7 +97,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Failed to fetch Proxmox cluster resources" });
   }
 
-  const guests = (resources ?? []).filter((resource) => resource.template === 0);
+  const guests = (resources ?? []).filter((resource) => !resource.template);
   const entries = await Promise.all(guests.map((resource) => buildEntry(pveConfig, resource)));
 
   return res.status(200).json(entries);

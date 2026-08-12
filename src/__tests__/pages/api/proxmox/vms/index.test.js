@@ -21,6 +21,14 @@ function jsonResponse(status, body) {
   return [status, {}, Buffer.from(JSON.stringify(body))];
 }
 
+// httpProxy never rejects — on a network-level failure (connection refused,
+// DNS failure, etc.) it catches the error internally and resolves with this
+// shape instead: status 500, and a plain JS object (not a Buffer) as the
+// third element. See src/utils/proxy/http.js's httpProxy catch branch.
+function networkFailure(message) {
+  return [500, "application/json", { error: { message, url: "https://10.0.1.9:8006/...", rawError: {} } }, null];
+}
+
 const clusterResourcesBody = {
   data: [
     {
@@ -191,7 +199,7 @@ describe("pages/api/proxmox/vms", () => {
     getPveConfig.mockReturnValue(pveConfig);
     httpProxy.mockImplementation(async (url) => {
       if (url.includes("cluster/resources")) return jsonResponse(200, clusterResourcesBody);
-      if (url.includes("/qemu/100/config")) throw new Error("connect ECONNREFUSED 10.0.1.9:8006");
+      if (url.includes("/qemu/100/config")) return networkFailure("connect ECONNREFUSED 10.0.1.9:8006");
       if (url.includes("/lxc/200/config")) return jsonResponse(200, lxcConfigBody);
       if (url.includes("/lxc/200/interfaces")) return jsonResponse(200, lxcInterfacesBody);
       throw new Error(`unexpected URL in test: ${url}`);

@@ -64,6 +64,10 @@ describe("components/proxmox-vms/group", () => {
     expect(vmCard).toHaveTextContent("10.0.1.22");
     expect(vmCard).toHaveTextContent("1d 1h"); // formatUptime(92576)
     expect(vmCard).toHaveTextContent("3.09 GB / 3.22 GB"); // pretty-bytes on mem
+    // QEMU has no real per-guest disk usage (diskUsedBytes: null), but the
+    // allocated size (diskTotalBytes / maxdisk) is available and should be
+    // shown instead of a bare "-".
+    expect(vmCard).toHaveTextContent("34.4 GB (allocated)"); // pretty-bytes on maxdisk (34359738368)
 
     const lxcCard = screen.getByText("lxc-homelab").closest('[data-testid="vm-card"]');
     expect(lxcCard).toHaveAttribute("data-status", "stopped");

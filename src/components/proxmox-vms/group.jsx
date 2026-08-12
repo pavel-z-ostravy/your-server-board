@@ -8,6 +8,7 @@ import { formatUptime } from "utils/proxmox/uptime";
 
 const STATUS_DOT_CLASS = {
   running: "bg-emerald-500",
+  paused: "bg-orange-400",
   stopped: "bg-theme-400",
 };
 
@@ -32,7 +33,13 @@ const fetcher = (url) =>
   });
 
 function formatCapacity(usedBytes, totalBytes) {
-  if (usedBytes == null || totalBytes == null) return null;
+  if (usedBytes == null) {
+    // QEMU VMs don't have real per-guest disk usage available (out of scope
+    // for this feature), but the route still returns the allocated size
+    // (maxdisk) for every VM. Show that instead of discarding it as "-".
+    return totalBytes == null ? null : `${prettyBytes(totalBytes)} (allocated)`;
+  }
+  if (totalBytes == null) return null;
   return `${prettyBytes(usedBytes)} / ${prettyBytes(totalBytes)}`;
 }
 
