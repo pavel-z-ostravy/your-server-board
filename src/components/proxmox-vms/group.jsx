@@ -1,6 +1,6 @@
 import classNames from "classnames";
 import prettyBytes from "pretty-bytes";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import useSWR from "swr";
 
 import { SettingsContext } from "utils/contexts/settings";
@@ -57,6 +57,31 @@ function VmCard({ vm, cardClassName }) {
   const memValue = formatCapacity(vm.memUsedBytes, vm.memTotalBytes);
   const diskValue = formatCapacity(vm.diskUsedBytes, vm.diskTotalBytes);
 
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // Fetch-on-first-expand: the detail request only fires the first time the
+  // card is opened. Subsequent toggles (close/reopen) reuse the cached
+  // `detail` state rather than re-hitting the API.
+  const toggleDetail = async () => {
+    if (detailOpen) {
+      setDetailOpen(false);
+      return;
+    }
+    setDetailOpen(true);
+    if (detail || detailLoading) return;
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/proxmox/vm-detail?type=${vm.type}&node=${vm.node}&vmid=${vm.vmid}`);
+      if (res.ok) {
+        setDetail(await res.json());
+      }
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   return (
     <div className={cardClassName} data-testid="vm-card" data-status={vm.status}>
       <div className="flex items-center justify-between mb-2">
@@ -78,6 +103,28 @@ function VmCard({ vm, cardClassName }) {
       <p className="text-theme-500 dark:text-theme-300 text-xs font-light mt-2">
         {vm.ipAddress ?? "-"} &middot; {vm.macAddress ?? "-"} &middot; {vm.osName ?? "-"}
       </p>
+      <button type="button" onClick={toggleDetail} className="text-xs text-theme-500 dark:text-theme-300 mt-2">
+        Details
+      </button>
+      {detailOpen && (
+        <div className="mt-2 text-xs">
+          {detailLoading && <p className="text-theme-500 dark:text-theme-300">Loading...</p>}
+          {detail && (
+            <>
+              <ul>
+                {detail.processes.map((p) => (
+                  <li key={p.pid}>
+                    <span>{p.command}</span> — {p.cpuPercent}% CPU
+                  </li>
+                ))}
+              </ul>
+              <p className="text-theme-500 dark:text-theme-300 mt-1">
+                Last update: {detail.lastUpdate ? new Date(detail.lastUpdate).toLocaleDateString() : "N/A"}
+              </p>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

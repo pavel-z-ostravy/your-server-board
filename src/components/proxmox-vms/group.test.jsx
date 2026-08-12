@@ -82,4 +82,57 @@ describe("components/proxmox-vms/group", () => {
 
     await waitFor(() => expect(screen.getByText("Failed to load VM/LXC data.")).toBeInTheDocument());
   });
+
+  it("lazily fetches and shows process/update detail only after the Details toggle is clicked", async () => {
+    const listResponse = {
+      ok: true,
+      json: () =>
+        Promise.resolve([
+          {
+            vmid: 200,
+            node: "proxmox",
+            type: "lxc",
+            name: "lxc-homelab",
+            status: "running",
+            cpuUsedCores: 1,
+            cpuTotalCores: 4,
+            memUsedBytes: 1,
+            memTotalBytes: 2,
+            diskUsedBytes: 1,
+            diskTotalBytes: 2,
+            uptimeSeconds: 100,
+            macAddress: "BC:24:11:AE:7C:89",
+            ipAddress: "10.0.1.104",
+            osName: "debian",
+          },
+        ]),
+    };
+    const detailResponse = {
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          processes: [{ pid: 3368, cpuPercent: 0.8, memPercent: 18.4, command: "redis-server" }],
+          osReleaseName: "Debian GNU/Linux 12 (bookworm)",
+          lastUpdate: null,
+        }),
+    };
+    global.fetch = vi.fn((url) =>
+      url.includes("vm-detail") ? Promise.resolve(detailResponse) : Promise.resolve(listResponse),
+    );
+
+    renderWithSWR(<ProxmoxVmsGroup />);
+    await waitFor(() => expect(screen.getByText("lxc-homelab")).toBeInTheDocument());
+
+    // Before expanding: no detail fetch, no process data visible.
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining("vm-detail"));
+    expect(screen.queryByText("redis-server")).not.toBeInTheDocument();
+
+    screen.getByText("Details").click();
+
+    await waitFor(() => expect(screen.getByText("redis-server")).toBeInTheDocument());
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/proxmox/vm-detail?type=lxc&node=proxmox&vmid=200"),
+    );
+    expect(screen.getByText(/Last update: N\/A/)).toBeInTheDocument();
+  });
 });
