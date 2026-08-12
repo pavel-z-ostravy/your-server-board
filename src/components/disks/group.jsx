@@ -116,7 +116,12 @@ export default function DisksGroup() {
     <div id="disks-group" className="flex flex-col m-4 sm:m-8 sm:mt-4 mb-2">
       <div className="flex items-center justify-between">
         <h2 className="flex text-theme-800 dark:text-theme-300 text-xl font-medium service-group-name">Disks</h2>
-        <button type="button" onClick={() => mutate()} disabled={isValidating} className="text-sm">
+        <button
+          type="button"
+          onClick={() => mutate()}
+          disabled={isValidating}
+          className="text-sm text-theme-500 dark:text-theme-300 disabled:opacity-50"
+        >
           Refresh
         </button>
       </div>

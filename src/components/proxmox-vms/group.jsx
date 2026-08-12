@@ -116,7 +116,12 @@ export default function ProxmoxVmsGroup() {
         <h2 className="flex text-theme-800 dark:text-theme-300 text-xl font-medium service-group-name">
           Virtual Machines
         </h2>
-        <button type="button" onClick={() => mutate()} disabled={isValidating} className="text-sm">
+        <button
+          type="button"
+          onClick={() => mutate()}
+          disabled={isValidating}
+          className="text-sm text-theme-500 dark:text-theme-300 disabled:opacity-50"
+        >
           Refresh
         </button>
       </div>
