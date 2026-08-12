@@ -36,9 +36,14 @@ describe("agentExec", () => {
 
     expect(result).toBe("   3368  0.8 18.4 python3\n");
     // The command array must be exactly this fixed set — never derived from vmid/node beyond selecting the URL.
+    // The body is form-urlencoded via encodeURIComponent (the correct, live-verified-against-the-real-Proxmox-API
+    // choice — plain `encodeURI` would leave `=`/`;`/`/` unescaped inside each value, which happens to not corrupt
+    // TODAY's two hardcoded command strings but is the wrong general-purpose tool for encoding a form VALUE, as
+    // opposed to a whole URI). Decode each `command=` field back out to assert on the real values, not raw percent-escapes.
     const execCall = httpProxy.mock.calls.find(([url]) => url.includes("/agent/exec") && !url.includes("exec-status"));
-    expect(execCall[1].body).toContain("ps");
-    expect(execCall[1].body).toContain("--sort=-pcpu");
+    const decodedParts = execCall[1].body.split("&").map((pair) => decodeURIComponent(pair.replace(/^command=/, "")));
+    expect(decodedParts).toContain("ps");
+    expect(decodedParts).toContain("--sort=-pcpu");
   });
 
   it("polls exec-status more than once when the command hasn't exited yet", async () => {

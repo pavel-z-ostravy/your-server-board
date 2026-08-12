@@ -40,12 +40,7 @@ async function launchExec(pveConfig, node, vmid, command) {
     Authorization: `PVEAPIToken=${pveConfig.token}=${pveConfig.secret}`,
     "Content-Type": "application/x-www-form-urlencoded",
   };
-  // encodeURI (not encodeURIComponent) is used deliberately: it escapes whitespace and
-  // other characters that would otherwise break form-urlencoded field boundaries, while
-  // leaving "=" and "," untouched. None of the two fixed command arrays above contain a
-  // literal "&", "+", or "#" (the characters encodeURI does NOT escape but that would be
-  // unsafe here), so this is a safe, simpler encoding for these known, constant values.
-  const body = command.map((part) => `command=${encodeURI(part)}`).join("&");
+  const body = command.map((part) => `command=${encodeURIComponent(part)}`).join("&");
   const [status, , data] = await httpProxy(url, { method: "POST", headers, body });
   if (status !== 200) {
     throw new Error(`Failed to launch guest-agent exec on qemu/${vmid}: status ${status}`);
