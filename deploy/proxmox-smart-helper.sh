@@ -40,6 +40,28 @@ case "$cmd" in
   "pvs --noheadings -o pv_name,vg_name")
     exec pvs --noheadings -o pv_name,vg_name
     ;;
+  "pct exec "[0-9]*" -- ps -eo pid=,pcpu=,pmem=,comm= --sort=-pcpu")
+    vmid="${cmd#pct exec }"
+    vmid="${vmid% -- ps -eo pid=,pcpu=,pmem=,comm= --sort=-pcpu}"
+    case "$vmid" in
+      ''|*[!0-9]*)
+        echo "refused: invalid vmid" >&2
+        exit 1
+        ;;
+    esac
+    exec pct exec "$vmid" -- ps -eo pid=,pcpu=,pmem=,comm= --sort=-pcpu
+    ;;
+  "pct exec "[0-9]*" -- sh -c 'cat /etc/os-release 2>/dev/null; echo ---; (stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || echo none)'")
+    vmid="${cmd#pct exec }"
+    vmid="${vmid% -- sh -c 'cat /etc/os-release 2>/dev/null; echo ---; (stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || echo none)'}"
+    case "$vmid" in
+      ''|*[!0-9]*)
+        echo "refused: invalid vmid" >&2
+        exit 1
+        ;;
+    esac
+    exec pct exec "$vmid" -- sh -c 'cat /etc/os-release 2>/dev/null; echo ---; (stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || echo none)'
+    ;;
   *)
     echo "refused: command not permitted for this key" >&2
     exit 1
