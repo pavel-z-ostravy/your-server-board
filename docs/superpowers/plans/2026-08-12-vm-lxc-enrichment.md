@@ -149,7 +149,19 @@ Insert these two `case` arms directly above the existing `*)` catch-all:
     ;;
   "pct exec "[0-9]*" -- sh -c 'cat /etc/os-release 2>/dev/null; echo ---; (stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || echo none)'")
     vmid="${cmd#pct exec }"
-    vmid="${vmid% -- sh -c 'cat /etc/os-release 2>/dev/null; echo ---; (stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || echo none)'}"
+    # NOTE: the %-suffix here MUST wrap the apostrophe-bearing text in double
+    # quotes ("'...'") rather than using bare single quotes, unlike how it
+    # might look natural to write. A bare single quote inside a ${var%pattern}
+    # word acts as a real quote-operator (and gets consumed during pattern
+    # processing) rather than matching a literal apostrophe in $vmid — with
+    # bare quotes here, this stripping silently no-ops on every input
+    # (legitimate or not), leaving $vmid equal to the full unstripped string,
+    # which then always fails the numeric-only check below (fails closed, not
+    # a security hole, but the whole branch becomes permanently non-functional).
+    # Verified by executing both forms directly: the bare-quote version left
+    # $vmid unstripped for a real "pct exec 200 -- sh -c '...'" input; the
+    # double-quote-wrapped version below correctly stripped it to "200".
+    vmid=${vmid% -- sh -c "'cat /etc/os-release 2>/dev/null; echo ---; (stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || echo none)'"}
     case "$vmid" in
       ''|*[!0-9]*)
         echo "refused: invalid vmid" >&2
