@@ -5,8 +5,9 @@
 #   secret: secret
 
 # SMART/disk health monitoring reads its SSH connection details from a block
-# like this. Uncomment and fill it in to enable the /disks page — see
-# deploy/SSH_SETUP.md for the restricted SSH key setup this depends on.
+# like this. Uncomment and fill it in to enable the Disks section on the
+# dashboard — see deploy/SSH_SETUP.md for the restricted SSH key setup this
+# depends on.
 # install.sh already places the private key at config/ssh/id_smart, so most
 # installs only need to uncomment these three lines and set the right host.
 # smart:
