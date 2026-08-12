@@ -24,9 +24,9 @@ describe("extractMacFromQemuNet0", () => {
 
 describe("extractMacFromLxcNet0", () => {
   it("extracts the MAC from a real LXC net0 string (hwaddr not first)", () => {
-    expect(
-      extractMacFromLxcNet0("name=eth0,bridge=vmbr0,firewall=1,hwaddr=BC:24:11:AE:7C:89,ip=dhcp,type=veth"),
-    ).toBe("BC:24:11:AE:7C:89");
+    expect(extractMacFromLxcNet0("name=eth0,bridge=vmbr0,firewall=1,hwaddr=BC:24:11:AE:7C:89,ip=dhcp,type=veth")).toBe(
+      "BC:24:11:AE:7C:89",
+    );
   });
 
   it("returns null for a falsy net0", () => {

@@ -28,7 +28,7 @@ vi.mock("utils/config/config", () => ({
   ...config,
 }));
 
-import { getPveConfig, getProxmoxConfig, getSmartConfig } from "./proxmox";
+import { getProxmoxConfig, getPveConfig, getSmartConfig } from "./proxmox";
 
 describe("utils/config/proxmox", () => {
   it("loads and parses proxmox.yaml", () => {
