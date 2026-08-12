@@ -26,14 +26,22 @@ const EMPTY_HEALTH = {
 
 async function buildDiskEntry(sshConfig, device, capacityData) {
   const base = { name: device.name, device: `/dev/${device.name}`, model: device.model, size: device.size };
-  // Fallback used if computeDiskCapacity itself throws before assigning below —
-  // the catch block still needs a value to spread into its response shape.
-  let capacityFields = { usedBytes: null, totalBytes: null };
 
+  // Capacity is a separate, independent enrichment from SMART: a malformed
+  // capacityData shape (e.g. a pvsRows entry missing pvName) can make
+  // computeDiskCapacity itself throw. Catch that here, distinctly from the
+  // SMART try/catch below, so (a) the log points at the right subsystem for
+  // on-call debugging and (b) a capacity throw never prevents the SMART query
+  // from running for this same disk.
+  let capacityFields = { usedBytes: null, totalBytes: null };
   try {
     const capacity = capacityData ? computeDiskCapacity(device, capacityData) : null;
     capacityFields = { usedBytes: capacity?.usedBytes ?? null, totalBytes: capacity?.totalBytes ?? null };
+  } catch (error) {
+    logger.error("Disk capacity computation failed for %s:", base.device, error);
+  }
 
+  try {
     const smartData = await getSmartData(sshConfig, base.device);
     const health = computeDiskHealth(smartData);
     return {

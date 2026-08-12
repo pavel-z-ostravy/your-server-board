@@ -215,4 +215,45 @@ describe("pages/api/disks", () => {
     // and must not leak raw SSH error detail into the public response.
     expect(JSON.stringify(res.body)).not.toContain("refused:");
   });
+
+  it("falls back to null usedBytes/totalBytes without failing the request or the disk's SMART data when computeDiskCapacity itself throws", async () => {
+    getSmartConfig.mockReturnValue(sshConfig);
+    listBlockDevices.mockResolvedValue({
+      blockdevices: [{ name: "sda", size: "238.5G", type: "disk", model: "A" }],
+    });
+    getSmartData.mockResolvedValue(ataSmart);
+    getDiskUsage.mockResolvedValue([]);
+    getLvmReport.mockResolvedValue([]);
+    // A pvsRows entry with no pvName makes computeDiskCapacity's
+    // pv.pvName.replace(...) throw a TypeError on undefined, unlike the
+    // fetchCapacityData-rejects scenario above where capacityData is null and
+    // computeDiskCapacity is never called at all.
+    getPvMapping.mockResolvedValue([{ vgName: "pve" }]);
+
+    const req = { query: {} };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toMatchObject({
+      name: "sda",
+      usedBytes: null,
+      totalBytes: null,
+      // SMART data must be unaffected by the capacity throw for this same disk.
+      status: "ok",
+      error: null,
+      temperature: 40,
+      smartPassed: true,
+      reallocatedSectors: 0,
+    });
+    // The raw TypeError detail must never reach the (potentially unauthenticated) HTTP response.
+    expect(JSON.stringify(res.body)).not.toContain("Cannot read properties of undefined");
+    expect(logger.error).toHaveBeenCalledWith(
+      "Disk capacity computation failed for %s:",
+      "/dev/sda",
+      expect.any(Error),
+    );
+  });
 });
