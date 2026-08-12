@@ -3,6 +3,7 @@ import classNames from "classnames";
 import BookmarksGroup from "components/bookmarks/group";
 import DisksGroup from "components/disks/group";
 import ErrorBoundary from "components/errorboundry";
+import ProxmoxVmsGroup from "components/proxmox-vms/group";
 import QuickLaunch from "components/quicklaunch";
 import ServicesGroup from "components/services/group";
 import Tab, { slugifyAndEncode } from "components/tab";
@@ -502,6 +503,8 @@ function Home({ initialSettings }) {
         </div>
 
         {servicesAndBookmarksGroups}
+
+        <ProxmoxVmsGroup />
 
         <DisksGroup />
 
