@@ -106,7 +106,7 @@ export default function DisksGroup() {
   });
 
   return (
-    <div id="disks-group">
+    <div id="disks-group" className="flex flex-col m-4 sm:m-8 sm:mt-4 mb-2">
       <div className="flex items-center justify-between">
         <h2 className="flex text-theme-800 dark:text-theme-300 text-xl font-medium service-group-name">Disks</h2>
         <button type="button" onClick={() => mutate()} disabled={isValidating} className="text-sm">
@@ -117,8 +117,9 @@ export default function DisksGroup() {
       {error && <p className="text-rose-500/80">Failed to load disk data.</p>}
       {!disks && !error && <p className="text-theme-500 dark:text-theme-300 text-sm">Loading...</p>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-4">
-        {Array.isArray(disks) && disks.map((disk) => <DiskCard key={disk.name} disk={disk} cardClassName={cardClassName} />)}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        {Array.isArray(disks) &&
+          disks.map((disk) => <DiskCard key={disk.name} disk={disk} cardClassName={cardClassName} />)}
       </div>
     </div>
   );

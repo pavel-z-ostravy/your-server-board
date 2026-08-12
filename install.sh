@@ -104,8 +104,9 @@ echo "least-privilege API token with 'pveum'). The dashboard will pick it up"
 echo "on next restart (docker compose restart)."
 echo
 echo "Also uncomment and fill in the 'smart:' block in the same file, using the"
-echo "config/ssh/id_smart key generated above, to enable the /disks page — see"
-echo "deploy/SSH_SETUP.md for the remaining setup on the Proxmox host."
+echo "config/ssh/id_smart key generated above, to enable the Disks section on"
+echo "the dashboard — see deploy/SSH_SETUP.md for the remaining setup on the"
+echo "Proxmox host."
 echo
 
 echo "== Building and starting the container =="

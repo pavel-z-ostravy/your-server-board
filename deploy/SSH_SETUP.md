@@ -36,5 +36,5 @@ step 2/3 instructions on screen — it does not copy the script or edit
 4. The private key already lives at `config/ssh/id_smart` (gitignored — never
    commit it) from step 1. Uncomment and fill in the `smart:` block in
    `config/proxmox.yaml` (see `src/skeleton/proxmox.yaml` for the shape) to
-   point at this key — the `/disks` page reads that block and will show a
-   500/error state until it's filled in.
+   point at this key — the Disks section on the dashboard reads that block
+   and will show a 500/error state until it's filled in.
