@@ -1,7 +1,9 @@
 # Restricted SSH key setup (Proxmox host)
 
-This key can only run `lsblk` or `smartctl -j -a <device>` — nothing else —
-enforced server-side by a forced command, not just by client-side discipline.
+This key can only run `lsblk`, `smartctl -j -a <device>`, `df`, `lvs`, or
+`pvs` (each a single fixed, read-only, parameterless or path-validated
+command) — nothing else — enforced server-side by a forced command, not
+just by client-side discipline.
 
 If you ran `./install.sh`, it already did step 1 for you and printed the
 step 2/3 instructions on screen — it does not copy the script or edit

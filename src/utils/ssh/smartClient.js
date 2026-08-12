@@ -101,3 +101,68 @@ export async function getSmartData(sshConfig, devicePath) {
     throw new Error(`Failed to parse smartctl output (exit code ${code}): ${stderr || stdout}`);
   }
 }
+
+export async function getDiskUsage(sshConfig) {
+  const { stdout, stderr, code } = await execCommand(
+    sshConfig,
+    "df -B1 --output=source,target,fstype,used,size",
+  );
+  if (code !== 0) {
+    throw new Error(`Command exited with code ${code}: ${stderr}`);
+  }
+  // First line is the column header ("Filesystem  Mounted on  Type  Used
+  // 1B-blocks"); every line after it is one whitespace-separated row. This
+  // assumes no mountpoint contains a space, which holds for every mountpoint
+  // this app expects to see (system partitions, LVM/LUKS-mapped storage) —
+  // acceptable for a homelab dashboard, not general-purpose df parsing.
+  const lines = stdout.trim().split("\n").slice(1);
+  return lines
+    .filter((line) => line.trim().length > 0)
+    .map((line) => {
+      const [source, target, fstype, used, size] = line.trim().split(/\s+/);
+      return { source, target, fstype, usedBytes: Number(used), sizeBytes: Number(size) };
+    });
+}
+
+export async function getLvmReport(sshConfig) {
+  const { stdout, stderr, code } = await execCommand(
+    sshConfig,
+    "lvs --noheadings --units b --nosuffix -o lv_name,vg_name,lv_attr,data_percent,lv_size",
+  );
+  if (code !== 0) {
+    throw new Error(`Command exited with code ${code}: ${stderr}`);
+  }
+  // --noheadings means every non-blank line is a row. Non-thin LVs (plain
+  // linear volumes like root/swap) have no data_percent to report at all —
+  // lvs omits the token rather than printing an empty one — so a row is
+  // either 5 whitespace-separated tokens (thin pool or thin volume) or 4
+  // (everything else); dataPercent is null in the 4-token case.
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const tokens = line.split(/\s+/);
+      if (tokens.length === 5) {
+        const [lvName, vgName, lvAttr, dataPercent, lvSize] = tokens;
+        return { lvName, vgName, lvAttr, dataPercent: Number(dataPercent), lvSizeBytes: Number(lvSize) };
+      }
+      const [lvName, vgName, lvAttr, lvSize] = tokens;
+      return { lvName, vgName, lvAttr, dataPercent: null, lvSizeBytes: Number(lvSize) };
+    });
+}
+
+export async function getPvMapping(sshConfig) {
+  const { stdout, stderr, code } = await execCommand(sshConfig, "pvs --noheadings -o pv_name,vg_name");
+  if (code !== 0) {
+    throw new Error(`Command exited with code ${code}: ${stderr}`);
+  }
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [pvName, vgName] = line.split(/\s+/);
+      return { pvName, vgName };
+    });
+}

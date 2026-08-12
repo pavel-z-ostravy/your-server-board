@@ -31,6 +31,15 @@ case "$cmd" in
         ;;
     esac
     ;;
+  "df -B1 --output=source,target,fstype,used,size")
+    exec df -B1 --output=source,target,fstype,used,size
+    ;;
+  "lvs --noheadings --units b --nosuffix -o lv_name,vg_name,lv_attr,data_percent,lv_size")
+    exec lvs --noheadings --units b --nosuffix -o lv_name,vg_name,lv_attr,data_percent,lv_size
+    ;;
+  "pvs --noheadings -o pv_name,vg_name")
+    exec pvs --noheadings -o pv_name,vg_name
+    ;;
   *)
     echo "refused: command not permitted for this key" >&2
     exit 1

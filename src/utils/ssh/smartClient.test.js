@@ -8,12 +8,16 @@ vi.mock("node:fs", () => ({
 
 const LSBLK_COMMAND = "lsblk -J -o NAME,SIZE,TYPE,MODEL,MOUNTPOINT,ROTA";
 const SMARTCTL_SDA_COMMAND = "smartctl -j -a /dev/sda";
+const DF_COMMAND = "df -B1 --output=source,target,fstype,used,size";
+const LVS_COMMAND = "lvs --noheadings --units b --nosuffix -o lv_name,vg_name,lv_attr,data_percent,lv_size";
+const PVS_COMMAND = "pvs --noheadings -o pv_name,vg_name";
 
 // Mutable per-test behavior knobs for the fake ssh2 Client below. Reset in
 // afterEach so tests can't leak behavior into each other.
 let connectBehavior = "ready"; // "ready" | "hang" | "error"
 let lsblkBehavior = "success"; // "success" | "nonzero"
 let smartBehavior = "success"; // "success" | "nonzero-valid-json" | "nonzero-invalid"
+let capacityBehavior = "success"; // "success" | "nonzero" | "empty"
 
 class FakeStream extends EventEmitter {
   constructor() {
@@ -73,6 +77,60 @@ class FakeClient extends EventEmitter {
         return;
       }
 
+      if (command === DF_COMMAND) {
+        if (capacityBehavior === "nonzero") {
+          stream.stderr.emit("data", Buffer.from("df: failure\n"));
+          stream.emit("close", 1);
+        } else if (capacityBehavior === "empty") {
+          stream.emit("data", Buffer.from("Filesystem Mounted on Type Used 1B-blocks\n"));
+          stream.emit("close", 0);
+        } else {
+          stream.emit(
+            "data",
+            Buffer.from(
+              "Filesystem            Mounted on   Type Used         1B-blocks\n" +
+                "/dev/mapper/pve-root  /            ext4 25914707968  89628205056\n" +
+                "/dev/sda2             /boot/efi    vfat 9211904      1071624192\n",
+            ),
+          );
+          stream.emit("close", 0);
+        }
+        return;
+      }
+
+      if (command === LVS_COMMAND) {
+        if (capacityBehavior === "nonzero") {
+          stream.stderr.emit("data", Buffer.from("lvs: failure\n"));
+          stream.emit("close", 1);
+        } else if (capacityBehavior === "empty") {
+          stream.emit("data", Buffer.from(""));
+          stream.emit("close", 0);
+        } else {
+          stream.emit(
+            "data",
+            Buffer.from(
+              "  data pve twi-aotz-- 63.09 151640866816\n" + "  root pve -wi-ao---- 91662319616\n",
+            ),
+          );
+          stream.emit("close", 0);
+        }
+        return;
+      }
+
+      if (command === PVS_COMMAND) {
+        if (capacityBehavior === "nonzero") {
+          stream.stderr.emit("data", Buffer.from("pvs: failure\n"));
+          stream.emit("close", 1);
+        } else if (capacityBehavior === "empty") {
+          stream.emit("data", Buffer.from(""));
+          stream.emit("close", 0);
+        } else {
+          stream.emit("data", Buffer.from("  /dev/sda3 pve\n"));
+          stream.emit("close", 0);
+        }
+        return;
+      }
+
       // Unexpected command in a test — fail loudly rather than silently
       // matching a fallback branch.
       stream.stderr.emit("data", Buffer.from(`unexpected command: ${command}\n`));
@@ -87,7 +145,8 @@ vi.mock("ssh2", () => ({
   Client: FakeClient,
 }));
 
-const { getSmartData, listBlockDevices, SSH_COMMAND_TIMEOUT_MS } = await import("./smartClient");
+const { getSmartData, listBlockDevices, getDiskUsage, getLvmReport, getPvMapping, SSH_COMMAND_TIMEOUT_MS } =
+  await import("./smartClient");
 
 const sshConfig = { host: "10.0.1.9", username: "root", privateKeyPath: "/config/ssh/id_smart" };
 
@@ -95,6 +154,7 @@ afterEach(() => {
   connectBehavior = "ready";
   lsblkBehavior = "success";
   smartBehavior = "success";
+  capacityBehavior = "success";
   vi.useRealTimers();
 });
 
@@ -149,5 +209,59 @@ describe("smartClient", () => {
     expect(endSpy).toHaveBeenCalled();
 
     endSpy.mockRestore();
+  });
+
+  it("fetches disk usage via the exact df command", async () => {
+    const result = await getDiskUsage(sshConfig);
+    expect(result).toEqual([
+      { source: "/dev/mapper/pve-root", target: "/", fstype: "ext4", usedBytes: 25914707968, sizeBytes: 89628205056 },
+      { source: "/dev/sda2", target: "/boot/efi", fstype: "vfat", usedBytes: 9211904, sizeBytes: 1071624192 },
+    ]);
+  });
+
+  it("returns an empty array when df has nothing to report beyond the header", async () => {
+    capacityBehavior = "empty";
+    const result = await getDiskUsage(sshConfig);
+    expect(result).toEqual([]);
+  });
+
+  it("rejects getDiskUsage when df exits non-zero", async () => {
+    capacityBehavior = "nonzero";
+    await expect(getDiskUsage(sshConfig)).rejects.toThrow(/exited with code 1/);
+  });
+
+  it("fetches the LVM report via the exact lvs command, with dataPercent null for non-thin LVs", async () => {
+    const result = await getLvmReport(sshConfig);
+    expect(result).toEqual([
+      { lvName: "data", vgName: "pve", lvAttr: "twi-aotz--", dataPercent: 63.09, lvSizeBytes: 151640866816 },
+      { lvName: "root", vgName: "pve", lvAttr: "-wi-ao----", dataPercent: null, lvSizeBytes: 91662319616 },
+    ]);
+  });
+
+  it("returns an empty array when lvs has no output (no LVM on this host)", async () => {
+    capacityBehavior = "empty";
+    const result = await getLvmReport(sshConfig);
+    expect(result).toEqual([]);
+  });
+
+  it("rejects getLvmReport when lvs exits non-zero", async () => {
+    capacityBehavior = "nonzero";
+    await expect(getLvmReport(sshConfig)).rejects.toThrow(/exited with code 1/);
+  });
+
+  it("fetches the PV-to-VG mapping via the exact pvs command", async () => {
+    const result = await getPvMapping(sshConfig);
+    expect(result).toEqual([{ pvName: "/dev/sda3", vgName: "pve" }]);
+  });
+
+  it("returns an empty array when pvs has no output (no LVM on this host)", async () => {
+    capacityBehavior = "empty";
+    const result = await getPvMapping(sshConfig);
+    expect(result).toEqual([]);
+  });
+
+  it("rejects getPvMapping when pvs exits non-zero", async () => {
+    capacityBehavior = "nonzero";
+    await expect(getPvMapping(sshConfig)).rejects.toThrow(/exited with code 1/);
   });
 });
