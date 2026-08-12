@@ -44,6 +44,11 @@ describe("agentExec", () => {
     const decodedParts = execCall[1].body.split("&").map((pair) => decodeURIComponent(pair.replace(/^command=/, "")));
     expect(decodedParts).toContain("ps");
     expect(decodedParts).toContain("--sort=-pcpu");
+    // Regression guard for the encoding MECHANISM itself, not just the decoded values: encodeURIComponent
+    // percent-encodes "=" (producing "%3D" in the raw body), while encodeURI would leave "=" unescaped for
+    // these strings. Neither PS_COMMAND nor OS_PROBE_COMMAND contains "&", so decoding alone can't tell the
+    // two encoders apart — this raw-body check ensures a future accidental revert to encodeURI fails loudly.
+    expect(execCall[1].body).toContain("%3D");
   });
 
   it("polls exec-status more than once when the command hasn't exited yet", async () => {

@@ -40,6 +40,7 @@ async function launchExec(pveConfig, node, vmid, command) {
     Authorization: `PVEAPIToken=${pveConfig.token}=${pveConfig.secret}`,
     "Content-Type": "application/x-www-form-urlencoded",
   };
+  // encodeURIComponent (not encodeURI) is required: it encodes an individual form VALUE, not a whole URI.
   const body = command.map((part) => `command=${encodeURIComponent(part)}`).join("&");
   const [status, , data] = await httpProxy(url, { method: "POST", headers, body });
   if (status !== 200) {
