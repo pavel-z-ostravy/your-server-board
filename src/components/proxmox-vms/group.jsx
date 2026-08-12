@@ -60,10 +60,15 @@ function VmCard({ vm, cardClassName }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
 
   // Fetch-on-first-expand: the detail request only fires the first time the
   // card is opened. Subsequent toggles (close/reopen) reuse the cached
-  // `detail` state rather than re-hitting the API.
+  // `detail` state rather than re-hitting the API. A failed fetch (non-ok
+  // response or a rejected promise, e.g. network failure) leaves `detail`
+  // null and sets `detailError` instead — the guard above then allows a
+  // retry on the next close/reopen, since only a *successful* fetch should
+  // ever be permanently cached.
   const toggleDetail = async () => {
     if (detailOpen) {
       setDetailOpen(false);
@@ -72,11 +77,16 @@ function VmCard({ vm, cardClassName }) {
     setDetailOpen(true);
     if (detail || detailLoading) return;
     setDetailLoading(true);
+    setDetailError(false);
     try {
       const res = await fetch(`/api/proxmox/vm-detail?type=${vm.type}&node=${vm.node}&vmid=${vm.vmid}`);
       if (res.ok) {
         setDetail(await res.json());
+      } else {
+        setDetailError(true);
       }
+    } catch {
+      setDetailError(true);
     } finally {
       setDetailLoading(false);
     }
@@ -109,6 +119,7 @@ function VmCard({ vm, cardClassName }) {
       {detailOpen && (
         <div className="mt-2 text-xs">
           {detailLoading && <p className="text-theme-500 dark:text-theme-300">Loading...</p>}
+          {detailError && <p className="text-rose-500/80">Failed to load details.</p>}
           {detail && (
             <>
               <ul>

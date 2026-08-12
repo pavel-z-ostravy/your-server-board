@@ -135,4 +135,42 @@ describe("components/proxmox-vms/group", () => {
     );
     expect(screen.getByText(/Last update: N\/A/)).toBeInTheDocument();
   });
+
+  it("shows a failure message when the detail fetch responds with a non-ok status", async () => {
+    const listResponse = {
+      ok: true,
+      json: () =>
+        Promise.resolve([
+          {
+            vmid: 200,
+            node: "proxmox",
+            type: "lxc",
+            name: "lxc-homelab",
+            status: "running",
+            cpuUsedCores: 1,
+            cpuTotalCores: 4,
+            memUsedBytes: 1,
+            memTotalBytes: 2,
+            diskUsedBytes: 1,
+            diskTotalBytes: 2,
+            uptimeSeconds: 100,
+            macAddress: "BC:24:11:AE:7C:89",
+            ipAddress: "10.0.1.104",
+            osName: "debian",
+          },
+        ]),
+    };
+    const detailResponse = { ok: false, json: () => Promise.resolve({ error: "boom" }) };
+    global.fetch = vi.fn((url) =>
+      url.includes("vm-detail") ? Promise.resolve(detailResponse) : Promise.resolve(listResponse),
+    );
+
+    renderWithSWR(<ProxmoxVmsGroup />);
+    await waitFor(() => expect(screen.getByText("lxc-homelab")).toBeInTheDocument());
+
+    screen.getByText("Details").click();
+
+    await waitFor(() => expect(screen.getByText("Failed to load details.")).toBeInTheDocument());
+    expect(screen.queryByText("redis-server")).not.toBeInTheDocument();
+  });
 });
