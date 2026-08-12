@@ -28,7 +28,7 @@ vi.mock("utils/config/config", () => ({
   ...config,
 }));
 
-import { getProxmoxConfig, getSmartConfig } from "./proxmox";
+import { getPveConfig, getProxmoxConfig, getSmartConfig } from "./proxmox";
 
 describe("utils/config/proxmox", () => {
   it("loads and parses proxmox.yaml", () => {
@@ -52,5 +52,17 @@ describe("utils/config/proxmox", () => {
     yaml.load.mockReturnValueOnce({ pve: { url: "http://pve" } });
 
     expect(getSmartConfig()).toBeNull();
+  });
+
+  it("returns the pve block", () => {
+    yaml.load.mockReturnValueOnce({ pve: { url: "https://10.0.1.9:8006", token: "t", secret: "s" } });
+
+    expect(getPveConfig()).toEqual({ url: "https://10.0.1.9:8006", token: "t", secret: "s" });
+  });
+
+  it("returns null when the pve block is absent", () => {
+    yaml.load.mockReturnValueOnce({});
+
+    expect(getPveConfig()).toBeNull();
   });
 });

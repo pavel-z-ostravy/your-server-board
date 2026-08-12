@@ -17,3 +17,8 @@ export function getSmartConfig() {
   const config = getProxmoxConfig();
   return config?.smart ?? null;
 }
+
+export function getPveConfig() {
+  const config = getProxmoxConfig();
+  return config?.pve ?? null;
+}
