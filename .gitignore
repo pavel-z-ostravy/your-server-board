@@ -67,3 +67,5 @@ config/proxmox.yaml
 config/ssh/
 .env
 .env.bak
+
+.worktrees/
