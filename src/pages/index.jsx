@@ -1,6 +1,7 @@
 /* eslint-disable react/no-array-index-key */
 import classNames from "classnames";
 import BookmarksGroup from "components/bookmarks/group";
+import DisksGroup from "components/disks/group";
 import ErrorBoundary from "components/errorboundry";
 import QuickLaunch from "components/quicklaunch";
 import ServicesGroup from "components/services/group";
@@ -11,7 +12,6 @@ import { useTranslation } from "next-i18next/pages";
 import { serverSideTranslations } from "next-i18next/pages/serverSideTranslations";
 import dynamic from "next/dynamic";
 import Head from "next/head";
-import Link from "next/link";
 import { useRouter } from "next/router";
 import Script from "next/script";
 import { useContext, useEffect, useMemo, useState } from "react";
@@ -503,11 +503,10 @@ function Home({ initialSettings }) {
 
         {servicesAndBookmarksGroups}
 
+        <DisksGroup />
+
         <div id="footer" className="flex flex-col mt-auto p-8 w-full">
           <div id="style" className="flex w-full justify-end items-center">
-            <Link href="/disks" className="text-sm mr-4 text-theme-500 dark:text-theme-300">
-              Disks
-            </Link>
             {!settings?.color && <ColorToggle />}
             <Revalidate />
             <SignOut />

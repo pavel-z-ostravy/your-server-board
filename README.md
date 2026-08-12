@@ -23,14 +23,14 @@ for exactly what in this repo is original vs. derivative.
 - **Foundation deployed and live.** The app runs as a Docker container on a
   real homelab host, connected to a real Proxmox cluster via API token, and
   the Proxmox VE widget renders real VM/CT/CPU/memory data.
-- **Disks & SMART health monitoring deployed and live.** The `/disks` page
-  and `/api/disks` route (built on top of the restricted-SSH
-  `src/utils/ssh/smartClient.js` client from Foundation) are live in the
-  deployed container, wired to a real restricted-command SSH key on a real
-  Proxmox host. `/api/disks` returns real per-drive SMART data — model,
-  size, temperature, health status — confirmed against real hardware (a
-  SATA SSD and a USB-enclosure NVMe drive), both reporting `"status": "ok"`.
-  Linked from the main dashboard's footer.
+- **Disks & SMART health monitoring deployed and live.** The Disks section
+  on the main dashboard and `/api/disks` route (built on top of the
+  restricted-SSH `src/utils/ssh/smartClient.js` client from Foundation) are
+  live in the deployed container, wired to a real restricted-command SSH key
+  on a real Proxmox host. `/api/disks` returns real per-drive SMART data —
+  model, size, temperature, health status — confirmed against real hardware
+  (a SATA SSD and a USB-enclosure NVMe drive), both reporting
+  `"status": "ok"`.
 - **Not yet implemented — tracked as separate follow-up plans**
   (see `docs/superpowers/plans/`):
   - Backup lifecycle management for Proxmox VMs/CTs (list/run/download/delete, retention)
@@ -60,8 +60,8 @@ for exactly what in this repo is original vs. derivative.
    Also uncomment and fill in the `smart:` block in the same file, pointing
    at the SSH key `install.sh` just generated — see
    [`deploy/SSH_SETUP.md`](deploy/SSH_SETUP.md) for the remaining setup on
-   the Proxmox host. Without it, the `/disks` page shows an error instead of
-   disk health data.
+   the Proxmox host. Without it, the Disks section on the dashboard shows an
+   error instead of disk health data.
 4. `docker compose restart`
 
 Prefer to do it by hand instead of `./install.sh`? See
@@ -83,7 +83,7 @@ in front of it too.
 |---|---|---|
 | Service widgets, bookmarks, search, theming, i18n | ✅ full support | unchanged |
 | Proxmox VM/CT status widget | ✅ read-only | unchanged (used for the live data above) |
-| Disk health (SMART) | ❌ none | ✅ live (`/disks` page + `/api/disks`) |
+| Disk health (SMART) | ❌ none | ✅ live (dashboard section + `/api/disks`) |
 | Backup lifecycle (list/run/download/delete/retention) | ❌ none | planned |
 | VM/CT power actions | ❌ none | planned |
 | Login | optional password only | password today, TOTP 2FA planned |
