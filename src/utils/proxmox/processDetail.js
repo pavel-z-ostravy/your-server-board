@@ -1,4 +1,3 @@
-
 export function parseTopProcesses(stdout, limit = 5) {
   return stdout
     .split("\n")

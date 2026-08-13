@@ -41,10 +41,7 @@ class FakeClient extends EventEmitter {
       }
 
       if (command === OS_PROBE_COMMAND_200) {
-        stream.emit(
-          "data",
-          Buffer.from('PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\nID=debian\n---\nnone\n'),
-        );
+        stream.emit("data", Buffer.from('PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\nID=debian\n---\nnone\n'));
         stream.emit("close", 0);
         return;
       }

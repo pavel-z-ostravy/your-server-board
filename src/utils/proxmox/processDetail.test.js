@@ -41,8 +41,8 @@ describe("parseOsProbe", () => {
   it("parses a real Debian os-release block with no update timestamp (none)", () => {
     const stdout =
       'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n' +
-      "NAME=\"Debian GNU/Linux\"\n" +
-      "VERSION_ID=\"12\"\n" +
+      'NAME="Debian GNU/Linux"\n' +
+      'VERSION_ID="12"\n' +
       "---\n" +
       "none\n";
 
