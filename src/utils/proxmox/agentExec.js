@@ -11,12 +11,12 @@ const POLL_INTERVAL_MS = 300;
 // select which guest's agent receives one of these two exact operations.
 // This is the QEMU-side equivalent of proxmox-smart-helper.sh's forced
 // command pattern: the "server" enforcing the fixed shape is this file.
-const PS_COMMAND = ["ps", "-eo", "pid=,pcpu=,pmem=,comm=", "--sort=-pcpu"];
-const OS_PROBE_COMMAND = [
+const PS_COMMAND = Object.freeze(["ps", "-eo", "pid=,pcpu=,pmem=,comm=", "--sort=-pcpu"]);
+const OS_PROBE_COMMAND = Object.freeze([
   "sh",
   "-c",
   "cat /etc/os-release 2>/dev/null; echo ---; (stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || echo none)",
-];
+]);
 
 function sleep(ms) {
   return new Promise((resolve) => {
@@ -35,7 +35,7 @@ async function pveAuthedGet(pveConfig, path) {
 }
 
 async function launchExec(pveConfig, node, vmid, command) {
-  const url = `${pveConfig.url}/api2/json/nodes/${node}/qemu/${vmid}/agent/exec`;
+  const url = `${pveConfig.url}/api2/json/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/agent/exec`;
   const headers = {
     Authorization: `PVEAPIToken=${pveConfig.token}=${pveConfig.secret}`,
     "Content-Type": "application/x-www-form-urlencoded",
@@ -53,7 +53,10 @@ async function launchExec(pveConfig, node, vmid, command) {
 async function pollExecStatus(pveConfig, node, vmid, pid) {
   const deadline = Date.now() + AGENT_EXEC_TIMEOUT_MS;
   for (;;) {
-    const status = await pveAuthedGet(pveConfig, `nodes/${node}/qemu/${vmid}/agent/exec-status?pid=${pid}`);
+    const status = await pveAuthedGet(
+      pveConfig,
+      `nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/agent/exec-status?pid=${pid}`,
+    );
     if (status.exited === 1) {
       return status["out-data"] ?? "";
     }

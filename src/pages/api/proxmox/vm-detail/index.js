@@ -7,7 +7,11 @@ import { getLxcOsProbe, getLxcProcesses } from "utils/ssh/lxcClient";
 const logger = createLogger("proxmoxVmDetailService");
 
 const VALID_TYPE = new Set(["qemu", "lxc"]);
-const VALID_NODE = /^[A-Za-z0-9._-]+$/;
+// Must start AND end with an alphanumeric character. This structurally
+// excludes "." and ".." (a path-traversal token would need to start or end
+// with "."), while still accepting real Proxmox node names such as
+// "proxmox", "pve-node1", or FQDN-style "node.example.com".
+const VALID_NODE = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
 const VALID_VMID = /^\d+$/;
 
 async function fetchLxcDetail(sshConfig, vmid) {

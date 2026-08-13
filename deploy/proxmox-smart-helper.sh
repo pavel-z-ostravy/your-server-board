@@ -9,6 +9,9 @@
 # via $SSH_ORIGINAL_COMMAND, which this script validates before acting on it.
 set -eu
 
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
 cmd="$SSH_ORIGINAL_COMMAND"
 
 case "$cmd" in
