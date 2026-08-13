@@ -31,6 +31,20 @@ describe("pages/api/proxmox/vm-detail", () => {
     vi.clearAllMocks();
   });
 
+  it("returns 405 for a non-GET request without calling any client function", async () => {
+    const req = { method: "POST", query: { type: "lxc", node: "proxmox", vmid: "200" } };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(405);
+    expect(res.body).toEqual({ error: "Method not allowed" });
+    expect(getSmartConfig).not.toHaveBeenCalled();
+    expect(getPveConfig).not.toHaveBeenCalled();
+    expect(getLxcProcesses).not.toHaveBeenCalled();
+    expect(getQemuProcesses).not.toHaveBeenCalled();
+  });
+
   it.each([
     [{ type: "qemu", node: "proxmox" }, "vmid"],
     [{ type: "qemu", vmid: "100" }, "node"],
@@ -39,7 +53,7 @@ describe("pages/api/proxmox/vm-detail", () => {
     [{ type: "qemu", node: "../etc", vmid: "100" }, "node"],
     [{ type: "qemu", node: "proxmox", vmid: "100; rm -rf /" }, "vmid"],
   ])("returns 400 for invalid query %o (bad %s)", async (query) => {
-    const req = { query };
+    const req = { method: "GET", query };
     const res = createMockRes();
 
     await handler(req, res);
@@ -52,7 +66,7 @@ describe("pages/api/proxmox/vm-detail", () => {
   it("returns 500 when the LXC SSH config is missing for a type=lxc request", async () => {
     getSmartConfig.mockReturnValue(null);
 
-    const req = { query: { type: "lxc", node: "proxmox", vmid: "200" } };
+    const req = { method: "GET", query: { type: "lxc", node: "proxmox", vmid: "200" } };
     const res = createMockRes();
 
     await handler(req, res);
@@ -63,7 +77,7 @@ describe("pages/api/proxmox/vm-detail", () => {
   it("returns 500 when the Proxmox API config is missing for a type=qemu request", async () => {
     getPveConfig.mockReturnValue(null);
 
-    const req = { query: { type: "qemu", node: "proxmox", vmid: "100" } };
+    const req = { method: "GET", query: { type: "qemu", node: "proxmox", vmid: "100" } };
     const res = createMockRes();
 
     await handler(req, res);
@@ -76,7 +90,7 @@ describe("pages/api/proxmox/vm-detail", () => {
     getLxcProcesses.mockResolvedValue(REAL_PS_OUTPUT);
     getLxcOsProbe.mockResolvedValue(REAL_OS_PROBE_OUTPUT);
 
-    const req = { query: { type: "lxc", node: "proxmox", vmid: "200" } };
+    const req = { method: "GET", query: { type: "lxc", node: "proxmox", vmid: "200" } };
     const res = createMockRes();
 
     await handler(req, res);
@@ -93,7 +107,7 @@ describe("pages/api/proxmox/vm-detail", () => {
     getQemuProcesses.mockResolvedValue(REAL_PS_OUTPUT);
     getQemuOsProbe.mockResolvedValue(REAL_OS_PROBE_OUTPUT);
 
-    const req = { query: { type: "qemu", node: "proxmox", vmid: "100" } };
+    const req = { method: "GET", query: { type: "qemu", node: "proxmox", vmid: "100" } };
     const res = createMockRes();
 
     await handler(req, res);
@@ -108,7 +122,7 @@ describe("pages/api/proxmox/vm-detail", () => {
     getLxcProcesses.mockRejectedValue(new Error("SSH command timed out after 15000ms"));
     getLxcOsProbe.mockRejectedValue(new Error("SSH command timed out after 15000ms"));
 
-    const req = { query: { type: "lxc", node: "proxmox", vmid: "200" } };
+    const req = { method: "GET", query: { type: "lxc", node: "proxmox", vmid: "200" } };
     const res = createMockRes();
 
     await handler(req, res);
@@ -124,7 +138,7 @@ describe("pages/api/proxmox/vm-detail", () => {
     getLxcProcesses.mockResolvedValue(REAL_PS_OUTPUT);
     getLxcOsProbe.mockRejectedValue(new Error("boom"));
 
-    const req = { query: { type: "lxc", node: "proxmox", vmid: "200" } };
+    const req = { method: "GET", query: { type: "lxc", node: "proxmox", vmid: "200" } };
     const res = createMockRes();
 
     await handler(req, res);

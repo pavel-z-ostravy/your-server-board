@@ -31,6 +31,10 @@ async function fetchQemuDetail(pveConfig, node, vmid) {
 }
 
 export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   const { type, node, vmid } = req.query;
 
   if (typeof type !== "string" || !VALID_TYPE.has(type)) {

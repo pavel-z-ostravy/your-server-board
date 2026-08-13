@@ -122,13 +122,17 @@ function VmCard({ vm, cardClassName }) {
           {detailError && <p className="text-rose-500/80">Failed to load details.</p>}
           {detail && (
             <>
-              <ul>
-                {detail.processes.map((p) => (
-                  <li key={p.pid}>
-                    <span>{p.command}</span> — {p.cpuPercent}% CPU
-                  </li>
-                ))}
-              </ul>
+              {detail.processes.length > 0 ? (
+                <ul>
+                  {detail.processes.map((p) => (
+                    <li key={p.pid}>
+                      <span>{p.command}</span> — {p.cpuPercent}% CPU
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-theme-500 dark:text-theme-300">No process data available.</p>
+              )}
               <p className="text-theme-500 dark:text-theme-300 mt-1">
                 Last update: {detail.lastUpdate ? new Date(detail.lastUpdate).toLocaleDateString() : "N/A"}
               </p>

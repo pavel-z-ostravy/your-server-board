@@ -136,6 +136,49 @@ describe("components/proxmox-vms/group", () => {
     expect(screen.getByText(/Last update: N\/A/)).toBeInTheDocument();
   });
 
+  it("shows an explicit empty-state message when the detail fetch succeeds with zero processes", async () => {
+    const listResponse = {
+      ok: true,
+      json: () =>
+        Promise.resolve([
+          {
+            vmid: 200,
+            node: "proxmox",
+            type: "lxc",
+            name: "lxc-homelab",
+            status: "stopped",
+            cpuUsedCores: 0,
+            cpuTotalCores: 4,
+            memUsedBytes: 0,
+            memTotalBytes: 2,
+            diskUsedBytes: 0,
+            diskTotalBytes: 2,
+            uptimeSeconds: 0,
+            macAddress: "BC:24:11:AE:7C:89",
+            ipAddress: "10.0.1.104",
+            osName: "debian",
+          },
+        ]),
+    };
+    const detailResponse = {
+      ok: true,
+      json: () => Promise.resolve({ processes: [], osReleaseName: null, lastUpdate: null }),
+    };
+    global.fetch = vi.fn((url) =>
+      url.includes("vm-detail") ? Promise.resolve(detailResponse) : Promise.resolve(listResponse),
+    );
+
+    renderWithSWR(<ProxmoxVmsGroup />);
+    await waitFor(() => expect(screen.getByText("lxc-homelab")).toBeInTheDocument());
+
+    screen.getByText("Details").click();
+
+    await waitFor(() => expect(screen.getByText("No process data available.")).toBeInTheDocument());
+    expect(screen.queryByText(/redis-server/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Failed to load details.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+  });
+
   it("shows a failure message when the detail fetch responds with a non-ok status", async () => {
     const listResponse = {
       ok: true,
