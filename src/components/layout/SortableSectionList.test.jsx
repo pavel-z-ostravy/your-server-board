@@ -11,6 +11,7 @@ vi.mock("@dnd-kit/core", () => ({
     return children;
   },
   PointerSensor: class {},
+  KeyboardSensor: class {},
   closestCenter: vi.fn(),
   useSensor: vi.fn(() => ({})),
   useSensors: vi.fn(() => []),
@@ -27,6 +28,7 @@ vi.mock("@dnd-kit/sortable", () => ({
     isDragging: false,
   }),
   verticalListSortingStrategy: "vertical",
+  sortableKeyboardCoordinates: vi.fn(),
 }));
 
 vi.mock("@dnd-kit/utilities", () => ({

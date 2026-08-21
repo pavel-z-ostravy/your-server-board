@@ -1,5 +1,5 @@
-import { closestCenter, DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
 import { reorderSectionIds } from "utils/config/layoutOrder";
 
@@ -10,7 +10,10 @@ import SortableSection from "./SortableSection";
 // after a drop. This component only translates a dnd-kit drag gesture into
 // that new order via onReorder(newOrderIds); it holds no order state itself.
 export default function SortableSectionList({ sections, onReorder }) {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   function handleDragEnd(event) {
     const { active, over } = event;
