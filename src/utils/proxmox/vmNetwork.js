@@ -1,5 +1,5 @@
 // QEMU's net0 config string has the MAC as the value of the FIRST
-// key=value pair, e.g. "virtio=BC:24:11:85:3A:8F,bridge=vmbr0" — the key
+// key=value pair, e.g. "virtio=AA:BB:CC:11:22:33,bridge=vmbr0" — the key
 // name is the configured NIC model (virtio, e1000, ...) and varies, so this
 // only relies on position, never the key name itself.
 export function extractMacFromQemuNet0(net0) {

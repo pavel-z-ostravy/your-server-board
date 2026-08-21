@@ -60,7 +60,7 @@ vi.mock("ssh2", () => ({
 
 const { getLxcProcesses, getLxcOsProbe } = await import("./lxcClient");
 
-const sshConfig = { host: "10.0.1.9", username: "root", privateKeyPath: "/config/ssh/id_smart" };
+const sshConfig = { host: "10.0.0.9", username: "root", privateKeyPath: "/config/ssh/id_smart" };
 
 afterEach(() => {
   commandBehavior = "success";

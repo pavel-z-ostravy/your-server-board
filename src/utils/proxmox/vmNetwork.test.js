@@ -4,7 +4,7 @@ import { extractMacFromLxcNet0, extractMacFromQemuNet0, findIPv4ByMac } from "./
 
 describe("extractMacFromQemuNet0", () => {
   it("extracts the MAC from a real QEMU net0 string (virtio model)", () => {
-    expect(extractMacFromQemuNet0("virtio=BC:24:11:85:3A:8F,bridge=vmbr0")).toBe("BC:24:11:85:3A:8F");
+    expect(extractMacFromQemuNet0("virtio=AA:BB:CC:11:22:33,bridge=vmbr0")).toBe("AA:BB:CC:11:22:33");
   });
 
   it("extracts the MAC regardless of NIC model key name", () => {
@@ -24,8 +24,8 @@ describe("extractMacFromQemuNet0", () => {
 
 describe("extractMacFromLxcNet0", () => {
   it("extracts the MAC from a real LXC net0 string (hwaddr not first)", () => {
-    expect(extractMacFromLxcNet0("name=eth0,bridge=vmbr0,firewall=1,hwaddr=BC:24:11:AE:7C:89,ip=dhcp,type=veth")).toBe(
-      "BC:24:11:AE:7C:89",
+    expect(extractMacFromLxcNet0("name=eth0,bridge=vmbr0,firewall=1,hwaddr=AA:BB:CC:44:55:66,ip=dhcp,type=veth")).toBe(
+      "AA:BB:CC:44:55:66",
     );
   });
 
@@ -52,11 +52,11 @@ describe("findIPv4ByMac", () => {
     },
     {
       name: "eth0",
-      hwaddr: "bc:24:11:ae:7c:89",
-      "hardware-address": "bc:24:11:ae:7c:89",
-      inet: "10.0.1.104/24",
+      hwaddr: "aa:bb:cc:44:55:66",
+      "hardware-address": "aa:bb:cc:44:55:66",
+      inet: "10.0.0.104/24",
       "ip-addresses": [
-        { "ip-address": "10.0.1.104", "ip-address-type": "inet", prefix: "24" },
+        { "ip-address": "10.0.0.104", "ip-address-type": "inet", prefix: "24" },
         { "ip-address": "fe80::be24:11ff:feae:7c89", "ip-address-type": "inet6", prefix: "64" },
       ],
     },
@@ -69,7 +69,7 @@ describe("findIPv4ByMac", () => {
   ];
 
   it("finds the LXC IPv4 by case-insensitive MAC match against the config's uppercase hwaddr", () => {
-    expect(findIPv4ByMac(lxcInterfaces, "BC:24:11:AE:7C:89", "inet")).toBe("10.0.1.104");
+    expect(findIPv4ByMac(lxcInterfaces, "AA:BB:CC:44:55:66", "inet")).toBe("10.0.0.104");
   });
 
   it("returns null when no interface matches the MAC", () => {
@@ -91,20 +91,20 @@ describe("findIPv4ByMac", () => {
     },
     {
       name: "enp0s18",
-      "hardware-address": "bc:24:11:85:3a:8f",
+      "hardware-address": "aa:bb:cc:11:22:33",
       "ip-addresses": [
-        { "ip-address": "10.0.1.22", "ip-address-type": "ipv4", prefix: 24 },
+        { "ip-address": "10.0.0.22", "ip-address-type": "ipv4", prefix: 24 },
         { "ip-address": "fe80::b8e5:9835:5708:de6a", "ip-address-type": "ipv6", prefix: 64 },
       ],
     },
   ];
 
   it("finds the QEMU IPv4 via the agent's different type-string ('ipv4', not 'inet')", () => {
-    expect(findIPv4ByMac(qemuAgentInterfaces, "BC:24:11:85:3A:8F", "ipv4")).toBe("10.0.1.22");
+    expect(findIPv4ByMac(qemuAgentInterfaces, "AA:BB:CC:11:22:33", "ipv4")).toBe("10.0.0.22");
   });
 
   it("returns null when interfaces is empty or undefined", () => {
-    expect(findIPv4ByMac([], "BC:24:11:85:3A:8F", "ipv4")).toBeNull();
-    expect(findIPv4ByMac(undefined, "BC:24:11:85:3A:8F", "ipv4")).toBeNull();
+    expect(findIPv4ByMac([], "AA:BB:CC:11:22:33", "ipv4")).toBeNull();
+    expect(findIPv4ByMac(undefined, "AA:BB:CC:11:22:33", "ipv4")).toBeNull();
   });
 });

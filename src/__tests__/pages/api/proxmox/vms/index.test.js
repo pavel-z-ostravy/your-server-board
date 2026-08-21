@@ -14,7 +14,7 @@ vi.mock("utils/logger", () => ({ default: () => logger }));
 
 import handler from "pages/api/proxmox/vms/index";
 
-const pveConfig = { url: "https://10.0.1.9:8006", token: "root@pam!ysb", secret: "s3cr3t" };
+const pveConfig = { url: "https://10.0.0.9:8006", token: "root@pam!ysb", secret: "s3cr3t" };
 
 // httpProxy returns [status, headers, data] — data is a Buffer-able body.
 function jsonResponse(status, body) {
@@ -26,7 +26,7 @@ function jsonResponse(status, body) {
 // shape instead: status 500, and a plain JS object (not a Buffer) as the
 // third element. See src/utils/proxy/http.js's httpProxy catch branch.
 function networkFailure(message) {
-  return [500, "application/json", { error: { message, url: "https://10.0.1.9:8006/...", rawError: {} } }, null];
+  return [500, "application/json", { error: { message, url: "https://10.0.0.9:8006/...", rawError: {} } }, null];
 }
 
 const clusterResourcesBody = {
@@ -36,7 +36,7 @@ const clusterResourcesBody = {
       vmid: 100,
       node: "proxmox",
       type: "qemu",
-      name: "homeassistant",
+      name: "example-vm",
       status: "running",
       template: 0,
       cpu: 0.0625912395730508,
@@ -52,7 +52,7 @@ const clusterResourcesBody = {
       vmid: 200,
       node: "proxmox",
       type: "lxc",
-      name: "lxc-homelab",
+      name: "example-lxc",
       status: "running",
       template: 0,
       cpu: 0.256998899633673,
@@ -83,16 +83,16 @@ const clusterResourcesBody = {
   ],
 };
 
-const qemuConfigBody = { data: { net0: "virtio=BC:24:11:85:3A:8F,bridge=vmbr0", agent: "1" } };
+const qemuConfigBody = { data: { net0: "virtio=AA:BB:CC:11:22:33,bridge=vmbr0", agent: "1" } };
 const lxcConfigBody = {
-  data: { net0: "name=eth0,bridge=vmbr0,hwaddr=BC:24:11:AE:7C:89,ip=dhcp,type=veth", ostype: "debian" },
+  data: { net0: "name=eth0,bridge=vmbr0,hwaddr=AA:BB:CC:44:55:66,ip=dhcp,type=veth", ostype: "debian" },
 };
 const lxcInterfacesBody = {
   data: [
     {
       name: "eth0",
-      "hardware-address": "bc:24:11:ae:7c:89",
-      "ip-addresses": [{ "ip-address": "10.0.1.104", "ip-address-type": "inet" }],
+      "hardware-address": "aa:bb:cc:44:55:66",
+      "ip-addresses": [{ "ip-address": "10.0.0.104", "ip-address-type": "inet" }],
     },
   ],
 };
@@ -101,8 +101,8 @@ const qemuAgentInterfacesBody = {
     result: [
       {
         name: "enp0s18",
-        "hardware-address": "bc:24:11:85:3a:8f",
-        "ip-addresses": [{ "ip-address": "10.0.1.22", "ip-address-type": "ipv4" }],
+        "hardware-address": "aa:bb:cc:11:22:33",
+        "ip-addresses": [{ "ip-address": "10.0.0.22", "ip-address-type": "ipv4" }],
       },
     ],
   },
@@ -163,7 +163,7 @@ describe("pages/api/proxmox/vms", () => {
       vmid: 100,
       node: "proxmox",
       type: "qemu",
-      name: "homeassistant",
+      name: "example-vm",
       status: "running",
       cpuUsedCores: 0.0625912395730508,
       cpuTotalCores: 1,
@@ -172,15 +172,15 @@ describe("pages/api/proxmox/vms", () => {
       diskUsedBytes: null,
       diskTotalBytes: 34359738368,
       uptimeSeconds: 92576,
-      macAddress: "BC:24:11:85:3A:8F",
-      ipAddress: "10.0.1.22",
+      macAddress: "AA:BB:CC:11:22:33",
+      ipAddress: "10.0.0.22",
       osName: "Home Assistant OS 18.2",
     });
     expect(res.body[1]).toEqual({
       vmid: 200,
       node: "proxmox",
       type: "lxc",
-      name: "lxc-homelab",
+      name: "example-lxc",
       status: "running",
       cpuUsedCores: 0.256998899633673 * 4,
       cpuTotalCores: 4,
@@ -189,8 +189,8 @@ describe("pages/api/proxmox/vms", () => {
       diskUsedBytes: 61370929152,
       diskTotalBytes: 84358758400,
       uptimeSeconds: 135548,
-      macAddress: "BC:24:11:AE:7C:89",
-      ipAddress: "10.0.1.104",
+      macAddress: "AA:BB:CC:44:55:66",
+      ipAddress: "10.0.0.104",
       osName: "debian",
     });
   });
@@ -199,7 +199,7 @@ describe("pages/api/proxmox/vms", () => {
     getPveConfig.mockReturnValue(pveConfig);
     httpProxy.mockImplementation(async (url) => {
       if (url.includes("cluster/resources")) return jsonResponse(200, clusterResourcesBody);
-      if (url.includes("/qemu/100/config")) return networkFailure("connect ECONNREFUSED 10.0.1.9:8006");
+      if (url.includes("/qemu/100/config")) return networkFailure("connect ECONNREFUSED 10.0.0.9:8006");
       if (url.includes("/lxc/200/config")) return jsonResponse(200, lxcConfigBody);
       if (url.includes("/lxc/200/interfaces")) return jsonResponse(200, lxcInterfacesBody);
       throw new Error(`unexpected URL in test: ${url}`);
@@ -214,8 +214,8 @@ describe("pages/api/proxmox/vms", () => {
     expect(res.body[0]).toMatchObject({ vmid: 100, macAddress: null, ipAddress: null, osName: null });
     // Base stats from cluster/resources must still be present even though enrichment failed.
     expect(res.body[0]).toMatchObject({ memUsedBytes: 3088969728, status: "running" });
-    // lxc-homelab's enrichment succeeded independently — one VM's failure doesn't affect another's.
-    expect(res.body[1]).toMatchObject({ macAddress: "BC:24:11:AE:7C:89", ipAddress: "10.0.1.104" });
+    // example-lxc's enrichment succeeded independently — one VM's failure doesn't affect another's.
+    expect(res.body[1]).toMatchObject({ macAddress: "AA:BB:CC:44:55:66", ipAddress: "10.0.0.104" });
     expect(logger.error).toHaveBeenCalled();
     expect(JSON.stringify(res.body)).not.toContain("ECONNREFUSED");
   });
@@ -235,6 +235,6 @@ describe("pages/api/proxmox/vms", () => {
     await handler(req, res);
 
     expect(res.statusCode).toBe(200);
-    expect(res.body[0]).toMatchObject({ macAddress: "BC:24:11:85:3A:8F", ipAddress: null, osName: null });
+    expect(res.body[0]).toMatchObject({ macAddress: "AA:BB:CC:11:22:33", ipAddress: null, osName: null });
   });
 });

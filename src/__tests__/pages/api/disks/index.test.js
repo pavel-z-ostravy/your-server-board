@@ -32,7 +32,7 @@ vi.mock("utils/logger", () => ({
 
 import handler from "pages/api/disks/index";
 
-const sshConfig = { host: "10.0.1.9", username: "root", privateKeyPath: "./config/ssh/id_smart" };
+const sshConfig = { host: "10.0.0.9", username: "root", privateKeyPath: "./config/ssh/id_smart" };
 
 const ataSmart = {
   device: { protocol: "ATA" },

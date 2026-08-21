@@ -20,8 +20,8 @@ vi.mock("utils/logger", () => ({ default: () => logger }));
 
 import handler from "pages/api/proxmox/vm-detail/index";
 
-const sshConfig = { host: "10.0.1.9", username: "root", privateKeyPath: "./config/ssh/id_smart" };
-const pveConfig = { url: "https://10.0.1.9:8006", token: "root@pam!ysb", secret: "s3cr3t" };
+const sshConfig = { host: "10.0.0.9", username: "root", privateKeyPath: "./config/ssh/id_smart" };
+const pveConfig = { url: "https://10.0.0.9:8006", token: "root@pam!ysb", secret: "s3cr3t" };
 
 const REAL_PS_OUTPUT = "   3368  0.8 18.4 redis-server\n    174  0.0  1.3 dockerd\n";
 const REAL_OS_PROBE_OUTPUT = 'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n---\nnone\n';

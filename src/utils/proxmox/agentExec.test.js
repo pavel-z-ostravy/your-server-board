@@ -6,7 +6,7 @@ vi.mock("utils/logger", () => ({ default: () => ({ error: vi.fn() }) }));
 
 const { getQemuOsProbe, getQemuProcesses, AGENT_EXEC_TIMEOUT_MS } = await import("./agentExec");
 
-const pveConfig = { url: "https://10.0.1.9:8006", token: "root@pam!ysb", secret: "s3cr3t" };
+const pveConfig = { url: "https://10.0.0.9:8006", token: "root@pam!ysb", secret: "s3cr3t" };
 
 function jsonResponse(status, body) {
   return [status, "application/json", Buffer.from(JSON.stringify(body)), null];

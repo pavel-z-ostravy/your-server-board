@@ -143,7 +143,7 @@ vi.mock("ssh2", () => ({
 const { getSmartData, listBlockDevices, getDiskUsage, getLvmReport, getPvMapping, SSH_COMMAND_TIMEOUT_MS } =
   await import("./smartClient");
 
-const sshConfig = { host: "10.0.1.9", username: "root", privateKeyPath: "/config/ssh/id_smart" };
+const sshConfig = { host: "10.0.0.9", username: "root", privateKeyPath: "/config/ssh/id_smart" };
 
 afterEach(() => {
   connectBehavior = "ready";

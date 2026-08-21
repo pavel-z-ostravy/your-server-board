@@ -20,7 +20,7 @@ describe("components/proxmox-vms/group", () => {
             vmid: 100,
             node: "proxmox",
             type: "qemu",
-            name: "homeassistant",
+            name: "example-vm",
             status: "running",
             cpuUsedCores: 0.0625912395730508,
             cpuTotalCores: 1,
@@ -29,15 +29,15 @@ describe("components/proxmox-vms/group", () => {
             diskUsedBytes: null,
             diskTotalBytes: 34359738368,
             uptimeSeconds: 92576,
-            macAddress: "BC:24:11:85:3A:8F",
-            ipAddress: "10.0.1.22",
+            macAddress: "AA:BB:CC:11:22:33",
+            ipAddress: "10.0.0.22",
             osName: "Home Assistant OS 18.2",
           },
           {
             vmid: 200,
             node: "proxmox",
             type: "lxc",
-            name: "lxc-homelab",
+            name: "example-lxc",
             status: "stopped",
             cpuUsedCores: 0,
             cpuTotalCores: 4,
@@ -56,12 +56,12 @@ describe("components/proxmox-vms/group", () => {
     renderWithSWR(<ProxmoxVmsGroup />);
 
     expect(screen.getByText("Virtual Machines")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("homeassistant")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("example-vm")).toBeInTheDocument());
 
-    const vmCard = screen.getByText("homeassistant").closest('[data-testid="vm-card"]');
+    const vmCard = screen.getByText("example-vm").closest('[data-testid="vm-card"]');
     expect(vmCard).toHaveAttribute("data-status", "running");
     expect(vmCard).toHaveTextContent("Home Assistant OS 18.2");
-    expect(vmCard).toHaveTextContent("10.0.1.22");
+    expect(vmCard).toHaveTextContent("10.0.0.22");
     expect(vmCard).toHaveTextContent("1d 1h"); // formatUptime(92576)
     expect(vmCard).toHaveTextContent("3.09 GB / 3.22 GB"); // pretty-bytes on mem
     // QEMU has no real per-guest disk usage (diskUsedBytes: null), but the
@@ -69,7 +69,7 @@ describe("components/proxmox-vms/group", () => {
     // shown instead of a bare "-".
     expect(vmCard).toHaveTextContent("34.4 GB (allocated)"); // pretty-bytes on maxdisk (34359738368)
 
-    const lxcCard = screen.getByText("lxc-homelab").closest('[data-testid="vm-card"]');
+    const lxcCard = screen.getByText("example-lxc").closest('[data-testid="vm-card"]');
     expect(lxcCard).toHaveAttribute("data-status", "stopped");
     // No MAC/IP/OS available for this entry — reuses the existing Stat "-" placeholder.
     expect(lxcCard).toHaveTextContent("-");
@@ -92,7 +92,7 @@ describe("components/proxmox-vms/group", () => {
             vmid: 200,
             node: "proxmox",
             type: "lxc",
-            name: "lxc-homelab",
+            name: "example-lxc",
             status: "running",
             cpuUsedCores: 1,
             cpuTotalCores: 4,
@@ -101,8 +101,8 @@ describe("components/proxmox-vms/group", () => {
             diskUsedBytes: 1,
             diskTotalBytes: 2,
             uptimeSeconds: 100,
-            macAddress: "BC:24:11:AE:7C:89",
-            ipAddress: "10.0.1.104",
+            macAddress: "AA:BB:CC:44:55:66",
+            ipAddress: "10.0.0.104",
             osName: "debian",
           },
         ]),
@@ -121,7 +121,7 @@ describe("components/proxmox-vms/group", () => {
     );
 
     renderWithSWR(<ProxmoxVmsGroup />);
-    await waitFor(() => expect(screen.getByText("lxc-homelab")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("example-lxc")).toBeInTheDocument());
 
     // Before expanding: no detail fetch, no process data visible.
     expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining("vm-detail"));
@@ -145,7 +145,7 @@ describe("components/proxmox-vms/group", () => {
             vmid: 200,
             node: "proxmox",
             type: "lxc",
-            name: "lxc-homelab",
+            name: "example-lxc",
             status: "stopped",
             cpuUsedCores: 0,
             cpuTotalCores: 4,
@@ -154,8 +154,8 @@ describe("components/proxmox-vms/group", () => {
             diskUsedBytes: 0,
             diskTotalBytes: 2,
             uptimeSeconds: 0,
-            macAddress: "BC:24:11:AE:7C:89",
-            ipAddress: "10.0.1.104",
+            macAddress: "AA:BB:CC:44:55:66",
+            ipAddress: "10.0.0.104",
             osName: "debian",
           },
         ]),
@@ -169,7 +169,7 @@ describe("components/proxmox-vms/group", () => {
     );
 
     renderWithSWR(<ProxmoxVmsGroup />);
-    await waitFor(() => expect(screen.getByText("lxc-homelab")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("example-lxc")).toBeInTheDocument());
 
     screen.getByText("Details").click();
 
@@ -188,7 +188,7 @@ describe("components/proxmox-vms/group", () => {
             vmid: 200,
             node: "proxmox",
             type: "lxc",
-            name: "lxc-homelab",
+            name: "example-lxc",
             status: "running",
             cpuUsedCores: 1,
             cpuTotalCores: 4,
@@ -197,8 +197,8 @@ describe("components/proxmox-vms/group", () => {
             diskUsedBytes: 1,
             diskTotalBytes: 2,
             uptimeSeconds: 100,
-            macAddress: "BC:24:11:AE:7C:89",
-            ipAddress: "10.0.1.104",
+            macAddress: "AA:BB:CC:44:55:66",
+            ipAddress: "10.0.0.104",
             osName: "debian",
           },
         ]),
@@ -209,7 +209,7 @@ describe("components/proxmox-vms/group", () => {
     );
 
     renderWithSWR(<ProxmoxVmsGroup />);
-    await waitFor(() => expect(screen.getByText("lxc-homelab")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("example-lxc")).toBeInTheDocument());
 
     screen.getByText("Details").click();
 

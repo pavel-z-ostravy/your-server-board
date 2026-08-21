@@ -60,7 +60,7 @@ async function buildDiskEntry(sshConfig, device, capacityData) {
     // This app can run with no authentication at all, so /api/disks may be fully
     // public. Never expose raw error.message here — it can contain internal IPs,
     // paths, or remote stderr (e.g. "SSH command timed out after 15000ms:
-    // smartctl -j -a /dev/sda", "connect ECONNREFUSED 10.0.1.9:22"). Log detail
+    // smartctl -j -a /dev/sda", "connect ECONNREFUSED 192.0.2.1:22"). Log detail
     // server-side and return a fixed generic message instead, matching the
     // listBlockDevices failure path below.
     logger.error("SMART query failed for %s:", base.device, error);

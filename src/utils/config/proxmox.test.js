@@ -42,10 +42,10 @@ describe("utils/config/proxmox", () => {
   it("returns the smart block when present", () => {
     yaml.load.mockReturnValueOnce({
       pve: { url: "http://pve" },
-      smart: { host: "10.0.1.9", username: "root", privateKeyPath: "./config/ssh/id_smart" },
+      smart: { host: "10.0.0.9", username: "root", privateKeyPath: "./config/ssh/id_smart" },
     });
 
-    expect(getSmartConfig()).toEqual({ host: "10.0.1.9", username: "root", privateKeyPath: "./config/ssh/id_smart" });
+    expect(getSmartConfig()).toEqual({ host: "10.0.0.9", username: "root", privateKeyPath: "./config/ssh/id_smart" });
   });
 
   it("returns null when the smart block is absent", () => {
@@ -55,9 +55,9 @@ describe("utils/config/proxmox", () => {
   });
 
   it("returns the pve block", () => {
-    yaml.load.mockReturnValueOnce({ pve: { url: "https://10.0.1.9:8006", token: "t", secret: "s" } });
+    yaml.load.mockReturnValueOnce({ pve: { url: "https://10.0.0.9:8006", token: "t", secret: "s" } });
 
-    expect(getPveConfig()).toEqual({ url: "https://10.0.1.9:8006", token: "t", secret: "s" });
+    expect(getPveConfig()).toEqual({ url: "https://10.0.0.9:8006", token: "t", secret: "s" });
   });
 
   it("returns null when the pve block is absent", () => {
