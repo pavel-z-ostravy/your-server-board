@@ -565,7 +565,12 @@ describe("pages/index Home behavior", () => {
   it("orders sections per the persisted layout order and drops empty blocks", async () => {
     state.servicesData = [];
     state.bookmarksData = [{ name: "Bookmarks", bookmarks: [{ name: "b1", href: "http://bm/1" }] }];
-    state.layoutOrderData = { order: ["disks", "bookmarks", "proxmox-vms"] };
+    // "layout-groups" and "services" are deliberately included in the persisted order even
+    // though settings.layout: {} and state.servicesData: [] mean their elements resolve to
+    // null - this exercises the sections useMemo's `.filter((section) => section.element)`
+    // for ids that ARE present in sectionOrder but have nothing to render, not just ids that
+    // were absent from the order to begin with.
+    state.layoutOrderData = { order: ["disks", "layout-groups", "bookmarks", "services", "proxmox-vms"] };
 
     await renderIndex({
       initialSettings: { title: "Homepage", layout: {} },
