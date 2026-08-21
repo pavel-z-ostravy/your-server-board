@@ -3,6 +3,7 @@ import classNames from "classnames";
 import BookmarksGroup from "components/bookmarks/group";
 import DisksGroup from "components/disks/group";
 import ErrorBoundary from "components/errorboundry";
+import SortableSectionList from "components/layout/SortableSectionList";
 import ProxmoxVmsGroup from "components/proxmox-vms/group";
 import QuickLaunch from "components/quicklaunch";
 import ServicesGroup from "components/services/group";
@@ -15,7 +16,7 @@ import dynamic from "next/dynamic";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import Script from "next/script";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { BiError } from "react-icons/bi";
 import useSWR, { SWRConfig } from "swr";
 import { ColorContext } from "utils/contexts/color";
@@ -25,6 +26,7 @@ import { ThemeContext } from "utils/contexts/theme";
 
 import { bookmarksResponse, servicesResponse, widgetsResponse } from "utils/config/api-response";
 import { getSettings } from "utils/config/config";
+import { getLayoutOrder, KNOWN_SECTION_IDS } from "utils/config/layoutOrder";
 import useWindowFocus from "utils/hooks/window-focus";
 import createLogger from "utils/logger";
 import themes from "utils/styles/themes";
@@ -47,6 +49,8 @@ const Version = dynamic(() => import("components/version"), {
 
 const rightAlignedWidgets = ["weatherapi", "openweathermap", "weather", "openmeteo", "search", "datetime"];
 
+const logger = createLogger("index");
+
 // Normalize language codes so older config values like zh-CN still point to Crowdin-provided ones
 const LANGUAGE_ALIASES = {
   "zh-cn": "zh-Hans",
@@ -67,6 +71,7 @@ export async function getStaticProps() {
     const services = await servicesResponse();
     const bookmarks = await bookmarksResponse();
     const widgets = await widgetsResponse();
+    const layoutOrder = getLayoutOrder();
     const language = normalizeLanguage(settings.language);
 
     return {
@@ -76,6 +81,7 @@ export async function getStaticProps() {
           "/api/services": services,
           "/api/bookmarks": bookmarks,
           "/api/widgets": widgets,
+          "/api/layout-order": { order: layoutOrder },
           "/api/hash": false,
         },
         ...(await serverSideTranslations(language)),
@@ -92,6 +98,7 @@ export async function getStaticProps() {
           "/api/services": [],
           "/api/bookmarks": [],
           "/api/widgets": [],
+          "/api/layout-order": { order: KNOWN_SECTION_IDS },
           "/api/hash": false,
         },
         ...(await serverSideTranslations("en")),
@@ -300,85 +307,56 @@ function Home({ initialSettings }) {
     }
   });
 
-  const servicesAndBookmarksGroups = useMemo(() => {
+  const sectionBlocks = useMemo(() => {
     const tabGroupFilter = (g) => g && [activeTab, ""].includes(slugifyAndEncode(settings.layout?.[g.name]?.tab));
     const undefinedGroupFilter = (g) => settings.layout?.[g.name] === undefined;
+
+    if (!settings.layout && JSON.stringify(settings.layout) !== JSON.stringify(initialSettings.layout)) {
+      // wait for settings to populate (if different from initial settings), otherwise all the widgets will be requested initially even if we are on a single tab
+      return { tabsElement: null, layoutGroupsElement: null, servicesElement: null, bookmarksElement: null };
+    }
 
     const layoutGroups = Object.keys(settings.layout ?? {})
       .map((groupName) => services?.find((g) => g.name === groupName) ?? bookmarks?.find((b) => b.name === groupName))
       .filter(tabGroupFilter);
-
-    if (!settings.layout && JSON.stringify(settings.layout) !== JSON.stringify(initialSettings.layout)) {
-      // wait for settings to populate (if different from initial settings), otherwise all the widgets will be requested initially even if we are on a single tab
-      return <div />;
-    }
-
     const serviceGroups = services?.filter(tabGroupFilter).filter(undefinedGroupFilter);
     const bookmarkGroups = bookmarks.filter(tabGroupFilter).filter(undefinedGroupFilter);
 
-    return (
-      <>
-        {tabs.length > 0 && (
-          <div key="tabs" id="tabs" className="m-5 sm:m-9 sm:mt-4 sm:mb-0">
-            <ul
-              className={classNames(
-                "sm:flex rounded-md bg-theme-100/20 dark:bg-white/5",
-                settings.cardBlur !== undefined &&
-                  `backdrop-blur${settings.cardBlur.length ? "-" : ""}${settings.cardBlur}`,
-              )}
-              id="myTab"
-              data-tabs-toggle="#myTabContent"
-              role="tablist"
-            >
-              {tabs.map((tab) => (
-                <Tab key={tab} tab={tab} />
-              ))}
-            </ul>
-          </div>
-        )}
-        {layoutGroups.length > 0 && (
-          <div key="layoutGroups" id="layout-groups" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
-            {layoutGroups.map((group) =>
-              group.services ? (
-                <ServicesGroup
-                  key={group.name}
-                  group={group}
-                  layout={settings.layout?.[group.name]}
-                  maxGroupColumns={settings.fiveColumns ? 5 : settings.maxGroupColumns}
-                  disableCollapse={settings.disableCollapse}
-                  useEqualHeights={settings.useEqualHeights}
-                  groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
-                />
-              ) : (
-                <BookmarksGroup
-                  key={group.name}
-                  bookmarks={group}
-                  layout={settings.layout?.[group.name]}
-                  disableCollapse={settings.disableCollapse}
-                  maxGroupColumns={settings.maxBookmarkGroupColumns ?? settings.maxGroupColumns}
-                  groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
-                />
-              ),
+    const tabsElement =
+      tabs.length > 0 ? (
+        <div id="tabs" className="m-5 sm:m-9 sm:mt-4 sm:mb-0">
+          <ul
+            className={classNames(
+              "sm:flex rounded-md bg-theme-100/20 dark:bg-white/5",
+              settings.cardBlur !== undefined &&
+                `backdrop-blur${settings.cardBlur.length ? "-" : ""}${settings.cardBlur}`,
             )}
-          </div>
-        )}
-        {serviceGroups?.length > 0 && (
-          <div key="services" id="services" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
-            {serviceGroups.map((group) => (
+            id="myTab"
+            data-tabs-toggle="#myTabContent"
+            role="tablist"
+          >
+            {tabs.map((tab) => (
+              <Tab key={tab} tab={tab} />
+            ))}
+          </ul>
+        </div>
+      ) : null;
+
+    const layoutGroupsElement =
+      layoutGroups.length > 0 ? (
+        <div id="layout-groups" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
+          {layoutGroups.map((group) =>
+            group.services ? (
               <ServicesGroup
                 key={group.name}
                 group={group}
                 layout={settings.layout?.[group.name]}
                 maxGroupColumns={settings.fiveColumns ? 5 : settings.maxGroupColumns}
                 disableCollapse={settings.disableCollapse}
+                useEqualHeights={settings.useEqualHeights}
                 groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
               />
-            ))}
-          </div>
-        )}
-        {bookmarkGroups?.length > 0 && (
-          <div key="bookmarks" id="bookmarks" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
-            {bookmarkGroups.map((group) => (
+            ) : (
               <BookmarksGroup
                 key={group.name}
                 bookmarks={group}
@@ -386,13 +364,46 @@ function Home({ initialSettings }) {
                 disableCollapse={settings.disableCollapse}
                 maxGroupColumns={settings.maxBookmarkGroupColumns ?? settings.maxGroupColumns}
                 groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
-                bookmarksStyle={settings.bookmarksStyle}
               />
-            ))}
-          </div>
-        )}
-      </>
-    );
+            ),
+          )}
+        </div>
+      ) : null;
+
+    const servicesElement =
+      serviceGroups?.length > 0 ? (
+        <div id="services" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
+          {serviceGroups.map((group) => (
+            <ServicesGroup
+              key={group.name}
+              group={group}
+              layout={settings.layout?.[group.name]}
+              maxGroupColumns={settings.fiveColumns ? 5 : settings.maxGroupColumns}
+              disableCollapse={settings.disableCollapse}
+              groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
+            />
+          ))}
+        </div>
+      ) : null;
+
+    const bookmarksElement =
+      bookmarkGroups?.length > 0 ? (
+        <div id="bookmarks" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
+          {bookmarkGroups.map((group) => (
+            <BookmarksGroup
+              key={group.name}
+              bookmarks={group}
+              layout={settings.layout?.[group.name]}
+              disableCollapse={settings.disableCollapse}
+              maxGroupColumns={settings.maxBookmarkGroupColumns ?? settings.maxGroupColumns}
+              groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
+              bookmarksStyle={settings.bookmarksStyle}
+            />
+          ))}
+        </div>
+      ) : null;
+
+    return { tabsElement, layoutGroupsElement, servicesElement, bookmarksElement };
   }, [
     tabs,
     activeTab,
@@ -409,6 +420,45 @@ function Home({ initialSettings }) {
     settings.bookmarksStyle,
     initialSettings.layout,
   ]);
+
+  const { data: persistedSectionOrder, mutate: mutateSectionOrder } = useSWR("/api/layout-order");
+  const [sectionOrder, setSectionOrder] = useState(() => persistedSectionOrder?.order ?? KNOWN_SECTION_IDS);
+
+  useEffect(() => {
+    if (persistedSectionOrder?.order) setSectionOrder(persistedSectionOrder.order);
+  }, [persistedSectionOrder]);
+
+  const handleReorder = useCallback(
+    async (nextOrder) => {
+      const previousOrder = sectionOrder;
+      setSectionOrder(nextOrder);
+      try {
+        const res = await fetch("/api/layout-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order: nextOrder }),
+        });
+        if (!res.ok) throw new Error(`request failed with status ${res.status}`);
+        const persisted = await res.json();
+        mutateSectionOrder(persisted, false);
+      } catch (error) {
+        logger.error("Failed to persist dashboard section order:", error);
+        setSectionOrder(previousOrder);
+      }
+    },
+    [sectionOrder, mutateSectionOrder],
+  );
+
+  const sections = useMemo(() => {
+    const elementsById = {
+      "layout-groups": sectionBlocks.layoutGroupsElement,
+      services: sectionBlocks.servicesElement,
+      bookmarks: sectionBlocks.bookmarksElement,
+      "proxmox-vms": <ProxmoxVmsGroup />,
+      disks: <DisksGroup />,
+    };
+    return sectionOrder.map((id) => ({ id, element: elementsById[id] })).filter((section) => section.element);
+  }, [sectionOrder, sectionBlocks]);
 
   return (
     <>
@@ -502,11 +552,9 @@ function Home({ initialSettings }) {
           </div>
         </div>
 
-        {servicesAndBookmarksGroups}
+        {sectionBlocks.tabsElement}
 
-        <ProxmoxVmsGroup />
-
-        <DisksGroup />
+        <SortableSectionList sections={sections} onReorder={handleReorder} />
 
         <div id="footer" className="flex flex-col mt-auto p-8 w-full">
           <div id="style" className="flex w-full justify-end items-center">

@@ -84,6 +84,7 @@ in front of it too.
 | Service widgets, bookmarks, search, theming, i18n | ✅ full support | unchanged |
 | Proxmox VM/CT status widget | ✅ read-only | unchanged (used for the live data above) |
 | Disk health (SMART) | ❌ none | ✅ live (dashboard section + `/api/disks`) |
+| Drag-and-drop section reordering | ❌ none | ✅ live (drag whole dashboard sections into any order) |
 | Backup lifecycle (list/run/download/delete/retention) | ❌ none | planned |
 | VM/CT power actions | ❌ none | planned |
 | Login | optional password only | password today, TOTP 2FA planned |

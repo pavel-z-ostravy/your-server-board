@@ -20,6 +20,7 @@ const {
   logger,
   useSWR,
   useWindowFocus,
+  getLayoutOrder,
 } = vi.hoisted(() => {
   const state = {
     throwIn: null,
@@ -32,6 +33,9 @@ const {
     quickLaunchProps: null,
     widgetCalls: [],
     windowFocused: false,
+    layoutOrderData: null,
+    mutateLayoutOrder: vi.fn(),
+    sortableSectionListProps: null,
   };
 
   const router = { asPath: "/" };
@@ -65,10 +69,13 @@ const {
     if (key === "/api/services") return { data: state.servicesData };
     if (key === "/api/bookmarks") return { data: state.bookmarksData };
     if (key === "/api/widgets") return { data: state.widgetsData };
+    if (key === "/api/layout-order") return { data: state.layoutOrderData, mutate: state.mutateLayoutOrder };
     return { data: undefined };
   });
 
   const useWindowFocus = vi.fn(() => state.windowFocused);
+
+  const getLayoutOrder = vi.fn(() => ["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"]);
 
   return {
     state,
@@ -82,6 +89,7 @@ const {
     logger,
     useSWR,
     useWindowFocus,
+    getLayoutOrder,
   };
 });
 
@@ -124,6 +132,26 @@ vi.mock("utils/config/api-response", () => ({
 
 vi.mock("utils/hooks/window-focus", () => ({
   default: useWindowFocus,
+}));
+
+vi.mock("utils/config/layoutOrder", () => ({
+  getLayoutOrder,
+  KNOWN_SECTION_IDS: ["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"],
+}));
+
+vi.mock("components/layout/SortableSectionList", () => ({
+  default: ({ sections, onReorder }) => {
+    state.sortableSectionListProps = { sections, onReorder };
+    return (
+      <div data-testid="sortable-section-list">
+        {sections.map(({ id, element }) => (
+          <div key={id} data-testid={`section-${id}`}>
+            {element}
+          </div>
+        ))}
+      </div>
+    );
+  },
 }));
 
 vi.mock("components/bookmarks/group", () => ({
@@ -312,6 +340,8 @@ describe("pages/index Index routing + SWR branches", () => {
     state.servicesData = [];
     state.bookmarksData = [];
     state.widgetsData = [];
+    state.layoutOrderData = null;
+    state.sortableSectionListProps = null;
   });
 
   it("renders the validation error screen when /api/validate returns an error", async () => {
@@ -402,6 +432,8 @@ describe("pages/index Home behavior", () => {
     state.widgetsData = [{ type: "glances" }, { type: "search" }];
     state.quickLaunchProps = null;
     state.widgetCalls = [];
+    state.layoutOrderData = null;
+    state.sortableSectionListProps = null;
   });
 
   it("passes href-bearing services and bookmarks to QuickLaunch and toggles search on keydown", async () => {
@@ -528,5 +560,90 @@ describe("pages/index Home behavior", () => {
 
     const rightAligned = state.widgetCalls.filter((c) => c.style?.isRightAligned).map((c) => c.widget.type);
     expect(rightAligned).toEqual(["search"]);
+  });
+
+  it("orders sections per the persisted layout order and drops empty blocks", async () => {
+    state.servicesData = [];
+    state.bookmarksData = [{ name: "Bookmarks", bookmarks: [{ name: "b1", href: "http://bm/1" }] }];
+    state.layoutOrderData = { order: ["disks", "bookmarks", "proxmox-vms"] };
+
+    await renderIndex({
+      initialSettings: { title: "Homepage", layout: {} },
+      settings: { title: "Homepage", layout: {}, language: "en" },
+    });
+
+    await waitFor(() => {
+      expect(state.sortableSectionListProps).toBeTruthy();
+    });
+    expect(state.sortableSectionListProps.sections.map((s) => s.id)).toEqual(["disks", "bookmarks", "proxmox-vms"]);
+  });
+
+  it("keeps the optimistic order and updates the SWR cache when persisting succeeds", async () => {
+    // A layout-mapped group (LayoutSvc) plus an unmapped one (Services) ensure both the
+    // "layout-groups" and "services" sections have content, so all 5 known ids render and
+    // can be exercised by the reorder assertions below.
+    state.servicesData = [
+      { name: "LayoutSvc", services: [{ name: "ls1", href: "http://svc/ls1" }], groups: [] },
+      { name: "Services", services: [{ name: "s1", href: "http://svc/s1" }], groups: [] },
+    ];
+    state.layoutOrderData = { order: ["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"] };
+    const persistedResponse = { order: ["disks", "layout-groups", "services", "bookmarks", "proxmox-vms"] };
+    const fetchSpy = vi.fn(async () => ({ ok: true, json: async () => persistedResponse }));
+    fetch = fetchSpy;
+
+    await renderIndex({
+      initialSettings: { title: "Homepage", layout: { LayoutSvc: {} } },
+      settings: { title: "Homepage", layout: { LayoutSvc: {} }, language: "en" },
+    });
+
+    await waitFor(() => {
+      expect(state.sortableSectionListProps).toBeTruthy();
+    });
+
+    const newOrder = ["disks", "layout-groups", "services", "bookmarks", "proxmox-vms"];
+    await state.sortableSectionListProps.onReorder(newOrder);
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/layout-order",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ order: newOrder }) }),
+    );
+    await waitFor(() => {
+      expect(state.sortableSectionListProps.sections.map((s) => s.id)).toEqual(newOrder);
+    });
+  });
+
+  it("optimistically reorders, then reverts when persisting fails", async () => {
+    // Same rationale as the previous test: a layout-mapped group plus an unmapped one so
+    // "layout-groups" and "services" both render alongside "bookmarks"/"proxmox-vms"/"disks".
+    state.servicesData = [
+      { name: "LayoutSvc", services: [{ name: "ls1", href: "http://svc/ls1" }], groups: [] },
+      { name: "Services", services: [{ name: "s1", href: "http://svc/s1" }], groups: [] },
+    ];
+    state.layoutOrderData = { order: ["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"] };
+    const fetchSpy = vi.fn(async () => ({ ok: false, status: 500 }));
+    fetch = fetchSpy;
+
+    await renderIndex({
+      initialSettings: { title: "Homepage", layout: { LayoutSvc: {} } },
+      settings: { title: "Homepage", layout: { LayoutSvc: {} }, language: "en" },
+    });
+
+    await waitFor(() => {
+      expect(state.sortableSectionListProps).toBeTruthy();
+    });
+
+    const newOrder = ["disks", "proxmox-vms", "bookmarks", "services", "layout-groups"];
+    await state.sortableSectionListProps.onReorder(newOrder);
+
+    expect(fetchSpy).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(state.sortableSectionListProps.sections.map((s) => s.id)).toEqual([
+        "layout-groups",
+        "services",
+        "bookmarks",
+        "proxmox-vms",
+        "disks",
+      ]);
+    });
   });
 });
