@@ -8,10 +8,7 @@ const { getLayoutOrder, writeLayoutOrder, logger } = vi.hoisted(() => ({
   logger: { error: vi.fn() },
 }));
 
-vi.mock("utils/config/layoutOrder", async () => {
-  const actual = await vi.importActual("utils/config/layoutOrder");
-  return { ...actual, getLayoutOrder, writeLayoutOrder };
-});
+vi.mock("utils/config/layoutOrder.server", () => ({ getLayoutOrder, writeLayoutOrder }));
 vi.mock("utils/logger", () => ({ default: () => logger }));
 
 import handler from "pages/api/layout-order/index";

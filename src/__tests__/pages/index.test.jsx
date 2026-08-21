@@ -135,8 +135,11 @@ vi.mock("utils/hooks/window-focus", () => ({
 }));
 
 vi.mock("utils/config/layoutOrder", () => ({
-  getLayoutOrder,
   KNOWN_SECTION_IDS: ["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"],
+}));
+
+vi.mock("utils/config/layoutOrder.server", () => ({
+  getLayoutOrder,
 }));
 
 vi.mock("components/layout/SortableSectionList", () => ({

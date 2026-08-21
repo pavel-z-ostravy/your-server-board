@@ -1,4 +1,5 @@
-import { getLayoutOrder, isValidSectionOrder, writeLayoutOrder } from "utils/config/layoutOrder";
+import { isValidSectionOrder } from "utils/config/layoutOrder";
+import { getLayoutOrder, writeLayoutOrder } from "utils/config/layoutOrder.server";
 import createLogger from "utils/logger";
 
 const logger = createLogger("layoutOrderApi");

@@ -26,7 +26,8 @@ import { ThemeContext } from "utils/contexts/theme";
 
 import { bookmarksResponse, servicesResponse, widgetsResponse } from "utils/config/api-response";
 import { getSettings } from "utils/config/config";
-import { getLayoutOrder, KNOWN_SECTION_IDS } from "utils/config/layoutOrder";
+import { KNOWN_SECTION_IDS } from "utils/config/layoutOrder";
+import { getLayoutOrder } from "utils/config/layoutOrder.server";
 import useWindowFocus from "utils/hooks/window-focus";
 import createLogger from "utils/logger";
 import themes from "utils/styles/themes";
@@ -48,8 +49,6 @@ const Version = dynamic(() => import("components/version"), {
 });
 
 const rightAlignedWidgets = ["weatherapi", "openweathermap", "weather", "openmeteo", "search", "datetime"];
-
-const logger = createLogger("index");
 
 // Normalize language codes so older config values like zh-CN still point to Crowdin-provided ones
 const LANGUAGE_ALIASES = {
@@ -442,7 +441,7 @@ function Home({ initialSettings }) {
         const persisted = await res.json();
         mutateSectionOrder(persisted, false);
       } catch (error) {
-        logger.error("Failed to persist dashboard section order:", error);
+        console.error("Failed to persist dashboard section order:", error);
         setSectionOrder(previousOrder);
       }
     },
