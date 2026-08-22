@@ -1,4 +1,5 @@
 /* eslint-disable react/jsx-props-no-spreading */
+import NavHeader from "components/layout/NavHeader";
 import { SessionProvider } from "next-auth/react";
 import { appWithTranslation } from "next-i18next/pages";
 import Head from "next/head";
@@ -90,6 +91,7 @@ function MyApp({ Component, pageProps }) {
           <ThemeProvider>
             <SettingsProvider>
               <TabProvider>
+                <NavHeader />
                 <Component {...pageProps} />
               </TabProvider>
             </SettingsProvider>
