@@ -52,6 +52,57 @@ function Stat({ value, label }) {
   );
 }
 
+// Header block above the VM/LXC card grid, showing the Proxmox host's own
+// status - the "parent" row for the "children" grid below it. `status` and
+// `error` come from an independent SWR call in ProxmoxVmsGroup, so a
+// host-status failure never blocks the VM grid from rendering.
+function NodeStatusHeader({ status, error }) {
+  if (error) {
+    return <p className="text-rose-500/80 text-sm mb-2">Failed to load Proxmox host status.</p>;
+  }
+  if (!status) {
+    return <p className="text-theme-500 dark:text-theme-300 text-sm mb-2">Loading host status...</p>;
+  }
+
+  const cpuValue = status.cpuUsedCores == null ? null : `${status.cpuUsedCores.toFixed(2)} / ${status.cpuTotalCores}`;
+  const memValue = formatCapacity(status.memUsedBytes, status.memTotalBytes);
+  const diskValue = formatCapacity(status.diskUsedBytes, status.diskTotalBytes);
+  const loadAvgText = Array.isArray(status.loadAvg) ? status.loadAvg.map((n) => n.toFixed(2)).join(" / ") : "-";
+
+  return (
+    <div
+      className="mb-2 pb-2 border-b border-theme-300/30 dark:border-theme-500/10"
+      data-testid="node-status-header"
+      data-status={status.status}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm font-medium">Proxmox Host</span>
+        <div className="flex items-center gap-2">
+          {status.status === "online" && status.uptimeSeconds != null && (
+            <span className="text-theme-500 dark:text-theme-300 text-xs font-light">
+              {formatUptime(status.uptimeSeconds)}
+            </span>
+          )}
+          <span
+            className={classNames(
+              "w-2.5 h-2.5 rounded-full",
+              STATUS_DOT_CLASS[status.status === "online" ? "running" : "stopped"],
+            )}
+          />
+        </div>
+      </div>
+      <div className="flex flex-row">
+        <Stat value={cpuValue} label="CPU" />
+        <Stat value={memValue} label="RAM" />
+        <Stat value={diskValue} label="Disk" />
+      </div>
+      <p className="text-theme-500 dark:text-theme-300 text-xs font-light mt-2">
+        {status.pveVersion ? `PVE ${status.pveVersion}` : "-"} &middot; load {loadAvgText}
+      </p>
+    </div>
+  );
+}
+
 function VmCard({ vm, cardClassName }) {
   const cpuValue = `${vm.cpuUsedCores.toFixed(2)} / ${vm.cpuTotalCores}`;
   const memValue = formatCapacity(vm.memUsedBytes, vm.memTotalBytes);
@@ -172,6 +223,17 @@ export default function ProxmoxVmsGroup() {
     refreshInterval: 60000,
   });
 
+  // Independent SWR call from the VM list above - a host-status failure must
+  // never blank out the VM grid, and vice versa (see NodeStatusHeader).
+  const {
+    data: hostStatus,
+    error: hostError,
+    mutate: mutateHost,
+    isValidating: hostValidating,
+  } = useSWR("/api/proxmox/host", fetcher, {
+    refreshInterval: 60000,
+  });
+
   return (
     <div id="proxmox-vms-group" className="flex flex-col m-4 sm:m-8 sm:mt-4 mb-2">
       <div className="flex items-center justify-between">
@@ -180,13 +242,18 @@ export default function ProxmoxVmsGroup() {
         </h2>
         <button
           type="button"
-          onClick={() => mutate()}
-          disabled={isValidating}
+          onClick={() => {
+            mutate();
+            mutateHost();
+          }}
+          disabled={isValidating || hostValidating}
           className="text-sm text-theme-500 dark:text-theme-300 disabled:opacity-50"
         >
           Refresh
         </button>
       </div>
+
+      <NodeStatusHeader status={hostStatus} error={hostError} />
 
       {error && <p className="text-rose-500/80">Failed to load VM/LXC data.</p>}
       {!vms && !error && <p className="text-theme-500 dark:text-theme-300 text-sm">Loading...</p>}
