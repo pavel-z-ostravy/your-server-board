@@ -17,9 +17,9 @@ Already set this up before and just pulled a new version of the app? Re-run
 step 2 below (re-copy `deploy/proxmox-smart-helper.sh` to the Proxmox host)
 whenever this file changes. The forced-command script lives on the Proxmox
 host, not on the app's own host, so deploying a new version of the app does
-NOT update it automatically. If you skip this, LXC process/OS-detail fetches
-will fail with `refused: command not permitted for this key` until you re-copy
-the script.
+NOT update it automatically. If you skip this, LXC process/OS-detail fetches and the Proxmox host's own
+Details toggle will fail with `refused: command not permitted for this key`
+until you re-copy the script.
 
 1. Generate a dedicated keypair (run on your workstation, not the Proxmox host).
    Generate it under `config/ssh/` (gitignored) — not the repo root, which is
