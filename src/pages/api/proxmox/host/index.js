@@ -1,6 +1,6 @@
 import { getPveConfig } from "utils/config/proxmox";
 import createLogger from "utils/logger";
-import { parsePveVersion } from "utils/proxmox/nodeStatus";
+import { parsePveVersion, pickPrimaryIpAddress } from "utils/proxmox/nodeStatus";
 import { httpProxy } from "utils/proxy/http";
 
 const logger = createLogger("proxmoxHostService");
@@ -30,6 +30,7 @@ function offlineEntry() {
     uptimeSeconds: null,
     pveVersion: null,
     loadAvg: null,
+    ipAddress: null,
   };
 }
 
@@ -67,15 +68,30 @@ export default async function handler(req, res) {
     uptimeSeconds: node.uptime,
   };
 
-  try {
-    const nodeStatus = await pveGet(pveConfig, `nodes/${node.node}/status`);
-    return res.status(200).json({
-      ...base,
-      pveVersion: parsePveVersion(nodeStatus?.pveversion),
-      loadAvg: Array.isArray(nodeStatus?.loadavg) ? nodeStatus.loadavg.map(Number) : null,
-    });
-  } catch (error) {
-    logger.error("Failed to fetch Proxmox node version/load detail:", error);
-    return res.status(200).json({ ...base, pveVersion: null, loadAvg: null });
+  // Fetched independently via allSettled - a failure in either call must
+  // only degrade its own field(s), never the other's, matching this route's
+  // established graceful-degradation contract (and this codebase's existing
+  // Promise.allSettled precedent in pages/api/proxmox/vm-detail/index.js).
+  const [statusResult, networkResult] = await Promise.allSettled([
+    pveGet(pveConfig, `nodes/${node.node}/status`),
+    pveGet(pveConfig, `nodes/${node.node}/network`),
+  ]);
+
+  let pveVersion = null;
+  let loadAvg = null;
+  if (statusResult.status === "fulfilled") {
+    pveVersion = parsePveVersion(statusResult.value?.pveversion);
+    loadAvg = Array.isArray(statusResult.value?.loadavg) ? statusResult.value.loadavg.map(Number) : null;
+  } else {
+    logger.error("Failed to fetch Proxmox node version/load detail:", statusResult.reason);
   }
+
+  let ipAddress = null;
+  if (networkResult.status === "fulfilled") {
+    ipAddress = pickPrimaryIpAddress(networkResult.value);
+  } else {
+    logger.error("Failed to fetch Proxmox node network detail:", networkResult.reason);
+  }
+
+  return res.status(200).json({ ...base, pveVersion, loadAvg, ipAddress });
 }

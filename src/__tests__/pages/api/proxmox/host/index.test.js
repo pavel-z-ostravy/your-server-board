@@ -74,6 +74,20 @@ const nodeStatusBody = {
   },
 };
 
+// Shape verified against a live Proxmox 9.2 host's GET /nodes/{node}/network
+// response: the physical NIC has no address of its own; the bridge
+// configured on top of it carries the actual IP (values below are invented).
+const networkBody = {
+  data: [
+    { iface: "nic0", type: "eth", families: ["inet"] },
+    { iface: "vmbr0", type: "bridge", families: ["inet"], address: "10.0.0.9" },
+  ],
+};
+
+const networkBodyNoMatch = {
+  data: [{ iface: "nic0", type: "eth", families: ["inet"] }],
+};
+
 describe("pages/api/proxmox/host", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -105,10 +119,11 @@ describe("pages/api/proxmox/host", () => {
     expect(res.body).toEqual({ error: "Failed to fetch Proxmox node status" });
   });
 
-  it("returns a full status object for an online node", async () => {
+  it("returns a full status object, including ipAddress, for an online node", async () => {
     getPveConfig.mockReturnValue(pveConfig);
     httpProxy.mockImplementation(async (url) => {
       if (url.includes("/nodes/proxmox/status")) return jsonResponse(200, nodeStatusBody);
+      if (url.includes("/nodes/proxmox/network")) return jsonResponse(200, networkBody);
       if (url.includes("/nodes")) return jsonResponse(200, onlineNodesBody);
       throw new Error(`unexpected URL in test: ${url}`);
     });
@@ -130,10 +145,30 @@ describe("pages/api/proxmox/host", () => {
       uptimeSeconds: 93784,
       pveVersion: "9.1.1",
       loadAvg: [0.55, 0.61, 0.58],
+      ipAddress: "10.0.0.9",
     });
   });
 
-  it("returns a degraded offline entry without attempting the node-status call, for an offline node", async () => {
+  it("returns ipAddress: null when the network call succeeds but no interface matches", async () => {
+    getPveConfig.mockReturnValue(pveConfig);
+    httpProxy.mockImplementation(async (url) => {
+      if (url.includes("/nodes/proxmox/status")) return jsonResponse(200, nodeStatusBody);
+      if (url.includes("/nodes/proxmox/network")) return jsonResponse(200, networkBodyNoMatch);
+      if (url.includes("/nodes")) return jsonResponse(200, onlineNodesBody);
+      throw new Error(`unexpected URL in test: ${url}`);
+    });
+
+    const req = { query: {} };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ipAddress).toBeNull();
+    expect(res.body.pveVersion).toBe("9.1.1"); // unaffected by the network call's outcome
+  });
+
+  it("returns a degraded offline entry (including ipAddress: null) without attempting the status/network calls, for an offline node", async () => {
     getPveConfig.mockReturnValue(pveConfig);
     httpProxy.mockResolvedValueOnce(jsonResponse(200, offlineNodesBody));
 
@@ -154,6 +189,7 @@ describe("pages/api/proxmox/host", () => {
       uptimeSeconds: null,
       pveVersion: null,
       loadAvg: null,
+      ipAddress: null,
     });
     expect(httpProxy).toHaveBeenCalledTimes(1);
   });
@@ -169,13 +205,15 @@ describe("pages/api/proxmox/host", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.status).toBe("offline");
+    expect(res.body.ipAddress).toBeNull();
     expect(httpProxy).toHaveBeenCalledTimes(1);
   });
 
-  it("returns base stats with null version/load when the node-status call fails but the node is online", async () => {
+  it("degrades only pveVersion/loadAvg to null when the status call fails but the network call succeeds", async () => {
     getPveConfig.mockReturnValue(pveConfig);
     httpProxy.mockImplementation(async (url) => {
       if (url.includes("/nodes/proxmox/status")) return networkFailure("connect ECONNREFUSED 10.0.0.9:8006");
+      if (url.includes("/nodes/proxmox/network")) return jsonResponse(200, networkBody);
       if (url.includes("/nodes")) return jsonResponse(200, onlineNodesBody);
       throw new Error(`unexpected URL in test: ${url}`);
     });
@@ -192,6 +230,32 @@ describe("pages/api/proxmox/host", () => {
       memUsedBytes: 4210000000,
       pveVersion: null,
       loadAvg: null,
+      ipAddress: "10.0.0.9", // unaffected by the status call's failure
+    });
+    expect(logger.error).toHaveBeenCalled();
+    expect(JSON.stringify(res.body)).not.toContain("ECONNREFUSED");
+  });
+
+  it("degrades only ipAddress to null when the network call fails but the status call succeeds", async () => {
+    getPveConfig.mockReturnValue(pveConfig);
+    httpProxy.mockImplementation(async (url) => {
+      if (url.includes("/nodes/proxmox/status")) return jsonResponse(200, nodeStatusBody);
+      if (url.includes("/nodes/proxmox/network")) return networkFailure("connect ECONNREFUSED 10.0.0.9:8006");
+      if (url.includes("/nodes")) return jsonResponse(200, onlineNodesBody);
+      throw new Error(`unexpected URL in test: ${url}`);
+    });
+
+    const req = { query: {} };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      status: "online",
+      pveVersion: "9.1.1", // unaffected by the network call's failure
+      loadAvg: [0.55, 0.61, 0.58],
+      ipAddress: null,
     });
     expect(logger.error).toHaveBeenCalled();
     expect(JSON.stringify(res.body)).not.toContain("ECONNREFUSED");
