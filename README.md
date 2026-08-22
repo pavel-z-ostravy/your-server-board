@@ -48,9 +48,11 @@ for exactly what in this repo is original vs. derivative.
    3050 — `YSB_PORT` in `.env.example`.)
 3. Edit `config/proxmox.yaml` (created from a template on first run) with
    your Proxmox host URL and an API token. Create one with:
+
    ```bash
    pveum user token add root@pam your-server-board --privsep 0
    ```
+
    This token inherits full `root@pam` privileges. Before exposing this
    dashboard publicly (e.g. via a Cloudflare Tunnel), replace it with a
    token scoped to a custom least-privilege Proxmox role — verify exact
@@ -62,6 +64,7 @@ for exactly what in this repo is original vs. derivative.
    [`deploy/SSH_SETUP.md`](deploy/SSH_SETUP.md) for the remaining setup on
    the Proxmox host. Without it, the Disks section on the dashboard shows an
    error instead of disk health data.
+
 4. `docker compose restart`
 
 Prefer to do it by hand instead of `./install.sh`? See
@@ -79,16 +82,16 @@ in front of it too.
 
 ## What this fork adds on top of Homepage
 
-| Area | Upstream Homepage | This fork |
-|---|---|---|
-| Service widgets, bookmarks, search, theming, i18n | ✅ full support | unchanged |
-| Proxmox VM/CT status widget | ✅ read-only | unchanged (used for the live data above) |
-| Disk health (SMART) | ❌ none | ✅ live (dashboard section + `/api/disks`) |
-| Drag-and-drop section reordering | ❌ none | ✅ live (drag whole dashboard sections into any order) |
-| Backup lifecycle (list/run/download/delete/retention) | ❌ none | planned |
-| VM/CT power actions | ❌ none | planned |
-| Login | optional password only | password today, TOTP 2FA planned |
-| Alerting | ❌ none | planned (SMART/disk/backup-failure via email) |
+| Area                                                  | Upstream Homepage      | This fork                                              |
+| ----------------------------------------------------- | ---------------------- | ------------------------------------------------------ |
+| Service widgets, bookmarks, search, theming, i18n     | ✅ full support        | unchanged                                              |
+| Proxmox VM/CT status widget                           | ✅ read-only           | unchanged (used for the live data above)               |
+| Disk health (SMART)                                   | ❌ none                | ✅ live (dashboard section + `/api/disks`)             |
+| Drag-and-drop section reordering                      | ❌ none                | ✅ live (drag whole dashboard sections into any order) |
+| Backup lifecycle (list/run/download/delete/retention) | ❌ none                | planned                                                |
+| VM/CT power actions                                   | ❌ none                | planned                                                |
+| Login                                                 | optional password only | password today, TOTP 2FA planned                       |
+| Alerting                                              | ❌ none                | planned (SMART/disk/backup-failure via email)          |
 
 For everything in the "unchanged" row — the config format, the 100+
 third-party service integrations, custom CSS/JS, layout options — the

@@ -23,13 +23,16 @@
 ### Task 1: Disk health status computation
 
 **Files:**
+
 - Create: `src/utils/disks/health.js`
 - Test: `src/utils/disks/health.test.js`
 
 **Interfaces:**
+
 - Produces: `computeDiskHealth(smartData) -> { status, temperature, smartPassed, reallocatedSectors, wearPercentage, mediaErrors }` where `status` is `"ok" | "warn" | "critical"`, and `smartData` is the parsed JSON object returned by `getSmartData()` (real shape, verified against a live Proxmox host — see field names below). This is a pure function — no I/O, no SSH — Task 3 imports and calls it per-disk.
 
 Real field names this function reads (verified against real `smartctl -j -a` output on both a SATA SSD and a USB-NVMe enclosure on the actual target Proxmox host):
+
 - `smartData.smart_status.passed` — boolean, present on both ATA and NVMe.
 - `smartData.temperature.current` — number, present on both. NVMe drives additionally report `smartData.temperature.op_limit_max` and `smartData.temperature.critical_limit_max` (device-reported thresholds); ATA drives on this host do not report these two fields.
 - `smartData.device.protocol` — `"ATA"` or `"NVMe"`, the reliable discriminator (the sibling `device.type` field varies by controller chipset, e.g. `"sat"` vs `"sntrealtek"` — not reliable to branch on).
@@ -219,10 +222,12 @@ git commit -m "feat: add disk health status computation from SMART data"
 ### Task 2: SMART SSH config loader
 
 **Files:**
+
 - Modify: `src/utils/config/proxmox.js`
 - Modify: `src/utils/config/proxmox.test.js`
 
 **Interfaces:**
+
 - Consumes: `getProxmoxConfig()` (already exists in this file, unchanged).
 - Produces: `getSmartConfig() -> { host, username, privateKeyPath, port? } | null` — reads the `smart:` block from the same `proxmox.yaml`. Task 3's API route calls this to get the `sshConfig` object it passes to `smartClient.js`.
 
@@ -286,16 +291,20 @@ git commit -m "feat: add getSmartConfig() to read the smart: block from proxmox.
 ### Task 3: Disks API route
 
 **Files:**
+
 - Create: `src/pages/api/disks/index.js`
 - Test: `src/__tests__/pages/api/disks/index.test.js`
 
 **Interfaces:**
+
 - Consumes: `getSmartConfig()` (Task 2), `computeDiskHealth(smartData)` (Task 1), `listBlockDevices(sshConfig)` and `getSmartData(sshConfig, devicePath)` (already exist, `src/utils/ssh/smartClient.js`).
 - Produces: `GET /api/disks` → `200` with a JSON array, one entry per physical disk:
+
   ```
   { name, device, model, size, protocol, temperature, smartPassed,
     reallocatedSectors, wearPercentage, mediaErrors, status, error }
   ```
+
   (`error` is `null` normally; if a single disk's SMART query fails, that disk's entry has `error: "<message>"` and every other field except `name`/`device`/`size` is `null` — one failing disk must not fail the whole response.) Task 4's page fetches this route directly.
 
 - [ ] **Step 1: Write the failing tests**
@@ -530,11 +539,13 @@ git commit -m "feat: add /api/disks route composing lsblk + per-disk SMART healt
 ### Task 4: Disks page UI + navigation link
 
 **Files:**
+
 - Create: `src/pages/disks.jsx`
 - Test: `src/__tests__/pages/disks.test.jsx`
 - Modify: `src/pages/index.jsx` (add a nav link to `/disks`)
 
 **Interfaces:**
+
 - Consumes: `GET /api/disks` (Task 3) via `useSWR("/api/disks", { refreshInterval: 60000 })` — the codebase's existing global `SWRConfig` (`src/pages/_app.jsx`) already provides the default `fetch(...).then(r => r.json())` fetcher, so no custom fetcher is needed here (same pattern as `src/components/services/status.jsx`).
 - Produces: the `/disks` route, and a link to it from the main dashboard footer.
 
@@ -682,8 +693,7 @@ function DiskCard({ disk }) {
     );
   }
 
-  const wearOrReallocated =
-    disk.wearPercentage !== null ? `${disk.wearPercentage}%` : (disk.reallocatedSectors ?? "-");
+  const wearOrReallocated = disk.wearPercentage !== null ? `${disk.wearPercentage}%` : (disk.reallocatedSectors ?? "-");
 
   return (
     <div className={CARD_CLASS} data-testid="disk-card" data-status={disk.status}>
@@ -788,6 +798,7 @@ git commit -m "feat: add /disks page with per-disk SMART health cards, link from
 **Files:** none (verification only, plus a config change on the deployed host — not in this git repo)
 
 **Interfaces:**
+
 - Consumes: everything from Tasks 1-4, deployed via the existing `docker-compose.yml` / Dockge setup from the Foundation plan.
 
 - [ ] **Step 1: Deploy the built code to the real host**

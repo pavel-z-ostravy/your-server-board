@@ -26,10 +26,12 @@
 ### Task 1: `layoutOrder.js` — pure merge/reorder logic + YAML persistence
 
 **Files:**
+
 - Create: `src/utils/config/layoutOrder.js`
 - Test: `src/utils/config/layoutOrder.test.js`
 
 **Interfaces:**
+
 - Produces (used by Task 2 and Task 4):
   - `KNOWN_SECTION_IDS: string[]` — `["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"]`, in default render order.
   - `mergeLayoutOrder(savedOrder: unknown, knownIds = KNOWN_SECTION_IDS): string[]` — pure. Keeps ids from `savedOrder` that are in `knownIds`, in their saved relative order, deduped; appends any `knownIds` not mentioned, in `knownIds`' own relative order. Always returns every id in `knownIds` exactly once. Tolerates `savedOrder` being `undefined`/non-array (treats as empty).
@@ -298,10 +300,12 @@ git commit -m "feat(layout): add pure section-order merge/reorder logic + YAML p
 ### Task 2: `/api/layout-order` route (GET/POST)
 
 **Files:**
+
 - Create: `src/pages/api/layout-order/index.js`
 - Test: `src/pages/api/layout-order/index.test.js`
 
 **Interfaces:**
+
 - Consumes: `getLayoutOrder`, `isValidSectionOrder`, `writeLayoutOrder` from `utils/config/layoutOrder` (Task 1).
 - Produces: `GET /api/layout-order` → `200 { order: string[] }`. `POST /api/layout-order` with body `{ order: string[] }` → `200 { order: string[] }` (the merged, persisted order) on success, `400 { error: string }` on an invalid body, `500 { error: string }` if the write throws. Any other method → `405 { error: "Method not allowed" }`. This exact shape (`{ order: [...] }`) is what Task 4's `getStaticProps` SWR fallback and client `useSWR("/api/layout-order")` both read.
 
@@ -459,6 +463,7 @@ git commit -m "feat(layout): add GET/POST /api/layout-order route"
 ### Task 3: `@dnd-kit`-powered `SortableSection` + `SortableSectionList` components
 
 **Files:**
+
 - Modify: `package.json` (new dependencies)
 - Create: `src/components/layout/SortableSection.jsx`
 - Test: `src/components/layout/SortableSection.test.jsx`
@@ -466,6 +471,7 @@ git commit -m "feat(layout): add GET/POST /api/layout-order route"
 - Test: `src/components/layout/SortableSectionList.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `reorderSectionIds` from `utils/config/layoutOrder` (Task 1).
 - Produces (used by Task 4):
   - `SortableSection({ id: string, children: ReactNode })` — wraps `children` in a `useSortable({id})`-driven positioned `div`, with a small full-width drag-handle strip (its own row, never overlapping `children`) rendered above them. `children` render completely unmodified and stay fully interactive.
@@ -725,11 +731,13 @@ git commit -m "feat(layout): add SortableSection/SortableSectionList dnd-kit com
 ### Task 4: Wire into `src/pages/index.jsx`
 
 **Files:**
+
 - Modify: `src/pages/index.jsx`
 - Modify: `src/__tests__/pages/index.test.jsx`
 - Modify: `README.md`
 
 **Interfaces:**
+
 - Consumes: `getLayoutOrder`, `KNOWN_SECTION_IDS` from `utils/config/layoutOrder` (Task 1); `SortableSectionList` from `components/layout/SortableSectionList` (Task 3); existing `ProxmoxVmsGroup`, `DisksGroup`, `ServicesGroup`, `BookmarksGroup`, `Tab`.
 
 Before touching `index.jsx`, confirm the current baseline is green:
@@ -748,47 +756,47 @@ import { getLayoutOrder, KNOWN_SECTION_IDS } from "utils/config/layoutOrder";
 In `getStaticProps` (around line 61), change:
 
 ```js
-    const services = await servicesResponse();
-    const bookmarks = await bookmarksResponse();
-    const widgets = await widgetsResponse();
-    const language = normalizeLanguage(settings.language);
+const services = await servicesResponse();
+const bookmarks = await bookmarksResponse();
+const widgets = await widgetsResponse();
+const language = normalizeLanguage(settings.language);
 
-    return {
-      props: {
-        initialSettings: settings,
-        fallback: {
-          "/api/services": services,
-          "/api/bookmarks": bookmarks,
-          "/api/widgets": widgets,
-          "/api/hash": false,
-        },
-        ...(await serverSideTranslations(language)),
-      },
-    };
+return {
+  props: {
+    initialSettings: settings,
+    fallback: {
+      "/api/services": services,
+      "/api/bookmarks": bookmarks,
+      "/api/widgets": widgets,
+      "/api/hash": false,
+    },
+    ...(await serverSideTranslations(language)),
+  },
+};
 ```
 
 to:
 
 ```js
-    const services = await servicesResponse();
-    const bookmarks = await bookmarksResponse();
-    const widgets = await widgetsResponse();
-    const layoutOrder = getLayoutOrder();
-    const language = normalizeLanguage(settings.language);
+const services = await servicesResponse();
+const bookmarks = await bookmarksResponse();
+const widgets = await widgetsResponse();
+const layoutOrder = getLayoutOrder();
+const language = normalizeLanguage(settings.language);
 
-    return {
-      props: {
-        initialSettings: settings,
-        fallback: {
-          "/api/services": services,
-          "/api/bookmarks": bookmarks,
-          "/api/widgets": widgets,
-          "/api/layout-order": { order: layoutOrder },
-          "/api/hash": false,
-        },
-        ...(await serverSideTranslations(language)),
-      },
-    };
+return {
+  props: {
+    initialSettings: settings,
+    fallback: {
+      "/api/services": services,
+      "/api/bookmarks": bookmarks,
+      "/api/widgets": widgets,
+      "/api/layout-order": { order: layoutOrder },
+      "/api/hash": false,
+    },
+    ...(await serverSideTranslations(language)),
+  },
+};
 ```
 
 And in the `catch` branch's fallback object, add the same key with the default:
@@ -808,138 +816,26 @@ And in the `catch` branch's fallback object, add the same key with the default:
 Replace the `servicesAndBookmarksGroups` `useMemo` (currently returning one JSX fragment containing tabs + three conditional divs) with a `sectionBlocks` `useMemo` returning an object of the four pieces instead of one fragment, so each can become an independently orderable section. Change:
 
 ```js
-  const servicesAndBookmarksGroups = useMemo(() => {
-    const tabGroupFilter = (g) => g && [activeTab, ""].includes(slugifyAndEncode(settings.layout?.[g.name]?.tab));
-    const undefinedGroupFilter = (g) => settings.layout?.[g.name] === undefined;
+const servicesAndBookmarksGroups = useMemo(() => {
+  const tabGroupFilter = (g) => g && [activeTab, ""].includes(slugifyAndEncode(settings.layout?.[g.name]?.tab));
+  const undefinedGroupFilter = (g) => settings.layout?.[g.name] === undefined;
 
-    const layoutGroups = Object.keys(settings.layout ?? {})
-      .map((groupName) => services?.find((g) => g.name === groupName) ?? bookmarks?.find((b) => b.name === groupName))
-      .filter(tabGroupFilter);
+  const layoutGroups = Object.keys(settings.layout ?? {})
+    .map((groupName) => services?.find((g) => g.name === groupName) ?? bookmarks?.find((b) => b.name === groupName))
+    .filter(tabGroupFilter);
 
-    if (!settings.layout && JSON.stringify(settings.layout) !== JSON.stringify(initialSettings.layout)) {
-      // wait for settings to populate (if different from initial settings), otherwise all the widgets will be requested initially even if we are on a single tab
-      return <div />;
-    }
+  if (!settings.layout && JSON.stringify(settings.layout) !== JSON.stringify(initialSettings.layout)) {
+    // wait for settings to populate (if different from initial settings), otherwise all the widgets will be requested initially even if we are on a single tab
+    return <div />;
+  }
 
-    const serviceGroups = services?.filter(tabGroupFilter).filter(undefinedGroupFilter);
-    const bookmarkGroups = bookmarks.filter(tabGroupFilter).filter(undefinedGroupFilter);
+  const serviceGroups = services?.filter(tabGroupFilter).filter(undefinedGroupFilter);
+  const bookmarkGroups = bookmarks.filter(tabGroupFilter).filter(undefinedGroupFilter);
 
-    return (
-      <>
-        {tabs.length > 0 && (
-          <div key="tabs" id="tabs" className="m-5 sm:m-9 sm:mt-4 sm:mb-0">
-            <ul
-              className={classNames(
-                "sm:flex rounded-md bg-theme-100/20 dark:bg-white/5",
-                settings.cardBlur !== undefined &&
-                  `backdrop-blur${settings.cardBlur.length ? "-" : ""}${settings.cardBlur}`,
-              )}
-              id="myTab"
-              data-tabs-toggle="#myTabContent"
-              role="tablist"
-            >
-              {tabs.map((tab) => (
-                <Tab key={tab} tab={tab} />
-              ))}
-            </ul>
-          </div>
-        )}
-        {layoutGroups.length > 0 && (
-          <div key="layoutGroups" id="layout-groups" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
-            {layoutGroups.map((group) =>
-              group.services ? (
-                <ServicesGroup
-                  key={group.name}
-                  group={group}
-                  layout={settings.layout?.[group.name]}
-                  maxGroupColumns={settings.fiveColumns ? 5 : settings.maxGroupColumns}
-                  disableCollapse={settings.disableCollapse}
-                  useEqualHeights={settings.useEqualHeights}
-                  groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
-                />
-              ) : (
-                <BookmarksGroup
-                  key={group.name}
-                  bookmarks={group}
-                  layout={settings.layout?.[group.name]}
-                  disableCollapse={settings.disableCollapse}
-                  maxGroupColumns={settings.maxBookmarkGroupColumns ?? settings.maxGroupColumns}
-                  groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
-                />
-              ),
-            )}
-          </div>
-        )}
-        {serviceGroups?.length > 0 && (
-          <div key="services" id="services" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
-            {serviceGroups.map((group) => (
-              <ServicesGroup
-                key={group.name}
-                group={group}
-                layout={settings.layout?.[group.name]}
-                maxGroupColumns={settings.fiveColumns ? 5 : settings.maxGroupColumns}
-                disableCollapse={settings.disableCollapse}
-                groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
-              />
-            ))}
-          </div>
-        )}
-        {bookmarkGroups?.length > 0 && (
-          <div key="bookmarks" id="bookmarks" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
-            {bookmarkGroups.map((group) => (
-              <BookmarksGroup
-                key={group.name}
-                bookmarks={group}
-                layout={settings.layout?.[group.name]}
-                disableCollapse={settings.disableCollapse}
-                maxGroupColumns={settings.maxBookmarkGroupColumns ?? settings.maxGroupColumns}
-                groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
-                bookmarksStyle={settings.bookmarksStyle}
-              />
-            ))}
-          </div>
-        )}
-      </>
-    );
-  }, [
-    tabs,
-    activeTab,
-    services,
-    bookmarks,
-    settings.layout,
-    settings.fiveColumns,
-    settings.maxGroupColumns,
-    settings.maxBookmarkGroupColumns,
-    settings.disableCollapse,
-    settings.useEqualHeights,
-    settings.cardBlur,
-    settings.groupsInitiallyCollapsed,
-    settings.bookmarksStyle,
-    initialSettings.layout,
-  ]);
-```
-
-to:
-
-```js
-  const sectionBlocks = useMemo(() => {
-    const tabGroupFilter = (g) => g && [activeTab, ""].includes(slugifyAndEncode(settings.layout?.[g.name]?.tab));
-    const undefinedGroupFilter = (g) => settings.layout?.[g.name] === undefined;
-
-    if (!settings.layout && JSON.stringify(settings.layout) !== JSON.stringify(initialSettings.layout)) {
-      // wait for settings to populate (if different from initial settings), otherwise all the widgets will be requested initially even if we are on a single tab
-      return { tabsElement: null, layoutGroupsElement: null, servicesElement: null, bookmarksElement: null };
-    }
-
-    const layoutGroups = Object.keys(settings.layout ?? {})
-      .map((groupName) => services?.find((g) => g.name === groupName) ?? bookmarks?.find((b) => b.name === groupName))
-      .filter(tabGroupFilter);
-    const serviceGroups = services?.filter(tabGroupFilter).filter(undefinedGroupFilter);
-    const bookmarkGroups = bookmarks.filter(tabGroupFilter).filter(undefinedGroupFilter);
-
-    const tabsElement =
-      tabs.length > 0 ? (
-        <div id="tabs" className="m-5 sm:m-9 sm:mt-4 sm:mb-0">
+  return (
+    <>
+      {tabs.length > 0 && (
+        <div key="tabs" id="tabs" className="m-5 sm:m-9 sm:mt-4 sm:mb-0">
           <ul
             className={classNames(
               "sm:flex rounded-md bg-theme-100/20 dark:bg-white/5",
@@ -955,11 +851,9 @@ to:
             ))}
           </ul>
         </div>
-      ) : null;
-
-    const layoutGroupsElement =
-      layoutGroups.length > 0 ? (
-        <div id="layout-groups" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
+      )}
+      {layoutGroups.length > 0 && (
+        <div key="layoutGroups" id="layout-groups" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
           {layoutGroups.map((group) =>
             group.services ? (
               <ServicesGroup
@@ -983,11 +877,9 @@ to:
             ),
           )}
         </div>
-      ) : null;
-
-    const servicesElement =
-      serviceGroups?.length > 0 ? (
-        <div id="services" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
+      )}
+      {serviceGroups?.length > 0 && (
+        <div key="services" id="services" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
           {serviceGroups.map((group) => (
             <ServicesGroup
               key={group.name}
@@ -999,11 +891,9 @@ to:
             />
           ))}
         </div>
-      ) : null;
-
-    const bookmarksElement =
-      bookmarkGroups?.length > 0 ? (
-        <div id="bookmarks" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
+      )}
+      {bookmarkGroups?.length > 0 && (
+        <div key="bookmarks" id="bookmarks" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
           {bookmarkGroups.map((group) => (
             <BookmarksGroup
               key={group.name}
@@ -1016,25 +906,143 @@ to:
             />
           ))}
         </div>
-      ) : null;
+      )}
+    </>
+  );
+}, [
+  tabs,
+  activeTab,
+  services,
+  bookmarks,
+  settings.layout,
+  settings.fiveColumns,
+  settings.maxGroupColumns,
+  settings.maxBookmarkGroupColumns,
+  settings.disableCollapse,
+  settings.useEqualHeights,
+  settings.cardBlur,
+  settings.groupsInitiallyCollapsed,
+  settings.bookmarksStyle,
+  initialSettings.layout,
+]);
+```
 
-    return { tabsElement, layoutGroupsElement, servicesElement, bookmarksElement };
-  }, [
-    tabs,
-    activeTab,
-    services,
-    bookmarks,
-    settings.layout,
-    settings.fiveColumns,
-    settings.maxGroupColumns,
-    settings.maxBookmarkGroupColumns,
-    settings.disableCollapse,
-    settings.useEqualHeights,
-    settings.cardBlur,
-    settings.groupsInitiallyCollapsed,
-    settings.bookmarksStyle,
-    initialSettings.layout,
-  ]);
+to:
+
+```js
+const sectionBlocks = useMemo(() => {
+  const tabGroupFilter = (g) => g && [activeTab, ""].includes(slugifyAndEncode(settings.layout?.[g.name]?.tab));
+  const undefinedGroupFilter = (g) => settings.layout?.[g.name] === undefined;
+
+  if (!settings.layout && JSON.stringify(settings.layout) !== JSON.stringify(initialSettings.layout)) {
+    // wait for settings to populate (if different from initial settings), otherwise all the widgets will be requested initially even if we are on a single tab
+    return { tabsElement: null, layoutGroupsElement: null, servicesElement: null, bookmarksElement: null };
+  }
+
+  const layoutGroups = Object.keys(settings.layout ?? {})
+    .map((groupName) => services?.find((g) => g.name === groupName) ?? bookmarks?.find((b) => b.name === groupName))
+    .filter(tabGroupFilter);
+  const serviceGroups = services?.filter(tabGroupFilter).filter(undefinedGroupFilter);
+  const bookmarkGroups = bookmarks.filter(tabGroupFilter).filter(undefinedGroupFilter);
+
+  const tabsElement =
+    tabs.length > 0 ? (
+      <div id="tabs" className="m-5 sm:m-9 sm:mt-4 sm:mb-0">
+        <ul
+          className={classNames(
+            "sm:flex rounded-md bg-theme-100/20 dark:bg-white/5",
+            settings.cardBlur !== undefined &&
+              `backdrop-blur${settings.cardBlur.length ? "-" : ""}${settings.cardBlur}`,
+          )}
+          id="myTab"
+          data-tabs-toggle="#myTabContent"
+          role="tablist"
+        >
+          {tabs.map((tab) => (
+            <Tab key={tab} tab={tab} />
+          ))}
+        </ul>
+      </div>
+    ) : null;
+
+  const layoutGroupsElement =
+    layoutGroups.length > 0 ? (
+      <div id="layout-groups" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
+        {layoutGroups.map((group) =>
+          group.services ? (
+            <ServicesGroup
+              key={group.name}
+              group={group}
+              layout={settings.layout?.[group.name]}
+              maxGroupColumns={settings.fiveColumns ? 5 : settings.maxGroupColumns}
+              disableCollapse={settings.disableCollapse}
+              useEqualHeights={settings.useEqualHeights}
+              groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
+            />
+          ) : (
+            <BookmarksGroup
+              key={group.name}
+              bookmarks={group}
+              layout={settings.layout?.[group.name]}
+              disableCollapse={settings.disableCollapse}
+              maxGroupColumns={settings.maxBookmarkGroupColumns ?? settings.maxGroupColumns}
+              groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
+            />
+          ),
+        )}
+      </div>
+    ) : null;
+
+  const servicesElement =
+    serviceGroups?.length > 0 ? (
+      <div id="services" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
+        {serviceGroups.map((group) => (
+          <ServicesGroup
+            key={group.name}
+            group={group}
+            layout={settings.layout?.[group.name]}
+            maxGroupColumns={settings.fiveColumns ? 5 : settings.maxGroupColumns}
+            disableCollapse={settings.disableCollapse}
+            groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
+          />
+        ))}
+      </div>
+    ) : null;
+
+  const bookmarksElement =
+    bookmarkGroups?.length > 0 ? (
+      <div id="bookmarks" className="flex flex-wrap m-4 sm:m-8 sm:mt-4 items-start mb-2">
+        {bookmarkGroups.map((group) => (
+          <BookmarksGroup
+            key={group.name}
+            bookmarks={group}
+            layout={settings.layout?.[group.name]}
+            disableCollapse={settings.disableCollapse}
+            maxGroupColumns={settings.maxBookmarkGroupColumns ?? settings.maxGroupColumns}
+            groupsInitiallyCollapsed={settings.groupsInitiallyCollapsed}
+            bookmarksStyle={settings.bookmarksStyle}
+          />
+        ))}
+      </div>
+    ) : null;
+
+  return { tabsElement, layoutGroupsElement, servicesElement, bookmarksElement };
+}, [
+  tabs,
+  activeTab,
+  services,
+  bookmarks,
+  settings.layout,
+  settings.fiveColumns,
+  settings.maxGroupColumns,
+  settings.maxBookmarkGroupColumns,
+  settings.disableCollapse,
+  settings.useEqualHeights,
+  settings.cardBlur,
+  settings.groupsInitiallyCollapsed,
+  settings.bookmarksStyle,
+  initialSettings.layout,
+]);
 ```
 
 - [ ] **Step 3: Add section order state, the reorder handler, and the composed `sections` array**
@@ -1048,44 +1056,44 @@ import SortableSectionList from "components/layout/SortableSectionList";
 Immediately after the `sectionBlocks` `useMemo` from Step 2, add:
 
 ```js
-  const { data: persistedSectionOrder, mutate: mutateSectionOrder } = useSWR("/api/layout-order");
-  const [sectionOrder, setSectionOrder] = useState(() => persistedSectionOrder?.order ?? KNOWN_SECTION_IDS);
+const { data: persistedSectionOrder, mutate: mutateSectionOrder } = useSWR("/api/layout-order");
+const [sectionOrder, setSectionOrder] = useState(() => persistedSectionOrder?.order ?? KNOWN_SECTION_IDS);
 
-  useEffect(() => {
-    if (persistedSectionOrder?.order) setSectionOrder(persistedSectionOrder.order);
-  }, [persistedSectionOrder]);
+useEffect(() => {
+  if (persistedSectionOrder?.order) setSectionOrder(persistedSectionOrder.order);
+}, [persistedSectionOrder]);
 
-  const handleReorder = useCallback(
-    async (nextOrder) => {
-      const previousOrder = sectionOrder;
-      setSectionOrder(nextOrder);
-      try {
-        const res = await fetch("/api/layout-order", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ order: nextOrder }),
-        });
-        if (!res.ok) throw new Error(`request failed with status ${res.status}`);
-        const persisted = await res.json();
-        mutateSectionOrder(persisted, false);
-      } catch (error) {
-        logger.error("Failed to persist dashboard section order:", error);
-        setSectionOrder(previousOrder);
-      }
-    },
-    [sectionOrder, mutateSectionOrder],
-  );
+const handleReorder = useCallback(
+  async (nextOrder) => {
+    const previousOrder = sectionOrder;
+    setSectionOrder(nextOrder);
+    try {
+      const res = await fetch("/api/layout-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: nextOrder }),
+      });
+      if (!res.ok) throw new Error(`request failed with status ${res.status}`);
+      const persisted = await res.json();
+      mutateSectionOrder(persisted, false);
+    } catch (error) {
+      logger.error("Failed to persist dashboard section order:", error);
+      setSectionOrder(previousOrder);
+    }
+  },
+  [sectionOrder, mutateSectionOrder],
+);
 
-  const sections = useMemo(() => {
-    const elementsById = {
-      "layout-groups": sectionBlocks.layoutGroupsElement,
-      services: sectionBlocks.servicesElement,
-      bookmarks: sectionBlocks.bookmarksElement,
-      "proxmox-vms": <ProxmoxVmsGroup />,
-      disks: <DisksGroup />,
-    };
-    return sectionOrder.map((id) => ({ id, element: elementsById[id] })).filter((section) => section.element);
-  }, [sectionOrder, sectionBlocks]);
+const sections = useMemo(() => {
+  const elementsById = {
+    "layout-groups": sectionBlocks.layoutGroupsElement,
+    services: sectionBlocks.servicesElement,
+    bookmarks: sectionBlocks.bookmarksElement,
+    "proxmox-vms": <ProxmoxVmsGroup />,
+    disks: <DisksGroup />,
+  };
+  return sectionOrder.map((id) => ({ id, element: elementsById[id] })).filter((section) => section.element);
+}, [sectionOrder, sectionBlocks]);
 ```
 
 Add a module-level logger for this error log (near the top of the file, after the other top-level constants like `rightAlignedWidgets`):
@@ -1111,9 +1119,11 @@ Change:
 to:
 
 ```jsx
-        {sectionBlocks.tabsElement}
+{
+  sectionBlocks.tabsElement;
+}
 
-        <SortableSectionList sections={sections} onReorder={handleReorder} />
+<SortableSectionList sections={sections} onReorder={handleReorder} />;
 ```
 
 - [ ] **Step 5: Run the existing test suite and fix the mocks it needs**
@@ -1126,44 +1136,44 @@ Apply these edits to `src/__tests__/pages/index.test.jsx`:
 1. In the `vi.hoisted` block, add two fields to `state` and one new mock function, and add the new SWR branch. Change:
 
 ```js
-  const state = {
-    throwIn: null,
-    validateData: [],
-    hashData: null,
-    mutateHash: vi.fn(),
-    servicesData: [],
-    bookmarksData: [],
-    widgetsData: [],
-    quickLaunchProps: null,
-    widgetCalls: [],
-    windowFocused: false,
-  };
+const state = {
+  throwIn: null,
+  validateData: [],
+  hashData: null,
+  mutateHash: vi.fn(),
+  servicesData: [],
+  bookmarksData: [],
+  widgetsData: [],
+  quickLaunchProps: null,
+  widgetCalls: [],
+  windowFocused: false,
+};
 ```
 
 to:
 
 ```js
-  const state = {
-    throwIn: null,
-    validateData: [],
-    hashData: null,
-    mutateHash: vi.fn(),
-    servicesData: [],
-    bookmarksData: [],
-    widgetsData: [],
-    quickLaunchProps: null,
-    widgetCalls: [],
-    windowFocused: false,
-    layoutOrderData: null,
-    mutateLayoutOrder: vi.fn(),
-    sortableSectionListProps: null,
-  };
+const state = {
+  throwIn: null,
+  validateData: [],
+  hashData: null,
+  mutateHash: vi.fn(),
+  servicesData: [],
+  bookmarksData: [],
+  widgetsData: [],
+  quickLaunchProps: null,
+  widgetCalls: [],
+  windowFocused: false,
+  layoutOrderData: null,
+  mutateLayoutOrder: vi.fn(),
+  sortableSectionListProps: null,
+};
 ```
 
 And add, alongside the existing `getSettings`/`servicesResponse`/etc. declarations:
 
 ```js
-  const getLayoutOrder = vi.fn(() => ["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"]);
+const getLayoutOrder = vi.fn(() => ["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"]);
 ```
 
 Add `getLayoutOrder` to the object this `vi.hoisted` block returns, and to the outer destructured `const { ... } = vi.hoisted(...)` above it.
@@ -1171,15 +1181,15 @@ Add `getLayoutOrder` to the object this `vi.hoisted` block returns, and to the o
 In the `useSWR` mock function, add a branch:
 
 ```js
-  const useSWR = vi.fn((key) => {
-    if (key === "/api/validate") return { data: state.validateData };
-    if (key === "/api/hash") return { data: state.hashData, mutate: state.mutateHash };
-    if (key === "/api/services") return { data: state.servicesData };
-    if (key === "/api/bookmarks") return { data: state.bookmarksData };
-    if (key === "/api/widgets") return { data: state.widgetsData };
-    if (key === "/api/layout-order") return { data: state.layoutOrderData, mutate: state.mutateLayoutOrder };
-    return { data: undefined };
-  });
+const useSWR = vi.fn((key) => {
+  if (key === "/api/validate") return { data: state.validateData };
+  if (key === "/api/hash") return { data: state.hashData, mutate: state.mutateHash };
+  if (key === "/api/services") return { data: state.servicesData };
+  if (key === "/api/bookmarks") return { data: state.bookmarksData };
+  if (key === "/api/widgets") return { data: state.widgetsData };
+  if (key === "/api/layout-order") return { data: state.layoutOrderData, mutate: state.mutateLayoutOrder };
+  return { data: undefined };
+});
 ```
 
 2. Add two new `vi.mock` calls, alongside the existing ones:
@@ -1209,120 +1219,120 @@ vi.mock("components/layout/SortableSectionList", () => ({
 3. In the `beforeEach` of the `"pages/index Index routing + SWR branches"` describe block, add resets:
 
 ```js
-  beforeEach(() => {
-    vi.clearAllMocks();
-    state.hashData = null;
-    state.mutateHash.mockClear();
-    state.servicesData = [];
-    state.bookmarksData = [];
-    state.widgetsData = [];
-    state.layoutOrderData = null;
-    state.sortableSectionListProps = null;
-  });
+beforeEach(() => {
+  vi.clearAllMocks();
+  state.hashData = null;
+  state.mutateHash.mockClear();
+  state.servicesData = [];
+  state.bookmarksData = [];
+  state.widgetsData = [];
+  state.layoutOrderData = null;
+  state.sortableSectionListProps = null;
+});
 ```
 
 4. In the `beforeEach` of the `"pages/index Home behavior"` describe block, add the same two resets:
 
 ```js
-  beforeEach(() => {
-    vi.clearAllMocks();
-    state.validateData = [];
-    state.hashData = null;
-    state.servicesData = [
-      {
-        name: "Services",
-        services: [{ name: "s1", href: "http://svc/1" }, { name: "s2" }],
-        groups: [{ name: "Nested", services: [{ name: "s3", href: "http://svc/3" }], groups: [] }],
-      },
-    ];
-    state.bookmarksData = [{ name: "Bookmarks", bookmarks: [{ name: "b1", href: "http://bm/1" }, { name: "b2" }] }];
-    state.widgetsData = [{ type: "glances" }, { type: "search" }];
-    state.quickLaunchProps = null;
-    state.widgetCalls = [];
-    state.layoutOrderData = null;
-    state.sortableSectionListProps = null;
-  });
+beforeEach(() => {
+  vi.clearAllMocks();
+  state.validateData = [];
+  state.hashData = null;
+  state.servicesData = [
+    {
+      name: "Services",
+      services: [{ name: "s1", href: "http://svc/1" }, { name: "s2" }],
+      groups: [{ name: "Nested", services: [{ name: "s3", href: "http://svc/3" }], groups: [] }],
+    },
+  ];
+  state.bookmarksData = [{ name: "Bookmarks", bookmarks: [{ name: "b1", href: "http://bm/1" }, { name: "b2" }] }];
+  state.widgetsData = [{ type: "glances" }, { type: "search" }];
+  state.quickLaunchProps = null;
+  state.widgetCalls = [];
+  state.layoutOrderData = null;
+  state.sortableSectionListProps = null;
+});
 ```
 
 5. Run: `pnpm exec vitest run src/__tests__/pages/index.test.jsx`
-Expected: all pre-existing tests PASS again (the mocked `SortableSectionList` renders each section's `element` inside a plain `data-testid="section-<id>"` div, so `services-group`/`bookmarks-group` testids from the already-mocked `ServicesGroup`/`BookmarksGroup` are still found the same way).
+   Expected: all pre-existing tests PASS again (the mocked `SortableSectionList` renders each section's `element` inside a plain `data-testid="section-<id>"` div, so `services-group`/`bookmarks-group` testids from the already-mocked `ServicesGroup`/`BookmarksGroup` are still found the same way).
 
 - [ ] **Step 6: Add new tests for the ordering and persistence behavior**
 
 Append to the `"pages/index Home behavior"` describe block in `src/__tests__/pages/index.test.jsx`:
 
 ```jsx
-  it("orders sections per the persisted layout order and drops empty blocks", async () => {
-    state.servicesData = [];
-    state.bookmarksData = [{ name: "Bookmarks", bookmarks: [{ name: "b1", href: "http://bm/1" }] }];
-    state.layoutOrderData = { order: ["disks", "bookmarks", "proxmox-vms"] };
+it("orders sections per the persisted layout order and drops empty blocks", async () => {
+  state.servicesData = [];
+  state.bookmarksData = [{ name: "Bookmarks", bookmarks: [{ name: "b1", href: "http://bm/1" }] }];
+  state.layoutOrderData = { order: ["disks", "bookmarks", "proxmox-vms"] };
 
-    await renderIndex({
-      initialSettings: { title: "Homepage", layout: {} },
-      settings: { title: "Homepage", layout: {}, language: "en" },
-    });
-
-    await waitFor(() => {
-      expect(state.sortableSectionListProps).toBeTruthy();
-    });
-    expect(state.sortableSectionListProps.sections.map((s) => s.id)).toEqual(["disks", "bookmarks", "proxmox-vms"]);
+  await renderIndex({
+    initialSettings: { title: "Homepage", layout: {} },
+    settings: { title: "Homepage", layout: {}, language: "en" },
   });
 
-  it("keeps the optimistic order and updates the SWR cache when persisting succeeds", async () => {
-    state.layoutOrderData = { order: ["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"] };
-    const persistedResponse = { order: ["disks", "layout-groups", "services", "bookmarks", "proxmox-vms"] };
-    const fetchSpy = vi.fn(async () => ({ ok: true, json: async () => persistedResponse }));
-    fetch = fetchSpy;
+  await waitFor(() => {
+    expect(state.sortableSectionListProps).toBeTruthy();
+  });
+  expect(state.sortableSectionListProps.sections.map((s) => s.id)).toEqual(["disks", "bookmarks", "proxmox-vms"]);
+});
 
-    await renderIndex({
-      initialSettings: { title: "Homepage", layout: {} },
-      settings: { title: "Homepage", layout: {}, language: "en" },
-    });
+it("keeps the optimistic order and updates the SWR cache when persisting succeeds", async () => {
+  state.layoutOrderData = { order: ["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"] };
+  const persistedResponse = { order: ["disks", "layout-groups", "services", "bookmarks", "proxmox-vms"] };
+  const fetchSpy = vi.fn(async () => ({ ok: true, json: async () => persistedResponse }));
+  fetch = fetchSpy;
 
-    await waitFor(() => {
-      expect(state.sortableSectionListProps).toBeTruthy();
-    });
-
-    const newOrder = ["disks", "layout-groups", "services", "bookmarks", "proxmox-vms"];
-    await state.sortableSectionListProps.onReorder(newOrder);
-
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "/api/layout-order",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ order: newOrder }) }),
-    );
-    await waitFor(() => {
-      expect(state.sortableSectionListProps.sections.map((s) => s.id)).toEqual(newOrder);
-    });
+  await renderIndex({
+    initialSettings: { title: "Homepage", layout: {} },
+    settings: { title: "Homepage", layout: {}, language: "en" },
   });
 
-  it("optimistically reorders, then reverts when persisting fails", async () => {
-    state.layoutOrderData = { order: ["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"] };
-    const fetchSpy = vi.fn(async () => ({ ok: false, status: 500 }));
-    fetch = fetchSpy;
-
-    await renderIndex({
-      initialSettings: { title: "Homepage", layout: {} },
-      settings: { title: "Homepage", layout: {}, language: "en" },
-    });
-
-    await waitFor(() => {
-      expect(state.sortableSectionListProps).toBeTruthy();
-    });
-
-    const newOrder = ["disks", "proxmox-vms", "bookmarks", "services", "layout-groups"];
-    await state.sortableSectionListProps.onReorder(newOrder);
-
-    expect(fetchSpy).toHaveBeenCalled();
-    await waitFor(() => {
-      expect(state.sortableSectionListProps.sections.map((s) => s.id)).toEqual([
-        "layout-groups",
-        "services",
-        "bookmarks",
-        "proxmox-vms",
-        "disks",
-      ]);
-    });
+  await waitFor(() => {
+    expect(state.sortableSectionListProps).toBeTruthy();
   });
+
+  const newOrder = ["disks", "layout-groups", "services", "bookmarks", "proxmox-vms"];
+  await state.sortableSectionListProps.onReorder(newOrder);
+
+  expect(fetchSpy).toHaveBeenCalledWith(
+    "/api/layout-order",
+    expect.objectContaining({ method: "POST", body: JSON.stringify({ order: newOrder }) }),
+  );
+  await waitFor(() => {
+    expect(state.sortableSectionListProps.sections.map((s) => s.id)).toEqual(newOrder);
+  });
+});
+
+it("optimistically reorders, then reverts when persisting fails", async () => {
+  state.layoutOrderData = { order: ["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"] };
+  const fetchSpy = vi.fn(async () => ({ ok: false, status: 500 }));
+  fetch = fetchSpy;
+
+  await renderIndex({
+    initialSettings: { title: "Homepage", layout: {} },
+    settings: { title: "Homepage", layout: {}, language: "en" },
+  });
+
+  await waitFor(() => {
+    expect(state.sortableSectionListProps).toBeTruthy();
+  });
+
+  const newOrder = ["disks", "proxmox-vms", "bookmarks", "services", "layout-groups"];
+  await state.sortableSectionListProps.onReorder(newOrder);
+
+  expect(fetchSpy).toHaveBeenCalled();
+  await waitFor(() => {
+    expect(state.sortableSectionListProps.sections.map((s) => s.id)).toEqual([
+      "layout-groups",
+      "services",
+      "bookmarks",
+      "proxmox-vms",
+      "disks",
+    ]);
+  });
+});
 ```
 
 - [ ] **Step 7: Run the full test file to verify everything passes**

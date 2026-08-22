@@ -239,7 +239,7 @@ Pass custom request body using the `requestBody` option in either a string or ob
 requestBody:
   foo: bar
 # or
-requestBody: "{\"foo\":\"bar\"}"
+requestBody: '{"foo":"bar"}'
 ```
 
 Both formats result in `{"foo":"bar"}` being sent as the request body. Don't forget to set your `Content-Type` headers!

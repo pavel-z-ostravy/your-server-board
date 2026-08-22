@@ -25,12 +25,14 @@
 ### Task 1: Fork & Bootstrap
 
 **Files:**
+
 - Create (on GitHub): `pavel-z-ostravy/your-server-board` (fork of `gethomepage/homepage`)
 - Modify: `package.json` (name, version)
 - Create: `NOTICE.md`
 - Move: `docs/superpowers/specs/2026-08-11-your-server-board-design.md` and this plan file into the forked repo
 
 **Interfaces:**
+
 - Produces: a working local clone at `/Users/pavel/DevVault/projects/your-server-board` with `origin` = the new fork, `upstream` = `gethomepage/homepage`, checked out on branch `dev`, existing test suite passing, dev server confirmed booting.
 
 - [ ] **Step 1: Fork the repo on GitHub with a custom name, cloned to a fresh directory**
@@ -92,6 +94,7 @@ Expected: `up`.
 - [ ] **Step 6: Minimal fork branding + GPL provenance notice**
 
 Edit `package.json`:
+
 ```json
 {
   "name": "your-server-board",
@@ -99,9 +102,11 @@ Edit `package.json`:
   ...
 }
 ```
+
 (keep every other field as-is)
 
 Create `NOTICE.md`:
+
 ```markdown
 # Notice
 
@@ -109,6 +114,7 @@ your-server-board is a derivative work of [gethomepage/homepage](https://github.
 licensed under the GNU General Public License v3.0 (see `LICENSE`).
 
 This fork adds:
+
 - Disks & SMART health monitoring (auto-detected, not in upstream)
 - Backup lifecycle management for Proxmox VMs/CTs (list, run, download, delete, retention)
 - Quick VM/CT actions (start/stop/reboot)
@@ -140,6 +146,7 @@ Expected: `PUBLIC` (forks of public repos are public by default on GitHub, but c
 ### Task 2: Restricted SSH client for SMART & disk enumeration
 
 **Files:**
+
 - Create: `src/utils/ssh/smartClient.js`
 - Create: `src/utils/ssh/smartClient.test.js`
 - Modify: `package.json` (adds `ssh2` dependency)
@@ -147,6 +154,7 @@ Expected: `PUBLIC` (forks of public repos are public by default on GitHub, but c
 - Create: `deploy/SSH_SETUP.md`
 
 **Interfaces:**
+
 - Produces: `listBlockDevices(sshConfig) -> Promise<{blockdevices: Array}>` and `getSmartData(sshConfig, devicePath) -> Promise<object>`, where `sshConfig = { host, port?, username, privateKeyPath }`. These are the functions the Disks & SMART plan (next) will import and call from an API route — no UI here.
 
 - [ ] **Step 1: Write the failing test**
@@ -331,8 +339,9 @@ esac
 
 - [ ] **Step 7: Document the host-side setup**
 
-```markdown
+````markdown
 <!-- deploy/SSH_SETUP.md -->
+
 # Restricted SSH key setup (Proxmox host)
 
 This key can only run `lsblk` or `smartctl -j -a <device>` — nothing else —
@@ -342,8 +351,10 @@ enforced server-side by a forced command, not just by client-side discipline.
    ```bash
    ssh-keygen -t ed25519 -f ./your-server-board-smart-key -N "" -C "your-server-board-smart-reader"
    ```
+````
 
 2. Copy `deploy/proxmox-smart-helper.sh` to the Proxmox host and make it executable:
+
    ```bash
    scp deploy/proxmox-smart-helper.sh proxmox:/usr/local/bin/your-server-board-smart-helper.sh
    ssh proxmox 'chmod 755 /usr/local/bin/your-server-board-smart-helper.sh'
@@ -351,6 +362,7 @@ enforced server-side by a forced command, not just by client-side discipline.
 
 3. Append the public key to `/root/.ssh/authorized_keys` on the Proxmox host,
    prefixed with the forced command and restriction flags:
+
    ```
    command="/usr/local/bin/your-server-board-smart-helper.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA...<paste-generated-pubkey-here> your-server-board-smart-reader
    ```
@@ -358,12 +370,13 @@ enforced server-side by a forced command, not just by client-side discipline.
    SMART data requires raw block device access, which in practice means root
    on Proxmox — there's no standard non-root group for it. The forced command
    is what makes this safe to expose behind a public tunnel: the key is root,
-   but it is *only* able to run the two whitelisted read-only commands above.
+   but it is _only_ able to run the two whitelisted read-only commands above.
 
 4. Copy the **private** key into this app's config volume as `config/ssh/id_smart`
    (gitignored — never commit it). The app reads it via `privateKeyPath` in
    `config/proxmox.yaml`.
-```
+
+````
 
 - [ ] **Step 8: Commit**
 
@@ -371,18 +384,20 @@ enforced server-side by a forced command, not just by client-side discipline.
 git add src/utils/ssh/smartClient.js src/utils/ssh/smartClient.test.js package.json pnpm-lock.yaml \
         deploy/proxmox-smart-helper.sh deploy/SSH_SETUP.md
 git commit -m "feat: add restricted SSH client for SMART/disk enumeration"
-```
+````
 
 ---
 
 ### Task 3: Deploy to lxc200 with real Proxmox connectivity
 
 **Files:**
+
 - Create: `docker-compose.yml`
 - Create (on `lxc200`, not committed): `config/proxmox.yaml`, `config/ssh/id_smart`
 - Modify: `.gitignore` (exclude `config/*.yaml` except a documented example, exclude `config/ssh/`)
 
 **Interfaces:**
+
 - Consumes: `getProxmoxConfig()` from `src/utils/config/proxmox.js` (already exists upstream, unmodified), `listBlockDevices`/`getSmartData` from Task 2.
 - Produces: a running container reachable at `http://10.0.1.104:3050`, registered as a Dockge stack, with a real Proxmox VE widget on the dashboard showing live cluster data — proof the whole pipeline (fork → build → deploy → real credentials → real data) works before any new UI is built on top of it.
 
@@ -534,6 +549,7 @@ git push origin dev
 ### Task 5: Generic installer for other users
 
 **Files:**
+
 - Modify: `docker-compose.yml` (created by Task 3) — replace hardcoded host-specific values with environment variable substitution
 - Create: `.env.example`
 - Create: `install.sh`
@@ -541,6 +557,7 @@ git push origin dev
 - Modify: `README.md` (add a "Getting Started" section pointing at `install.sh`)
 
 **Interfaces:**
+
 - Consumes: `deploy/proxmox-smart-helper.sh` and `deploy/SSH_SETUP.md` from Task 2 (the script prints the same authorized_keys line format `SSH_SETUP.md` documents, so they must stay consistent — if you change one, check the other).
 - Produces: a `./install.sh` a first-time visitor can run from a fresh clone to get their own instance running, without editing any file that has this deployment's IP address, port, or hostnames baked in.
 
@@ -679,7 +696,7 @@ echo ".env" >> .gitignore
 
 - [ ] **Step 5: Add a "Getting Started" section to `README.md`**
 
-```markdown
+````markdown
 ## Getting Started (your own server)
 
 1. Clone this repo onto the machine that will run the dashboard container.
@@ -691,11 +708,13 @@ echo ".env" >> .gitignore
    ```bash
    pveum user token add root@pam your-server-board --privsep 0
    ```
-   (see `docs/superpowers/specs/2026-08-11-your-server-board-design.md` for
-   why this should later be scoped down to a custom least-privilege role
-   before exposing the dashboard publicly)
-4. `docker compose restart`
-```
+````
+
+(see `docs/superpowers/specs/2026-08-11-your-server-board-design.md` for
+why this should later be scoped down to a custom least-privilege role
+before exposing the dashboard publicly) 4. `docker compose restart`
+
+````
 
 - [ ] **Step 6: Prove it works by re-provisioning our own instance through it**
 
@@ -705,7 +724,7 @@ This is the actual verification for this task — not just "the script runs with
 ssh lxc200 'cd /opt/your-server-board && git pull origin dev'
 ssh lxc200 'cd /opt/your-server-board && cp .env.example .env && \
   sed -i "s/^YSB_ALLOWED_HOSTS=.*/YSB_ALLOWED_HOSTS=10.0.1.104:3050/" .env'
-```
+````
 
 The restricted SSH key and `config/proxmox.yaml` already exist on lxc200 from Task 3 — `install.sh` must detect and skip regenerating them (its `[ ! -f ... ]` guards handle this), not overwrite working config. Run it non-interactively to confirm the skip logic:
 

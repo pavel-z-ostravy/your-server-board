@@ -7,6 +7,7 @@
 **Goal:** Add an expandable "Details" section to each VM/LXC card (built in Plan 3) showing its top 5 processes by CPU and its last OS update date (or "N/A") — fetched on demand when a user expands a card, not on every 60s dashboard poll.
 
 **Architecture:** Two genuinely different, narrow, hardcoded-command execution paths — never a general-purpose exec primitive, matching the security discipline established in Foundation and re-applied in every subsequent plan:
+
 - **QEMU**: the guest agent's `exec`/`exec-status` RPCs, reached over the existing Proxmox API token (no new SSH). The Next.js route sends a fixed, hardcoded `command` array — never anything derived from client input.
 - **LXC**: `pct exec`, which has no Proxmox API equivalent (confirmed live during planning — see below), reached over the SAME restricted SSH key Plans 1-2 already extended, with two new forced-command branches using the exact validate-and-reconstruct pattern (extract a numeric vmid, validate strictly, substitute into a literal fixed template) already reviewed and shipped for `smartctl`'s device-path parameter.
 
@@ -18,8 +19,8 @@ A new on-demand route (`GET /api/proxmox/vm-detail`) is fetched only when a card
 
 - Node 22, pnpm only. Test via `pnpm test` (Vitest, `vitest run`).
 - **No general-purpose exec primitive, ever, for any user.** Every new capability this plan adds is exactly one fixed, named, read-only operation (list processes; read `/etc/os-release` + one update-timestamp file) — there is no way for a client to request anything else through either new code path. This is a hard constraint per the design spec, restated here because it's the single thing Task 6's adversarial review exists to verify.
-- **QEMU path:** the `command` array sent to the guest agent's `/agent/exec` endpoint MUST be a JS constant baked into server code — never built from `req.query`, `req.body`, or any other client-controlled value. Only `node`/`vmid` (both strictly validated) select *which* guest the fixed command runs against.
-- **LXC path:** every new `case` branch added to `deploy/proxmox-smart-helper.sh` extracts and validates the `vmid` parameter as `^[0-9]+$` *before* substituting it into a hardcoded command template — the exact pattern the existing `smartctl -j -a /dev/nvme...` branch already uses for its device-path parameter. No other part of the client-supplied command string is ever passed through to `exec`.
+- **QEMU path:** the `command` array sent to the guest agent's `/agent/exec` endpoint MUST be a JS constant baked into server code — never built from `req.query`, `req.body`, or any other client-controlled value. Only `node`/`vmid` (both strictly validated) select _which_ guest the fixed command runs against.
+- **LXC path:** every new `case` branch added to `deploy/proxmox-smart-helper.sh` extracts and validates the `vmid` parameter as `^[0-9]+$` _before_ substituting it into a hardcoded command template — the exact pattern the existing `smartctl -j -a /dev/nvme...` branch already uses for its device-path parameter. No other part of the client-supplied command string is ever passed through to `exec`.
 - Do not modify `src/pages/api/proxmox/vms/index.js` (Plan 3's route) — this plan's enrichment lives entirely in a new, separate, on-demand route. Do not modify the existing `lsblk`/`smartctl`/`df`/`lvs`/`pvs` case branches in `deploy/proxmox-smart-helper.sh`, or any existing export in `src/utils/ssh/smartClient.js`.
 - Top-5-processes uses a custom `ps -eo pid=,pcpu=,pmem=,comm=` format (not `ps aux`) — `comm` (not the full command line) is deliberately used: it's a single, no-spaces token (trivial and safe to parse, no risk of embedded whitespace breaking column splitting) and it avoids surfacing full process argv (which can contain secrets — tokens, connection strings — passed as CLI args to some processes) on a dashboard that, like `/api/disks` and `/api/proxmox/vms` before it, may be running with no authentication at all.
 - "Last OS update" is best-effort for apt/dpkg-based Linux only, exactly as the design spec's non-goals state — any other package manager, or an appliance OS with no apt (confirmed live: Home Assistant OS), reports `null` → UI renders "N/A". Do not attempt broader package-manager detection.
@@ -44,7 +45,7 @@ Checked directly against the real Proxmox API and the real Proxmox host (`ssh pr
   - The identical command sent via QEMU guest-agent exec (`sh`/`-c`/the same string as three `command` array elements) against VM 100 (Home Assistant OS) works too — HAOS's minimal image still has a POSIX `sh`, returns real HAOS `os-release` fields, then `---`, then `none` (HAOS uses image-based `rauc` updates, no apt — matches the design spec's stated non-goal exactly).
   - Because the exact same command/output shape works for both guest types, **one shared pure parser handles both** (Task 3) — this is a deliberate simplification made possible by live-verifying the QEMU shell environment rather than assuming LXC-only.
 - **`pct exec <nonexistent-vmid> -- ...` fails cleanly**: `pct exec 9999 -- ps aux` → `Configuration file 'nodes/proxmox/lxc/9999.conf' does not exist` on stderr, non-zero exit — confirms Proxmox's own error handling for a bad vmid is well-behaved (no crash, no ambiguous output), useful for this plan's own error-path design.
-- **`src/components/services/item.jsx`'s `statsOpen`/`showStats` toggle** (the pattern the design spec pointed at for the expand/collapse interaction) uses an animated `max-h-0 opacity-0` ↔ `max-h-[Npx] opacity-100` transition with a separate `statsClosing` state for the close animation. This plan's `VmCard` Details toggle borrows the *affordance* (a button that reveals more info) but not the animation complexity — a plain conditional render is enough here and matches `DisksGroup`/`ProxmoxVmsGroup`'s already-established preference for simplicity over `item.jsx`'s more elaborate transitions.
+- **`src/components/services/item.jsx`'s `statsOpen`/`showStats` toggle** (the pattern the design spec pointed at for the expand/collapse interaction) uses an animated `max-h-0 opacity-0` ↔ `max-h-[Npx] opacity-100` transition with a separate `statsClosing` state for the close animation. This plan's `VmCard` Details toggle borrows the _affordance_ (a button that reveals more info) but not the animation complexity — a plain conditional render is enough here and matches `DisksGroup`/`ProxmoxVmsGroup`'s already-established preference for simplicity over `item.jsx`'s more elaborate transitions.
 
 ## File Structure
 
@@ -66,12 +67,14 @@ Checked directly against the real Proxmox API and the real Proxmox host (`ssh pr
 ### Task 1: Restricted-SSH `pct exec` support
 
 **Files:**
+
 - Modify: `deploy/proxmox-smart-helper.sh`
 - Modify: `deploy/SSH_SETUP.md`
 - Create: `src/utils/ssh/lxcClient.js`
 - Test: `src/utils/ssh/lxcClient.test.js`
 
 **Interfaces:**
+
 - Consumes: the SSH connection mechanism already established (this new file makes its own `ssh2` connections following `smartClient.js`'s exact `execCommand` shape — read `smartClient.js` first and copy the pattern; do not import from it, this is a deliberate sibling module per the design spec).
 - Produces:
   - `export async function getLxcProcesses(sshConfig, vmid)` → resolves to raw stdout string (parsing happens in Task 3's shared parser, not here — keep this module's responsibility to "run the SSH command", not "understand `ps` output").
@@ -172,7 +175,7 @@ Insert these two `case` arms directly above the existing `*)` catch-all:
     ;;
 ```
 
-Both branches follow the exact pattern already used for `smartctl`'s `/dev/nvme` device path: the `case` pattern's `[0-9]*` glob only narrows which strings *reach* this branch (a coarse pre-filter, matching a plausible shape) — the REAL security boundary is the subsequent `case "$vmid" in ''|*[!0-9]*)` check, which runs unconditionally on the extracted substring before it is ever substituted into the `exec` line. `${cmd#prefix}`/`${vmid%suffix}` are pure POSIX string-stripping parameter expansions — they never execute anything, and if the prefix/suffix didn't actually match (impossible here since we're already inside the matching `case` arm) they'd simply no-op rather than corrupt anything.
+Both branches follow the exact pattern already used for `smartctl`'s `/dev/nvme` device path: the `case` pattern's `[0-9]*` glob only narrows which strings _reach_ this branch (a coarse pre-filter, matching a plausible shape) — the REAL security boundary is the subsequent `case "$vmid" in ''|*[!0-9]*)` check, which runs unconditionally on the extracted substring before it is ever substituted into the `exec` line. `${cmd#prefix}`/`${vmid%suffix}` are pure POSIX string-stripping parameter expansions — they never execute anything, and if the prefix/suffix didn't actually match (impossible here since we're already inside the matching `case` arm) they'd simply no-op rather than corrupt anything.
 
 - [ ] **Step 2: Update `deploy/SSH_SETUP.md`'s capability description**
 
@@ -321,10 +324,7 @@ class FakeClient extends EventEmitter {
       }
 
       if (command === OS_PROBE_COMMAND_200) {
-        stream.emit(
-          "data",
-          Buffer.from('PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\nID=debian\n---\nnone\n'),
-        );
+        stream.emit("data", Buffer.from('PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\nID=debian\n---\nnone\n'));
         stream.emit("close", 0);
         return;
       }
@@ -397,10 +397,12 @@ git commit -m "feat: add pct exec support to the restricted SSH allowlist and a 
 ### Task 2: QEMU guest-agent exec client
 
 **Files:**
+
 - Create: `src/utils/proxmox/agentExec.js`
 - Test: `src/utils/proxmox/agentExec.test.js`
 
 **Interfaces:**
+
 - Consumes: `httpProxy` (`utils/proxy/http`), `createLogger` (`utils/logger`) — same as Plan 3's route.
 - Produces:
   - `export async function getQemuProcesses(pveConfig, node, vmid)` → resolves to raw stdout string.
@@ -638,10 +640,12 @@ git commit -m "feat: add QEMU guest-agent exec client for process listing and OS
 ### Task 3: Shared pure parsers
 
 **Files:**
+
 - Create: `src/utils/proxmox/processDetail.js`
 - Test: `src/utils/proxmox/processDetail.test.js`
 
 **Interfaces:**
+
 - Consumes: nothing (pure, standalone — the raw stdout strings Task 1/2's clients produce).
 - Produces:
   - `export function parseTopProcesses(stdout, limit = 5)` → `Array<{ pid: number, cpuPercent: number, memPercent: number, command: string }>`, already sorted CPU-descending by the upstream `ps --sort=-pcpu`, truncated to `limit`.
@@ -694,8 +698,8 @@ describe("parseOsProbe", () => {
   it("parses a real Debian os-release block with no update timestamp (none)", () => {
     const stdout =
       'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n' +
-      "NAME=\"Debian GNU/Linux\"\n" +
-      "VERSION_ID=\"12\"\n" +
+      'NAME="Debian GNU/Linux"\n' +
+      'VERSION_ID="12"\n' +
       "---\n" +
       "none\n";
 
@@ -794,15 +798,19 @@ git commit -m "feat: add pure parsers for process listing and OS-release probe o
 ### Task 4: On-demand `/api/proxmox/vm-detail` route
 
 **Files:**
+
 - Create: `src/pages/api/proxmox/vm-detail/index.js`
 - Test: `src/__tests__/pages/api/proxmox/vm-detail/index.test.js`
 
 **Interfaces:**
+
 - Consumes: `getPveConfig`/`getSmartConfig` (`utils/config/proxmox`); `getLxcProcesses`/`getLxcOsProbe` (Task 1); `getQemuProcesses`/`getQemuOsProbe` (Task 2); `parseTopProcesses`/`parseOsProbe` (Task 3).
 - Produces: `GET /api/proxmox/vm-detail?type=<qemu|lxc>&node=<node>&vmid=<vmid>` → 200 with:
+
   ```js
   { processes: Array<{pid, cpuPercent, memPercent, command}>, osReleaseName: string | null, lastUpdate: string | null }
   ```
+
   Both the process listing and the OS probe are fetched independently and degrade independently to `[]`/`null` on failure — one failing must never fail the whole response, matching every prior route in this project. 400 for invalid/missing `type`/`node`/`vmid`. 500 only if BOTH the SSH config (for `lxc`) or the Proxmox config (for `qemu`) is missing outright — a config that's present but whose live query fails degrades to empty/null, not 500.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1055,10 +1063,12 @@ git commit -m "feat: add on-demand /api/proxmox/vm-detail route"
 ### Task 5: `VmCard` Details toggle
 
 **Files:**
+
 - Modify: `src/components/proxmox-vms/group.jsx`
 - Modify: `src/components/proxmox-vms/group.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `GET /api/proxmox/vm-detail` (Task 4).
 - Produces: each `VmCard` gains a "Details" toggle button. Expanding it lazily fetches `/api/proxmox/vm-detail?type=${vm.type}&node=${vm.node}&vmid=${vm.vmid}` (only on first expand, not on every render) and shows the top-5-process list plus "Last update: <date>" or "Last update: N/A".
 
@@ -1069,43 +1079,58 @@ Read the current `src/components/proxmox-vms/group.jsx` first (it may have shift
 Add to `src/components/proxmox-vms/group.test.jsx` (read the current file first to match its exact fetch-mocking convention):
 
 ```javascript
-  it("lazily fetches and shows process/update detail only after the Details toggle is clicked", async () => {
-    const listResponse = {
-      ok: true,
-      json: () =>
-        Promise.resolve([
-          {
-            vmid: 200, node: "proxmox", type: "lxc", name: "lxc-homelab", status: "running",
-            cpuUsedCores: 1, cpuTotalCores: 4, memUsedBytes: 1, memTotalBytes: 2,
-            diskUsedBytes: 1, diskTotalBytes: 2, uptimeSeconds: 100,
-            macAddress: "BC:24:11:AE:7C:89", ipAddress: "10.0.1.104", osName: "debian",
-          },
-        ]),
-    };
-    const detailResponse = {
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          processes: [{ pid: 3368, cpuPercent: 0.8, memPercent: 18.4, command: "redis-server" }],
-          osReleaseName: "Debian GNU/Linux 12 (bookworm)",
-          lastUpdate: null,
-        }),
-    };
-    global.fetch = vi.fn((url) => (url.includes("vm-detail") ? Promise.resolve(detailResponse) : Promise.resolve(listResponse)));
+it("lazily fetches and shows process/update detail only after the Details toggle is clicked", async () => {
+  const listResponse = {
+    ok: true,
+    json: () =>
+      Promise.resolve([
+        {
+          vmid: 200,
+          node: "proxmox",
+          type: "lxc",
+          name: "lxc-homelab",
+          status: "running",
+          cpuUsedCores: 1,
+          cpuTotalCores: 4,
+          memUsedBytes: 1,
+          memTotalBytes: 2,
+          diskUsedBytes: 1,
+          diskTotalBytes: 2,
+          uptimeSeconds: 100,
+          macAddress: "BC:24:11:AE:7C:89",
+          ipAddress: "10.0.1.104",
+          osName: "debian",
+        },
+      ]),
+  };
+  const detailResponse = {
+    ok: true,
+    json: () =>
+      Promise.resolve({
+        processes: [{ pid: 3368, cpuPercent: 0.8, memPercent: 18.4, command: "redis-server" }],
+        osReleaseName: "Debian GNU/Linux 12 (bookworm)",
+        lastUpdate: null,
+      }),
+  };
+  global.fetch = vi.fn((url) =>
+    url.includes("vm-detail") ? Promise.resolve(detailResponse) : Promise.resolve(listResponse),
+  );
 
-    renderWithSWR(<ProxmoxVmsGroup />);
-    await waitFor(() => expect(screen.getByText("lxc-homelab")).toBeInTheDocument());
+  renderWithSWR(<ProxmoxVmsGroup />);
+  await waitFor(() => expect(screen.getByText("lxc-homelab")).toBeInTheDocument());
 
-    // Before expanding: no detail fetch, no process data visible.
-    expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining("vm-detail"));
-    expect(screen.queryByText("redis-server")).not.toBeInTheDocument();
+  // Before expanding: no detail fetch, no process data visible.
+  expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining("vm-detail"));
+  expect(screen.queryByText("redis-server")).not.toBeInTheDocument();
 
-    screen.getByText("Details").click();
+  screen.getByText("Details").click();
 
-    await waitFor(() => expect(screen.getByText("redis-server")).toBeInTheDocument());
-    expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("/api/proxmox/vm-detail?type=lxc&node=proxmox&vmid=200"));
-    expect(screen.getByText(/Last update: N\/A/)).toBeInTheDocument();
-  });
+  await waitFor(() => expect(screen.getByText("redis-server")).toBeInTheDocument());
+  expect(global.fetch).toHaveBeenCalledWith(
+    expect.stringContaining("/api/proxmox/vm-detail?type=lxc&node=proxmox&vmid=200"),
+  );
+  expect(screen.getByText(/Last update: N\/A/)).toBeInTheDocument();
+});
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -1206,6 +1231,7 @@ Not the whole branch diff — specifically `deploy/proxmox-smart-helper.sh` (ful
 - [ ] **Step 2: Dispatch with this exact adversarial framing**
 
 The reviewer's brief must instruct it to actively try to find a way to:
+
 1. Get the `pct exec` forced-command branches in `proxmox-smart-helper.sh` to run something other than the exact two commands they're supposed to — try constructing `$SSH_ORIGINAL_COMMAND` values that might slip past the `case` pattern match, confuse the `${cmd#...}`/`${vmid%...}` stripping, or exploit shell word-splitting/globbing in the vmid validation. Specifically: does the vmid validation correctly reject a vmid containing shell metacharacters, a vmid that's a valid-looking number followed by injected content the suffix-stripping might not fully remove, an empty vmid, a vmid with leading zeros or extreme length, or unicode digit look-alikes?
 2. Get `src/utils/proxmox/agentExec.js`'s `command` array to include anything not in the two hardcoded constants — trace every code path from the Next.js route (`vm-detail/index.js`) down to `launchExec`'s `command` parameter and confirm no request data (query params, headers, body) reaches it.
 3. Find any way `type`/`node`/`vmid` validation in `vm-detail/index.js` could be bypassed to reach either exec path with attacker-controlled data beyond the validated node name and numeric vmid.

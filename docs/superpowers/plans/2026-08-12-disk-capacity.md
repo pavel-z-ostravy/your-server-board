@@ -58,12 +58,14 @@ Checked directly against the real Proxmox host (`ssh proxmox`) before writing th
 ### Task 1: Extend the SSH allowlist and client
 
 **Files:**
+
 - Modify: `deploy/proxmox-smart-helper.sh`
 - Modify: `deploy/SSH_SETUP.md`
 - Modify: `src/utils/ssh/smartClient.js`
 - Modify: `src/utils/ssh/smartClient.test.js`
 
 **Interfaces:**
+
 - Consumes: the existing `execCommand(sshConfig, command, timeoutMs)` helper already defined in `smartClient.js` — do not duplicate it.
 - Produces:
   - `export async function getDiskUsage(sshConfig)` → resolves to an array of `{ source, target, fstype, usedBytes, sizeBytes }`.
@@ -169,59 +171,57 @@ let capacityBehavior = "success"; // "success" | "nonzero" | "empty"
 Add to `FakeClient.exec`'s command dispatch (inside the existing `setImmediate` callback, as new `if` blocks before the final "unexpected command" fallback):
 
 ```javascript
-      if (command === DF_COMMAND) {
-        if (capacityBehavior === "nonzero") {
-          stream.stderr.emit("data", Buffer.from("df: failure\n"));
-          stream.emit("close", 1);
-        } else if (capacityBehavior === "empty") {
-          stream.emit("data", Buffer.from("Filesystem Mounted on Type Used 1B-blocks\n"));
-          stream.emit("close", 0);
-        } else {
-          stream.emit(
-            "data",
-            Buffer.from(
-              "Filesystem            Mounted on   Type Used         1B-blocks\n" +
-                "/dev/mapper/pve-root  /            ext4 25914707968  89628205056\n" +
-                "/dev/sda2             /boot/efi    vfat 9211904      1071624192\n",
-            ),
-          );
-          stream.emit("close", 0);
-        }
-        return;
-      }
+if (command === DF_COMMAND) {
+  if (capacityBehavior === "nonzero") {
+    stream.stderr.emit("data", Buffer.from("df: failure\n"));
+    stream.emit("close", 1);
+  } else if (capacityBehavior === "empty") {
+    stream.emit("data", Buffer.from("Filesystem Mounted on Type Used 1B-blocks\n"));
+    stream.emit("close", 0);
+  } else {
+    stream.emit(
+      "data",
+      Buffer.from(
+        "Filesystem            Mounted on   Type Used         1B-blocks\n" +
+          "/dev/mapper/pve-root  /            ext4 25914707968  89628205056\n" +
+          "/dev/sda2             /boot/efi    vfat 9211904      1071624192\n",
+      ),
+    );
+    stream.emit("close", 0);
+  }
+  return;
+}
 
-      if (command === LVS_COMMAND) {
-        if (capacityBehavior === "nonzero") {
-          stream.stderr.emit("data", Buffer.from("lvs: failure\n"));
-          stream.emit("close", 1);
-        } else if (capacityBehavior === "empty") {
-          stream.emit("data", Buffer.from(""));
-          stream.emit("close", 0);
-        } else {
-          stream.emit(
-            "data",
-            Buffer.from(
-              "  data pve twi-aotz-- 63.09 151640866816\n" + "  root pve -wi-ao---- 91662319616\n",
-            ),
-          );
-          stream.emit("close", 0);
-        }
-        return;
-      }
+if (command === LVS_COMMAND) {
+  if (capacityBehavior === "nonzero") {
+    stream.stderr.emit("data", Buffer.from("lvs: failure\n"));
+    stream.emit("close", 1);
+  } else if (capacityBehavior === "empty") {
+    stream.emit("data", Buffer.from(""));
+    stream.emit("close", 0);
+  } else {
+    stream.emit(
+      "data",
+      Buffer.from("  data pve twi-aotz-- 63.09 151640866816\n" + "  root pve -wi-ao---- 91662319616\n"),
+    );
+    stream.emit("close", 0);
+  }
+  return;
+}
 
-      if (command === PVS_COMMAND) {
-        if (capacityBehavior === "nonzero") {
-          stream.stderr.emit("data", Buffer.from("pvs: failure\n"));
-          stream.emit("close", 1);
-        } else if (capacityBehavior === "empty") {
-          stream.emit("data", Buffer.from(""));
-          stream.emit("close", 0);
-        } else {
-          stream.emit("data", Buffer.from("  /dev/sda3 pve\n"));
-          stream.emit("close", 0);
-        }
-        return;
-      }
+if (command === PVS_COMMAND) {
+  if (capacityBehavior === "nonzero") {
+    stream.stderr.emit("data", Buffer.from("pvs: failure\n"));
+    stream.emit("close", 1);
+  } else if (capacityBehavior === "empty") {
+    stream.emit("data", Buffer.from(""));
+    stream.emit("close", 0);
+  } else {
+    stream.emit("data", Buffer.from("  /dev/sda3 pve\n"));
+    stream.emit("close", 0);
+  }
+  return;
+}
 ```
 
 Add `capacityBehavior = "success";` to the existing `afterEach` reset block alongside the other three behavior resets.
@@ -236,59 +236,59 @@ const { getSmartData, listBlockDevices, getDiskUsage, getLvmReport, getPvMapping
 Add these new test cases inside the existing `describe("smartClient", ...)` block:
 
 ```javascript
-  it("fetches disk usage via the exact df command", async () => {
-    const result = await getDiskUsage(sshConfig);
-    expect(result).toEqual([
-      { source: "/dev/mapper/pve-root", target: "/", fstype: "ext4", usedBytes: 25914707968, sizeBytes: 89628205056 },
-      { source: "/dev/sda2", target: "/boot/efi", fstype: "vfat", usedBytes: 9211904, sizeBytes: 1071624192 },
-    ]);
-  });
+it("fetches disk usage via the exact df command", async () => {
+  const result = await getDiskUsage(sshConfig);
+  expect(result).toEqual([
+    { source: "/dev/mapper/pve-root", target: "/", fstype: "ext4", usedBytes: 25914707968, sizeBytes: 89628205056 },
+    { source: "/dev/sda2", target: "/boot/efi", fstype: "vfat", usedBytes: 9211904, sizeBytes: 1071624192 },
+  ]);
+});
 
-  it("returns an empty array when df has nothing to report beyond the header", async () => {
-    capacityBehavior = "empty";
-    const result = await getDiskUsage(sshConfig);
-    expect(result).toEqual([]);
-  });
+it("returns an empty array when df has nothing to report beyond the header", async () => {
+  capacityBehavior = "empty";
+  const result = await getDiskUsage(sshConfig);
+  expect(result).toEqual([]);
+});
 
-  it("rejects getDiskUsage when df exits non-zero", async () => {
-    capacityBehavior = "nonzero";
-    await expect(getDiskUsage(sshConfig)).rejects.toThrow(/exited with code 1/);
-  });
+it("rejects getDiskUsage when df exits non-zero", async () => {
+  capacityBehavior = "nonzero";
+  await expect(getDiskUsage(sshConfig)).rejects.toThrow(/exited with code 1/);
+});
 
-  it("fetches the LVM report via the exact lvs command, with dataPercent null for non-thin LVs", async () => {
-    const result = await getLvmReport(sshConfig);
-    expect(result).toEqual([
-      { lvName: "data", vgName: "pve", lvAttr: "twi-aotz--", dataPercent: 63.09, lvSizeBytes: 151640866816 },
-      { lvName: "root", vgName: "pve", lvAttr: "-wi-ao----", dataPercent: null, lvSizeBytes: 91662319616 },
-    ]);
-  });
+it("fetches the LVM report via the exact lvs command, with dataPercent null for non-thin LVs", async () => {
+  const result = await getLvmReport(sshConfig);
+  expect(result).toEqual([
+    { lvName: "data", vgName: "pve", lvAttr: "twi-aotz--", dataPercent: 63.09, lvSizeBytes: 151640866816 },
+    { lvName: "root", vgName: "pve", lvAttr: "-wi-ao----", dataPercent: null, lvSizeBytes: 91662319616 },
+  ]);
+});
 
-  it("returns an empty array when lvs has no output (no LVM on this host)", async () => {
-    capacityBehavior = "empty";
-    const result = await getLvmReport(sshConfig);
-    expect(result).toEqual([]);
-  });
+it("returns an empty array when lvs has no output (no LVM on this host)", async () => {
+  capacityBehavior = "empty";
+  const result = await getLvmReport(sshConfig);
+  expect(result).toEqual([]);
+});
 
-  it("rejects getLvmReport when lvs exits non-zero", async () => {
-    capacityBehavior = "nonzero";
-    await expect(getLvmReport(sshConfig)).rejects.toThrow(/exited with code 1/);
-  });
+it("rejects getLvmReport when lvs exits non-zero", async () => {
+  capacityBehavior = "nonzero";
+  await expect(getLvmReport(sshConfig)).rejects.toThrow(/exited with code 1/);
+});
 
-  it("fetches the PV-to-VG mapping via the exact pvs command", async () => {
-    const result = await getPvMapping(sshConfig);
-    expect(result).toEqual([{ pvName: "/dev/sda3", vgName: "pve" }]);
-  });
+it("fetches the PV-to-VG mapping via the exact pvs command", async () => {
+  const result = await getPvMapping(sshConfig);
+  expect(result).toEqual([{ pvName: "/dev/sda3", vgName: "pve" }]);
+});
 
-  it("returns an empty array when pvs has no output (no LVM on this host)", async () => {
-    capacityBehavior = "empty";
-    const result = await getPvMapping(sshConfig);
-    expect(result).toEqual([]);
-  });
+it("returns an empty array when pvs has no output (no LVM on this host)", async () => {
+  capacityBehavior = "empty";
+  const result = await getPvMapping(sshConfig);
+  expect(result).toEqual([]);
+});
 
-  it("rejects getPvMapping when pvs exits non-zero", async () => {
-    capacityBehavior = "nonzero";
-    await expect(getPvMapping(sshConfig)).rejects.toThrow(/exited with code 1/);
-  });
+it("rejects getPvMapping when pvs exits non-zero", async () => {
+  capacityBehavior = "nonzero";
+  await expect(getPvMapping(sshConfig)).rejects.toThrow(/exited with code 1/);
+});
 ```
 
 - [ ] **Step 4: Run the tests to verify they fail**
@@ -302,10 +302,7 @@ Add to `src/utils/ssh/smartClient.js`, after the existing `getSmartData` export 
 
 ```javascript
 export async function getDiskUsage(sshConfig) {
-  const { stdout, stderr, code } = await execCommand(
-    sshConfig,
-    "df -B1 --output=source,target,fstype,used,size",
-  );
+  const { stdout, stderr, code } = await execCommand(sshConfig, "df -B1 --output=source,target,fstype,used,size");
   if (code !== 0) {
     throw new Error(`Command exited with code ${code}: ${stderr}`);
   }
@@ -384,10 +381,12 @@ git commit -m "feat: add df/lvs/pvs to the restricted SSH allowlist and client"
 ### Task 2: Pure disk-capacity aggregation function
 
 **Files:**
+
 - Create: `src/utils/disks/capacity.js`
 - Test: `src/utils/disks/capacity.test.js`
 
 **Interfaces:**
+
 - Consumes: nothing from Task 1 directly (pure function, takes already-parsed data) — but its input shapes must exactly match Task 1's return shapes: `dfRows: Array<{ source, target, fstype, usedBytes, sizeBytes }>`, `lvsRows: Array<{ lvName, vgName, lvAttr, dataPercent, lvSizeBytes }>`, `pvsRows: Array<{ pvName, vgName }>`. Also consumes one disk entry from the existing `lsblk -J` tree shape already used elsewhere in this codebase (`{ name, type, mountpoint, children: [...] }`, recursively nested).
 - Produces: `export function computeDiskCapacity(disk, { dfRows, lvsRows, pvsRows })` → `{ usedBytes: number, totalBytes: number } | null`. `null` means "nothing found for this disk" (no mounted filesystem, no LVM) — Task 3 must render this as the existing "-" placeholder, not throw or crash.
 
@@ -408,7 +407,13 @@ describe("computeDiskCapacity", () => {
       children: [{ name: "sdc_crypt", type: "crypt", mountpoint: "/mnt/storage" }],
     };
     const dfRows = [
-      { source: "/dev/mapper/sdc_crypt", target: "/mnt/storage", fstype: "ext4", usedBytes: 400000000000, sizeBytes: 2000000000000 },
+      {
+        source: "/dev/mapper/sdc_crypt",
+        target: "/mnt/storage",
+        fstype: "ext4",
+        usedBytes: 400000000000,
+        sizeBytes: 2000000000000,
+      },
       // Unrelated mountpoint on a different disk — must be ignored.
       { source: "/dev/sda2", target: "/boot/efi", fstype: "vfat", usedBytes: 10000000, sizeBytes: 1000000000 },
     ];
@@ -469,7 +474,9 @@ describe("computeDiskCapacity", () => {
       mountpoint: null,
       children: [{ name: "sda1", type: "lvm", mountpoint: "[SWAP]" }],
     };
-    const dfRows = [{ source: "/dev/mapper/pve-swap", target: "[SWAP]", fstype: "swap", usedBytes: 999, sizeBytes: 999 }];
+    const dfRows = [
+      { source: "/dev/mapper/pve-swap", target: "[SWAP]", fstype: "swap", usedBytes: 999, sizeBytes: 999 },
+    ];
 
     const result = computeDiskCapacity(disk, { dfRows, lvsRows: [], pvsRows: [] });
 
@@ -545,9 +552,7 @@ export function computeDiskCapacity(disk, { dfRows, lvsRows, pvsRows }) {
   collectPartitionNames(disk, partitionNames);
 
   const vgNames = new Set(
-    pvsRows
-      .filter((pv) => partitionNames.includes(pv.pvName.replace(/^\/dev\//, "")))
-      .map((pv) => pv.vgName),
+    pvsRows.filter((pv) => partitionNames.includes(pv.pvName.replace(/^\/dev\//, ""))).map((pv) => pv.vgName),
   );
 
   const relevantDf = dfRows.filter((row) => mountpoints.includes(row.target));
@@ -589,12 +594,14 @@ git commit -m "feat: add pure disk-capacity aggregation function"
 ### Task 3: Surface capacity in the API and the dashboard UI
 
 **Files:**
+
 - Modify: `src/pages/api/disks/index.js`
 - Modify: `src/__tests__/pages/api/disks/index.test.js`
 - Modify: `src/components/disks/group.jsx`
 - Modify: `src/components/disks/group.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `getDiskUsage`, `getLvmReport`, `getPvMapping` from `src/utils/ssh/smartClient.js` (Task 1); `computeDiskCapacity` from `src/utils/disks/capacity.js` (Task 2).
 - Produces: each object in `/api/disks`'s response array gains two new fields: `usedBytes: number | null`, `totalBytes: number | null`. `DisksGroup`'s `DiskCard` renders a fourth `Stat` from them.
 
@@ -676,8 +683,8 @@ export default async function handler(req, res) {
 Read `src/__tests__/pages/api/disks/index.test.js` first to confirm its current exact structure. Add to the `vi.hoisted`/`vi.mock` blocks:
 
 ```javascript
-const { getSmartConfig, listBlockDevices, getSmartData, getDiskUsage, getLvmReport, getPvMapping, logger } =
-  vi.hoisted(() => ({
+const { getSmartConfig, listBlockDevices, getSmartData, getDiskUsage, getLvmReport, getPvMapping, logger } = vi.hoisted(
+  () => ({
     getSmartConfig: vi.fn(),
     listBlockDevices: vi.fn(),
     getSmartData: vi.fn(),
@@ -685,7 +692,8 @@ const { getSmartConfig, listBlockDevices, getSmartData, getDiskUsage, getLvmRepo
     getLvmReport: vi.fn(),
     getPvMapping: vi.fn(),
     logger: { error: vi.fn() },
-  }));
+  }),
+);
 
 vi.mock("utils/ssh/smartClient", () => ({
   listBlockDevices,
@@ -701,9 +709,9 @@ vi.mock("utils/ssh/smartClient", () => ({
 In every existing test, add default resolved values for the three new mocks so pre-existing tests keep passing unchanged in behavior (add this line inside the existing `beforeEach`, after `vi.clearAllMocks()`):
 
 ```javascript
-    getDiskUsage.mockResolvedValue([]);
-    getLvmReport.mockResolvedValue([]);
-    getPvMapping.mockResolvedValue([]);
+getDiskUsage.mockResolvedValue([]);
+getLvmReport.mockResolvedValue([]);
+getPvMapping.mockResolvedValue([]);
 ```
 
 With those defaults, the two existing tests that assert an exact `res.body` (`"filters lsblk output..."` and the error-path tests) need `usedBytes: null, totalBytes: null` added to their expected objects — `computeDiskCapacity` returns `null` for a disk with no matching df/lvs/pvs data, which this task's route code must render as `usedBytes: null, totalBytes: null` (see Step 3).
@@ -711,59 +719,65 @@ With those defaults, the two existing tests that assert an exact `res.body` (`"f
 Add these new test cases inside the existing `describe("pages/api/disks", ...)` block:
 
 ```javascript
-  it("merges real capacity data into each disk entry", async () => {
-    getSmartConfig.mockReturnValue(sshConfig);
-    listBlockDevices.mockResolvedValue({
-      blockdevices: [
-        {
-          name: "sdc",
-          size: "1.9T",
-          type: "disk",
-          model: "Vi3000",
-          children: [{ name: "sdc_crypt", type: "crypt", mountpoint: "/mnt/storage" }],
-        },
-      ],
-    });
-    getSmartData.mockResolvedValue(ataSmart);
-    getDiskUsage.mockResolvedValue([
-      { source: "/dev/mapper/sdc_crypt", target: "/mnt/storage", fstype: "ext4", usedBytes: 400000000000, sizeBytes: 2000000000000 },
-    ]);
-    getLvmReport.mockResolvedValue([]);
-    getPvMapping.mockResolvedValue([]);
-
-    const req = { query: {} };
-    const res = createMockRes();
-
-    await handler(req, res);
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body[0]).toMatchObject({ name: "sdc", usedBytes: 400000000000, totalBytes: 2000000000000 });
+it("merges real capacity data into each disk entry", async () => {
+  getSmartConfig.mockReturnValue(sshConfig);
+  listBlockDevices.mockResolvedValue({
+    blockdevices: [
+      {
+        name: "sdc",
+        size: "1.9T",
+        type: "disk",
+        model: "Vi3000",
+        children: [{ name: "sdc_crypt", type: "crypt", mountpoint: "/mnt/storage" }],
+      },
+    ],
   });
+  getSmartData.mockResolvedValue(ataSmart);
+  getDiskUsage.mockResolvedValue([
+    {
+      source: "/dev/mapper/sdc_crypt",
+      target: "/mnt/storage",
+      fstype: "ext4",
+      usedBytes: 400000000000,
+      sizeBytes: 2000000000000,
+    },
+  ]);
+  getLvmReport.mockResolvedValue([]);
+  getPvMapping.mockResolvedValue([]);
 
-  it("returns usedBytes/totalBytes null for every disk, without failing the request, when the capacity SSH calls fail", async () => {
-    getSmartConfig.mockReturnValue(sshConfig);
-    listBlockDevices.mockResolvedValue({
-      blockdevices: [{ name: "sda", size: "238.5G", type: "disk", model: "A" }],
-    });
-    getSmartData.mockResolvedValue(ataSmart);
-    // Simulates the real operational sequencing risk this plan calls out: the
-    // app was redeployed with the new client code, but proxmox-smart-helper.sh
-    // on the host hasn't been re-copied yet, so the host refuses the new commands.
-    getDiskUsage.mockRejectedValue(new Error("refused: command not permitted for this key"));
-    getLvmReport.mockRejectedValue(new Error("refused: command not permitted for this key"));
-    getPvMapping.mockRejectedValue(new Error("refused: command not permitted for this key"));
+  const req = { query: {} };
+  const res = createMockRes();
 
-    const req = { query: {} };
-    const res = createMockRes();
+  await handler(req, res);
 
-    await handler(req, res);
+  expect(res.statusCode).toBe(200);
+  expect(res.body[0]).toMatchObject({ name: "sdc", usedBytes: 400000000000, totalBytes: 2000000000000 });
+});
 
-    expect(res.statusCode).toBe(200);
-    expect(res.body[0]).toMatchObject({ name: "sda", status: "ok", usedBytes: null, totalBytes: null });
-    // The capacity failure must not contaminate the unrelated SMART error message,
-    // and must not leak raw SSH error detail into the public response.
-    expect(JSON.stringify(res.body)).not.toContain("refused:");
+it("returns usedBytes/totalBytes null for every disk, without failing the request, when the capacity SSH calls fail", async () => {
+  getSmartConfig.mockReturnValue(sshConfig);
+  listBlockDevices.mockResolvedValue({
+    blockdevices: [{ name: "sda", size: "238.5G", type: "disk", model: "A" }],
   });
+  getSmartData.mockResolvedValue(ataSmart);
+  // Simulates the real operational sequencing risk this plan calls out: the
+  // app was redeployed with the new client code, but proxmox-smart-helper.sh
+  // on the host hasn't been re-copied yet, so the host refuses the new commands.
+  getDiskUsage.mockRejectedValue(new Error("refused: command not permitted for this key"));
+  getLvmReport.mockRejectedValue(new Error("refused: command not permitted for this key"));
+  getPvMapping.mockRejectedValue(new Error("refused: command not permitted for this key"));
+
+  const req = { query: {} };
+  const res = createMockRes();
+
+  await handler(req, res);
+
+  expect(res.statusCode).toBe(200);
+  expect(res.body[0]).toMatchObject({ name: "sda", status: "ok", usedBytes: null, totalBytes: null });
+  // The capacity failure must not contaminate the unrelated SMART error message,
+  // and must not leak raw SSH error detail into the public response.
+  expect(JSON.stringify(res.body)).not.toContain("refused:");
+});
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -880,58 +894,58 @@ Expected: PASS (all existing tests, with the `usedBytes: null, totalBytes: null`
 Read `src/components/disks/group.test.jsx` first to confirm its current exact structure. Update the first test's mocked disk fixture to include `usedBytes: 25914707968, totalBytes: 89628205056` (real-shaped numbers, matching the plan's verified `df` figures for `/`), and add an assertion for the new stat. Also add back a second disk in that same test with `warn` status, recovering the coverage the pre-relocation `/disks` page test had (per this plan's File Structure note) — the simplest way to do both in one place is to replace the whole first test:
 
 ```javascript
-  it("renders a heading and a card per disk with the correct status color", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve([
-          {
-            name: "sda",
-            device: "/dev/sda",
-            model: "MTFDDAK256TBN-1AR1ZABHA",
-            size: "238.5G",
-            protocol: "ATA",
-            temperature: 40,
-            smartPassed: true,
-            reallocatedSectors: 0,
-            wearPercentage: null,
-            mediaErrors: null,
-            usedBytes: 25914707968,
-            totalBytes: 89628205056,
-            status: "ok",
-            error: null,
-          },
-          {
-            name: "sdc",
-            device: "/dev/sdc",
-            model: "Vi3000",
-            size: "1.9T",
-            protocol: "NVMe",
-            temperature: 91,
-            smartPassed: true,
-            reallocatedSectors: null,
-            wearPercentage: 12,
-            mediaErrors: 0,
-            usedBytes: null,
-            totalBytes: null,
-            status: "warn",
-            error: null,
-          },
-        ]),
-    });
-
-    renderWithSWR(<DisksGroup />);
-
-    expect(screen.getByText("Disks")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("sda")).toBeInTheDocument());
-    const sdaCard = screen.getByText("sda").closest('[data-testid="disk-card"]');
-    expect(sdaCard).toHaveAttribute("data-status", "ok");
-    expect(sdaCard).toHaveTextContent("25.9 GB / 89.6 GB");
-
-    const sdcCard = screen.getByText("sdc").closest('[data-testid="disk-card"]');
-    expect(sdcCard).toHaveAttribute("data-status", "warn");
-    expect(sdcCard).toHaveTextContent("-");
+it("renders a heading and a card per disk with the correct status color", async () => {
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    json: () =>
+      Promise.resolve([
+        {
+          name: "sda",
+          device: "/dev/sda",
+          model: "MTFDDAK256TBN-1AR1ZABHA",
+          size: "238.5G",
+          protocol: "ATA",
+          temperature: 40,
+          smartPassed: true,
+          reallocatedSectors: 0,
+          wearPercentage: null,
+          mediaErrors: null,
+          usedBytes: 25914707968,
+          totalBytes: 89628205056,
+          status: "ok",
+          error: null,
+        },
+        {
+          name: "sdc",
+          device: "/dev/sdc",
+          model: "Vi3000",
+          size: "1.9T",
+          protocol: "NVMe",
+          temperature: 91,
+          smartPassed: true,
+          reallocatedSectors: null,
+          wearPercentage: 12,
+          mediaErrors: 0,
+          usedBytes: null,
+          totalBytes: null,
+          status: "warn",
+          error: null,
+        },
+      ]),
   });
+
+  renderWithSWR(<DisksGroup />);
+
+  expect(screen.getByText("Disks")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText("sda")).toBeInTheDocument());
+  const sdaCard = screen.getByText("sda").closest('[data-testid="disk-card"]');
+  expect(sdaCard).toHaveAttribute("data-status", "ok");
+  expect(sdaCard).toHaveTextContent("25.9 GB / 89.6 GB");
+
+  const sdcCard = screen.getByText("sdc").closest('[data-testid="disk-card"]');
+  expect(sdcCard).toHaveAttribute("data-status", "warn");
+  expect(sdcCard).toHaveTextContent("-");
+});
 ```
 
 (`25.9 GB / 89.6 GB` is `pretty-bytes@7.1.1`'s actual, verified default formatting for `25914707968` / `89628205056` — confirmed directly via `node --input-type=module -e "import prettyBytes from 'pretty-bytes'; console.log(prettyBytes(25914707968))"` while writing this plan, not guessed. The `sdc` card asserting `"-"` confirms the existing `Stat` component's null-placeholder behavior is reused as-is for a disk where capacity is unavailable, rather than this task inventing a new empty state.)
@@ -961,12 +975,12 @@ function formatCapacity(usedBytes, totalBytes) {
 In `DiskCard`, add a fourth `Stat` to the existing `<div className="flex flex-row">` (after the existing three):
 
 ```jsx
-      <div className="flex flex-row">
-        <Stat value={disk.temperature != null ? `${disk.temperature}°C` : null} label="Temp" />
-        <Stat value={disk.smartPassed == null ? null : disk.smartPassed ? "PASSED" : "FAILED"} label="SMART" />
-        <Stat value={wearOrReallocated} label={disk.wearPercentage != null ? "Wear" : "Realloc"} />
-        <Stat value={formatCapacity(disk.usedBytes, disk.totalBytes)} label="Capacity" />
-      </div>
+<div className="flex flex-row">
+  <Stat value={disk.temperature != null ? `${disk.temperature}°C` : null} label="Temp" />
+  <Stat value={disk.smartPassed == null ? null : disk.smartPassed ? "PASSED" : "FAILED"} label="SMART" />
+  <Stat value={wearOrReallocated} label={disk.wearPercentage != null ? "Wear" : "Realloc"} />
+  <Stat value={formatCapacity(disk.usedBytes, disk.totalBytes)} label="Capacity" />
+</div>
 ```
 
 - [ ] **Step 8: Run the component test to verify it passes**

@@ -16,7 +16,7 @@ The dashboard's section order (native Homepage service/bookmark groups, plus thi
 
 ## Non-goals
 
-- Reordering individual items *within* a section (a single service tile inside its group) — out of scope, whole-section reordering only.
+- Reordering individual items _within_ a section (a single service tile inside its group) — out of scope, whole-section reordering only.
 - Per-tab section order — Homepage's tab feature exists but isn't in use on this deployment today; this design targets one global order. Per-tab ordering is a natural future extension if tabs come into use, not built now (YAGNI).
 - Any auth gate on the new write endpoint — the app runs with no authentication by default, and per explicit instruction, the new order-write endpoint stays unauthenticated even when NextAuth is configured elsewhere, consistent with the rest of the dashboard's current behavior.
 
@@ -38,7 +38,7 @@ New file `config/layout-order.yaml` (gitignored, like every other user config fi
 
 New API route `POST /api/layout-order` — validates the request body is an array of strings, writes it to `config/layout-order.yaml` (via the existing `js-yaml`/config-file conventions already used elsewhere in `utils/config/`), returns the saved order. The persisted order must also be available when the dashboard page first renders, so every visitor sees the saved arrangement immediately, not just after a client-side fetch resolves — the implementation plan should follow whatever mechanism `index.jsx` already uses to get `services`/`bookmarks` data to the initial render (investigate this codebase's existing pattern rather than assuming SSR vs. client-fetch) and read `layout-order.yaml` the same way. No auth check on the write route, matching the rest of the app's default posture and Pavel's explicit choice.
 
-**Merge logic (pure function, the core piece worth unit-testing):** given the persisted order (an array of IDs, possibly referencing sections that no longer exist) and the actual current set of section descriptors, produce the final render order: known IDs in their persisted relative order first, then any current sections *not* in the persisted list appended at the end (in their natural/default order), with persisted IDs that no longer correspond to any current section silently dropped. This is what makes "add a new service group" or "a future widget" show up automatically without needing a migration step.
+**Merge logic (pure function, the core piece worth unit-testing):** given the persisted order (an array of IDs, possibly referencing sections that no longer exist) and the actual current set of section descriptors, produce the final render order: known IDs in their persisted relative order first, then any current sections _not_ in the persisted list appended at the end (in their natural/default order), with persisted IDs that no longer correspond to any current section silently dropped. This is what makes "add a new service group" or "a future widget" show up automatically without needing a migration step.
 
 ### Drag interaction
 

@@ -24,12 +24,14 @@ the script.
    Generate it under `config/ssh/` (gitignored) — not the repo root, which is
    NOT gitignored and would leave an unprotected private key one `git add .`
    away from being committed:
+
    ```bash
    mkdir -p config/ssh
    ssh-keygen -t ed25519 -f config/ssh/id_smart -N "" -C "your-server-board-smart-reader"
    ```
 
 2. Copy `deploy/proxmox-smart-helper.sh` to the Proxmox host and make it executable:
+
    ```bash
    scp deploy/proxmox-smart-helper.sh proxmox:/usr/local/bin/your-server-board-smart-helper.sh
    ssh proxmox 'chmod 755 /usr/local/bin/your-server-board-smart-helper.sh'
@@ -37,6 +39,7 @@ the script.
 
 3. Append the public key to `/root/.ssh/authorized_keys` on the Proxmox host,
    prefixed with the forced command and restriction flags:
+
    ```
    command="/usr/local/bin/your-server-board-smart-helper.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA...<paste-generated-pubkey-here> your-server-board-smart-reader
    ```
@@ -44,7 +47,7 @@ the script.
    SMART data requires raw block device access, which in practice means root
    on Proxmox — there's no standard non-root group for it. The forced command
    is what makes this safe to expose behind a public tunnel: the key is root,
-   but it is *only* able to run the whitelisted read-only commands above.
+   but it is _only_ able to run the whitelisted read-only commands above.
 
 4. The private key already lives at `config/ssh/id_smart` (gitignored — never
    commit it) from step 1. Uncomment and fill in the `smart:` block in

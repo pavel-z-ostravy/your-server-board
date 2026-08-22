@@ -25,7 +25,7 @@ The homelab (Proxmox host `10.0.1.9` + LXC containers, notably `lxc200`/10.0.1.1
 
 - No LXC/container generator, no dev-environment installer (this is what's being dropped from lxc-automat).
 - No replacement of lxc-automat — it keeps running independently; this is a new project on its own port.
-- No multi-Proxmox-cluster support. Single node, config-driven so it *could* point at a different single node, but no cluster UI.
+- No multi-Proxmox-cluster support. Single node, config-driven so it _could_ point at a different single node, but no cluster UI.
 - No custom reimplementation of integrations Homepage already ships as configurable widgets (Home Assistant, router/SNMP, Cloudflare, DNS ad-blockers, speedtest, service-uptime, Wake-on-LAN). These remain available to the operator via Homepage's own YAML config with zero custom code — they are not part of this project's development scope.
 - No backup restore-testing/verification automation.
 
@@ -60,10 +60,12 @@ Hybrid, chosen specifically so the design is not tied to one root SSH credential
 ## Feature Detail
 
 ### Disks & SMART
+
 - On each load (or on a refresh interval), enumerate **all** block devices on the Proxmox host via `lsblk` — not a fixed list. Currently known devices on this host: `sda` (256GB system SSD) and `sdc`/`sdc_crypt` (2TB Vi3000 NVMe enclosure, mounted `/mnt/storage`), but the module must not assume any specific device names.
 - Per disk: SMART overall health (PASSED/FAILED), temperature, reallocated-sector count (SATA) or wear/media-errors (NVMe), capacity/usage. Color-coded thresholds (ok/warn/critical).
 
 ### Backups
+
 - List existing Proxmox backups (VM 100 and any future CT backups) with date, size, source.
 - **Run backup now**: operator picks the VM/CT and picks the destination storage from a live list of configured Proxmox storages at run time — no single hardcoded target baked into config.
 - **Download**: streams the backup archive to the browser so it saves to the operator's Mac.
@@ -71,13 +73,16 @@ Hybrid, chosen specifically so the design is not tied to one root SSH credential
 - **Retention policy**: per-VM/CT configurable rule (keep last N, or max age in days), applied automatically after each successful backup run.
 
 ### Quick Actions
+
 - Start/stop/reboot buttons on the existing Proxmox VM/CT widget cards, via the same API token already used for backups — no additional credential.
 
 ### Alerting
+
 - Trigger conditions: SMART health != PASSED, any disk usage > 90%, a backup job failure.
 - Delivery: email via the postfix instance already running locally on `lxc200` (no external mail service needed), with ntfy.sh as an optional second channel.
 
 ### Resource/Load History
+
 - Lightweight mini trend graphs (CPU, RAM, temperature, and backup size over time) on relevant cards, not just instantaneous values — the same value lxc-automat provided via `stats_history.json`/`temp_history.json`.
 - Storage: rolling-window JSON file(s), same lightweight pattern as lxc-automat used — no database.
 
@@ -89,6 +94,7 @@ Hybrid, chosen specifically so the design is not tied to one root SSH credential
 ## Visual Design
 
 Validated against real Homepage screenshots (not assumption):
+
 - **Base theme:** Glass + Wallpaper (Homepage's frosted-glass card style over a background image), as opposed to Homepage's flat light/dark alternatives.
 - **Accent color:** defaults to violet (matching lxc-automat's existing brand color `#7c6ff7`), but the `color` setting is left **unlocked** so the operator can switch between Homepage's full 20-color palette at any time from the UI — not a build-time decision.
 - New Disks/SMART and Backups cards are built from Homepage's existing card/icon/stat-pill/status-dot component language so they read as native, not bolted on.
@@ -108,6 +114,6 @@ Validated against real Homepage screenshots (not assumption):
 - **Config:** hand-edited YAML files under `config/` (Docker volume mount), no in-app settings UI — matches Homepage's existing convention for every other integration. `config/proxmox.yaml` already has a skeleton/precedent (`getProxmoxConfig()` in `src/utils/config/proxmox.js`); new `config/backups.yaml` / `config/disks.yaml` follow the same pattern.
 - **Homepage internals:** Next.js Pages Router. Read-only widgets live in `src/widgets/<name>/{widget.js,component.jsx}`, credentials injected server-side only via `src/utils/proxy/handlers/credentialed.js`. The existing `src/pages/api/proxmox/stats/[...service].js` route (validate params → `getProxmoxConfig()` → build `PVEAPIToken=` header → proxy → JSON) is the direct template for our new Disks/Backups API routes. New top-level pages are trivial (`src/pages/backups.jsx` → `/backups`).
 - **Auth:** NextAuth.js, JWT session, single global password (`HOMEPAGE_AUTH_PASSWORD`, SHA-256 + timing-safe compare), gated by `HOMEPAGE_AUTH_ENABLED`. Sign-in page `src/pages/auth/signin.jsx`. No TOTP precedent anywhere — needs the `otplib` npm package (Node has no built-in TOTP) and a new `HOMEPAGE_TOTP_SECRET` env var, verified inside the `CredentialsProvider.authorize()` callback after the password check.
-- **⚠️ No write/action pattern exists anywhere in Homepage** — every widget is read-only display. Quick Actions (start/stop/reboot) and Backup run/delete are genuinely new UI + API patterns for this codebase, not a copy of an existing button. Budget real design and build time for these, not a trivial add-on. The API route *shape* (param validation → auth header → proxy call → JSON) is reusable from the read-only routes; only the HTTP verb and the button/confirmation UI are new.
+- **⚠️ No write/action pattern exists anywhere in Homepage** — every widget is read-only display. Quick Actions (start/stop/reboot) and Backup run/delete are genuinely new UI + API patterns for this codebase, not a copy of an existing button. Budget real design and build time for these, not a trivial add-on. The API route _shape_ (param validation → auth header → proxy call → JSON) is reusable from the read-only routes; only the HTTP verb and the button/confirmation UI are new.
 - **Build:** Node 22, **pnpm only** (`npx only-allow pnpm` preinstall hook — npm/yarn fail immediately), multi-stage Dockerfile, Next.js `standalone` output, build via webpack (not Turbopack).
 - **Testing:** Vitest. Convention: `widget.test.js` next to `widget.js` using the shared `expectWidgetConfigShape()` helper from `src/test-utils/widget-config.js`; `component.test.jsx` for component tests.

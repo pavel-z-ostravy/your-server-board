@@ -39,9 +39,54 @@ Checked directly against the real Proxmox API (`https://10.0.1.9:8006`, token fr
 - **`GET /cluster/resources?type=vm`** returns all three real guests in ONE call — confirmed this eliminates the need for per-VM `status/current` calls the design spec sketched:
   ```json
   [
-    {"id":"qemu/100","vmid":100,"node":"proxmox","type":"qemu","name":"homeassistant","status":"running","template":0,"cpu":0.0625912395730508,"maxcpu":1,"mem":3088969728,"maxmem":3221225472,"disk":0,"maxdisk":34359738368,"uptime":92576},
-    {"id":"lxc/200","vmid":200,"node":"proxmox","type":"lxc","name":"lxc-homelab","status":"running","template":0,"cpu":0.256998899633673,"maxcpu":4,"mem":4531613696,"maxmem":12582912000,"disk":61370929152,"maxdisk":84358758400,"uptime":135548},
-    {"id":"lxc/202","vmid":202,"node":"proxmox","type":"lxc","name":"lxc-influxdb","status":"running","template":0,"cpu":0.00303185839164451,"maxcpu":2,"mem":126689280,"maxmem":2147483648,"disk":888872960,"maxdisk":16729894912,"uptime":862972}
+    {
+      "id": "qemu/100",
+      "vmid": 100,
+      "node": "proxmox",
+      "type": "qemu",
+      "name": "homeassistant",
+      "status": "running",
+      "template": 0,
+      "cpu": 0.0625912395730508,
+      "maxcpu": 1,
+      "mem": 3088969728,
+      "maxmem": 3221225472,
+      "disk": 0,
+      "maxdisk": 34359738368,
+      "uptime": 92576
+    },
+    {
+      "id": "lxc/200",
+      "vmid": 200,
+      "node": "proxmox",
+      "type": "lxc",
+      "name": "lxc-homelab",
+      "status": "running",
+      "template": 0,
+      "cpu": 0.256998899633673,
+      "maxcpu": 4,
+      "mem": 4531613696,
+      "maxmem": 12582912000,
+      "disk": 61370929152,
+      "maxdisk": 84358758400,
+      "uptime": 135548
+    },
+    {
+      "id": "lxc/202",
+      "vmid": 202,
+      "node": "proxmox",
+      "type": "lxc",
+      "name": "lxc-influxdb",
+      "status": "running",
+      "template": 0,
+      "cpu": 0.00303185839164451,
+      "maxcpu": 2,
+      "mem": 126689280,
+      "maxmem": 2147483648,
+      "disk": 888872960,
+      "maxdisk": 16729894912,
+      "uptime": 862972
+    }
   ]
   ```
   Confirms: QEMU's `disk` is always `0` (never a real figure without the guest agent — matches the Deviation section above); LXC's `disk` is real, non-zero, independently sourced (Proxmox reads it from the container's own rootfs, a different measurement than Plan 2's host-side thin-pool percentage — no conflict, just a different, already-correct number Proxmox hands over for free).
@@ -69,12 +114,14 @@ Checked directly against the real Proxmox API (`https://10.0.1.9:8006`, token fr
 ### Task 1: Proxmox config accessor + uptime formatter
 
 **Files:**
+
 - Modify: `src/utils/config/proxmox.js`
 - Modify: `src/utils/config/proxmox.test.js`
 - Create: `src/utils/proxmox/uptime.js`
 - Test: `src/utils/proxmox/uptime.test.js`
 
 **Interfaces:**
+
 - Produces: `export function getPveConfig()` in `src/utils/config/proxmox.js` → returns `config?.pve ?? null`, mirroring `getSmartConfig()` exactly (same file, same pattern, do not touch `getSmartConfig()` or `getProxmoxConfig()` themselves).
 - Produces: `export function formatUptime(seconds)` in `src/utils/proxmox/uptime.js` → returns a short human string, two units max: `"Xd Yh"` when `seconds >= 86400`, `"Xh Ym"` when `>= 3600`, `"Xm"` when `>= 60`, `"Xs"` otherwise. `0` → `"0m"`.
 
@@ -83,17 +130,17 @@ Checked directly against the real Proxmox API (`https://10.0.1.9:8006`, token fr
 Read `src/utils/config/proxmox.js` and `src/utils/config/proxmox.test.js` first to confirm the current exact structure (they may have shifted since this plan was written). Add to `proxmox.test.js`, inside the existing `describe` block, alongside the existing `getSmartConfig` tests:
 
 ```javascript
-  it("returns the pve block", () => {
-    yaml.load.mockReturnValueOnce({ pve: { url: "https://10.0.1.9:8006", token: "t", secret: "s" } });
+it("returns the pve block", () => {
+  yaml.load.mockReturnValueOnce({ pve: { url: "https://10.0.1.9:8006", token: "t", secret: "s" } });
 
-    expect(getPveConfig()).toEqual({ url: "https://10.0.1.9:8006", token: "t", secret: "s" });
-  });
+  expect(getPveConfig()).toEqual({ url: "https://10.0.1.9:8006", token: "t", secret: "s" });
+});
 
-  it("returns null when the pve block is absent", () => {
-    yaml.load.mockReturnValueOnce({});
+it("returns null when the pve block is absent", () => {
+  yaml.load.mockReturnValueOnce({});
 
-    expect(getPveConfig()).toBeNull();
-  });
+  expect(getPveConfig()).toBeNull();
+});
 ```
 
 Add `getPveConfig` to the existing import line: `import { getPveConfig, getProxmoxConfig, getSmartConfig } from "./proxmox";`
@@ -199,10 +246,12 @@ git commit -m "feat: add getPveConfig accessor and formatUptime helper"
 ### Task 2: VM/LXC network parsing (MAC extraction + IP correlation)
 
 **Files:**
+
 - Create: `src/utils/proxmox/vmNetwork.js`
 - Test: `src/utils/proxmox/vmNetwork.test.js`
 
 **Interfaces:**
+
 - Consumes: nothing from Task 1 (pure, independent).
 - Produces:
   - `export function extractMacFromQemuNet0(net0)` → given a QEMU `net0` config string (e.g. `"virtio=BC:24:11:85:3A:8F,bridge=vmbr0"`), returns the MAC (the value of the first `key=value` pair) or `null` if `net0` is falsy or has no recognizable MAC.
@@ -239,9 +288,9 @@ describe("extractMacFromQemuNet0", () => {
 
 describe("extractMacFromLxcNet0", () => {
   it("extracts the MAC from a real LXC net0 string (hwaddr not first)", () => {
-    expect(
-      extractMacFromLxcNet0("name=eth0,bridge=vmbr0,firewall=1,hwaddr=BC:24:11:AE:7C:89,ip=dhcp,type=veth"),
-    ).toBe("BC:24:11:AE:7C:89");
+    expect(extractMacFromLxcNet0("name=eth0,bridge=vmbr0,firewall=1,hwaddr=BC:24:11:AE:7C:89,ip=dhcp,type=veth")).toBe(
+      "BC:24:11:AE:7C:89",
+    );
   });
 
   it("returns null for a falsy net0", () => {
@@ -387,10 +436,12 @@ git commit -m "feat: add VM/LXC net0 MAC parsing and MAC-to-IPv4 correlation"
 ### Task 3: Composed `/api/proxmox/vms` route
 
 **Files:**
+
 - Create: `src/pages/api/proxmox/vms/index.js`
 - Test: `src/__tests__/pages/api/proxmox/vms/index.test.js`
 
 **Interfaces:**
+
 - Consumes: `getPveConfig()` (Task 1); `extractMacFromQemuNet0`, `extractMacFromLxcNet0`, `findIPv4ByMac` (Task 2); the existing `httpProxy` (`utils/proxy/http`) and `createLogger` (`utils/logger`) utilities — same imports the existing `src/pages/api/proxmox/stats/[...service].js` route already uses, follow its exact `httpProxy` call shape (`const [status, , data] = await httpProxy(url, { method: "GET", headers })`, then `JSON.parse(Buffer.from(data).toString())`).
 - Produces: `GET /api/proxmox/vms` → 200 with a JSON array, one entry per non-template VM/LXC:
   ```js
@@ -449,20 +500,53 @@ function jsonResponse(status, body) {
 const clusterResourcesBody = {
   data: [
     {
-      id: "qemu/100", vmid: 100, node: "proxmox", type: "qemu", name: "homeassistant",
-      status: "running", template: 0, cpu: 0.0625912395730508, maxcpu: 1,
-      mem: 3088969728, maxmem: 3221225472, disk: 0, maxdisk: 34359738368, uptime: 92576,
+      id: "qemu/100",
+      vmid: 100,
+      node: "proxmox",
+      type: "qemu",
+      name: "homeassistant",
+      status: "running",
+      template: 0,
+      cpu: 0.0625912395730508,
+      maxcpu: 1,
+      mem: 3088969728,
+      maxmem: 3221225472,
+      disk: 0,
+      maxdisk: 34359738368,
+      uptime: 92576,
     },
     {
-      id: "lxc/200", vmid: 200, node: "proxmox", type: "lxc", name: "lxc-homelab",
-      status: "running", template: 0, cpu: 0.256998899633673, maxcpu: 4,
-      mem: 4531613696, maxmem: 12582912000, disk: 61370929152, maxdisk: 84358758400, uptime: 135548,
+      id: "lxc/200",
+      vmid: 200,
+      node: "proxmox",
+      type: "lxc",
+      name: "lxc-homelab",
+      status: "running",
+      template: 0,
+      cpu: 0.256998899633673,
+      maxcpu: 4,
+      mem: 4531613696,
+      maxmem: 12582912000,
+      disk: 61370929152,
+      maxdisk: 84358758400,
+      uptime: 135548,
     },
     // A template must be excluded entirely — never queried further, never returned.
     {
-      id: "qemu/9000", vmid: 9000, node: "proxmox", type: "qemu", name: "ubuntu-template",
-      status: "stopped", template: 1, cpu: 0, maxcpu: 2, mem: 0, maxmem: 2147483648,
-      disk: 0, maxdisk: 21474836480, uptime: 0,
+      id: "qemu/9000",
+      vmid: 9000,
+      node: "proxmox",
+      type: "qemu",
+      name: "ubuntu-template",
+      status: "stopped",
+      template: 1,
+      cpu: 0,
+      maxcpu: 2,
+      mem: 0,
+      maxmem: 2147483648,
+      disk: 0,
+      maxdisk: 21474836480,
+      uptime: 0,
     },
   ],
 };
@@ -473,11 +557,23 @@ const lxcConfigBody = {
 };
 const lxcInterfacesBody = {
   data: [
-    { name: "eth0", "hardware-address": "bc:24:11:ae:7c:89", "ip-addresses": [{ "ip-address": "10.0.1.104", "ip-address-type": "inet" }] },
+    {
+      name: "eth0",
+      "hardware-address": "bc:24:11:ae:7c:89",
+      "ip-addresses": [{ "ip-address": "10.0.1.104", "ip-address-type": "inet" }],
+    },
   ],
 };
 const qemuAgentInterfacesBody = {
-  data: { result: [{ name: "enp0s18", "hardware-address": "bc:24:11:85:3a:8f", "ip-addresses": [{ "ip-address": "10.0.1.22", "ip-address-type": "ipv4" }] }] },
+  data: {
+    result: [
+      {
+        name: "enp0s18",
+        "hardware-address": "bc:24:11:85:3a:8f",
+        "ip-addresses": [{ "ip-address": "10.0.1.22", "ip-address-type": "ipv4" }],
+      },
+    ],
+  },
 };
 const qemuAgentOsinfoBody = { data: { result: { "pretty-name": "Home Assistant OS 18.2" } } };
 
@@ -532,20 +628,38 @@ describe("pages/api/proxmox/vms", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toHaveLength(2);
     expect(res.body[0]).toEqual({
-      vmid: 100, node: "proxmox", type: "qemu", name: "homeassistant", status: "running",
-      cpuUsedCores: 0.0625912395730508, cpuTotalCores: 1,
-      memUsedBytes: 3088969728, memTotalBytes: 3221225472,
-      diskUsedBytes: null, diskTotalBytes: 34359738368,
+      vmid: 100,
+      node: "proxmox",
+      type: "qemu",
+      name: "homeassistant",
+      status: "running",
+      cpuUsedCores: 0.0625912395730508,
+      cpuTotalCores: 1,
+      memUsedBytes: 3088969728,
+      memTotalBytes: 3221225472,
+      diskUsedBytes: null,
+      diskTotalBytes: 34359738368,
       uptimeSeconds: 92576,
-      macAddress: "BC:24:11:85:3A:8F", ipAddress: "10.0.1.22", osName: "Home Assistant OS 18.2",
+      macAddress: "BC:24:11:85:3A:8F",
+      ipAddress: "10.0.1.22",
+      osName: "Home Assistant OS 18.2",
     });
     expect(res.body[1]).toEqual({
-      vmid: 200, node: "proxmox", type: "lxc", name: "lxc-homelab", status: "running",
-      cpuUsedCores: 0.256998899633673 * 4, cpuTotalCores: 4,
-      memUsedBytes: 4531613696, memTotalBytes: 12582912000,
-      diskUsedBytes: 61370929152, diskTotalBytes: 84358758400,
+      vmid: 200,
+      node: "proxmox",
+      type: "lxc",
+      name: "lxc-homelab",
+      status: "running",
+      cpuUsedCores: 0.256998899633673 * 4,
+      cpuTotalCores: 4,
+      memUsedBytes: 4531613696,
+      memTotalBytes: 12582912000,
+      diskUsedBytes: 61370929152,
+      diskTotalBytes: 84358758400,
       uptimeSeconds: 135548,
-      macAddress: "BC:24:11:AE:7C:89", ipAddress: "10.0.1.104", osName: "debian",
+      macAddress: "BC:24:11:AE:7C:89",
+      ipAddress: "10.0.1.104",
+      osName: "debian",
     });
   });
 
@@ -657,7 +771,10 @@ async function enrichQemu(pveConfig, resource) {
   let osName = null;
   if (config?.agent === "1" || config?.agent?.startsWith?.("1,")) {
     try {
-      const agentInterfaces = await pveGet(pveConfig, `nodes/${resource.node}/qemu/${resource.vmid}/agent/network-get-interfaces`);
+      const agentInterfaces = await pveGet(
+        pveConfig,
+        `nodes/${resource.node}/qemu/${resource.vmid}/agent/network-get-interfaces`,
+      );
       ipAddress = findIPv4ByMac(agentInterfaces?.result, mac, "ipv4");
     } catch (error) {
       logger.error("QEMU guest-agent network lookup failed for vmid %s:", resource.vmid, error);
@@ -676,7 +793,8 @@ async function enrichQemu(pveConfig, resource) {
 async function buildEntry(pveConfig, resource) {
   const base = basicStatsFromResource(resource);
   try {
-    const enrichment = resource.type === "lxc" ? await enrichLxc(pveConfig, resource) : await enrichQemu(pveConfig, resource);
+    const enrichment =
+      resource.type === "lxc" ? await enrichLxc(pveConfig, resource) : await enrichQemu(pveConfig, resource);
     return { ...base, ...enrichment };
   } catch (error) {
     logger.error("Enrichment failed for %s/%s:", resource.type, resource.vmid, error);
@@ -729,11 +847,13 @@ git commit -m "feat: add composed /api/proxmox/vms route"
 ### Task 4: `ProxmoxVmsGroup` UI and dashboard wiring
 
 **Files:**
+
 - Create: `src/components/proxmox-vms/group.jsx`
 - Test: `src/components/proxmox-vms/group.test.jsx`
 - Modify: `src/pages/index.jsx`
 
 **Interfaces:**
+
 - Consumes: `GET /api/proxmox/vms` (Task 3); `formatUptime` (Task 1).
 - Produces: `export default function ProxmoxVmsGroup()` — self-contained component (own SWR fetch, own loading/error states, own grid), no props, rendered directly in `index.jsx` alongside `<DisksGroup />`.
 
@@ -761,20 +881,38 @@ describe("components/proxmox-vms/group", () => {
       json: () =>
         Promise.resolve([
           {
-            vmid: 100, node: "proxmox", type: "qemu", name: "homeassistant", status: "running",
-            cpuUsedCores: 0.0625912395730508, cpuTotalCores: 1,
-            memUsedBytes: 3088969728, memTotalBytes: 3221225472,
-            diskUsedBytes: null, diskTotalBytes: 34359738368,
+            vmid: 100,
+            node: "proxmox",
+            type: "qemu",
+            name: "homeassistant",
+            status: "running",
+            cpuUsedCores: 0.0625912395730508,
+            cpuTotalCores: 1,
+            memUsedBytes: 3088969728,
+            memTotalBytes: 3221225472,
+            diskUsedBytes: null,
+            diskTotalBytes: 34359738368,
             uptimeSeconds: 92576,
-            macAddress: "BC:24:11:85:3A:8F", ipAddress: "10.0.1.22", osName: "Home Assistant OS 18.2",
+            macAddress: "BC:24:11:85:3A:8F",
+            ipAddress: "10.0.1.22",
+            osName: "Home Assistant OS 18.2",
           },
           {
-            vmid: 200, node: "proxmox", type: "lxc", name: "lxc-homelab", status: "stopped",
-            cpuUsedCores: 0, cpuTotalCores: 4,
-            memUsedBytes: 0, memTotalBytes: 12582912000,
-            diskUsedBytes: 61370929152, diskTotalBytes: 84358758400,
+            vmid: 200,
+            node: "proxmox",
+            type: "lxc",
+            name: "lxc-homelab",
+            status: "stopped",
+            cpuUsedCores: 0,
+            cpuTotalCores: 4,
+            memUsedBytes: 0,
+            memTotalBytes: 12582912000,
+            diskUsedBytes: 61370929152,
+            diskTotalBytes: 84358758400,
             uptimeSeconds: 0,
-            macAddress: null, ipAddress: null, osName: null,
+            macAddress: null,
+            ipAddress: null,
+            osName: null,
           },
         ]),
     });
@@ -858,7 +996,8 @@ function Stat({ value, label }) {
 function VmCard({ vm, cardClassName }) {
   const cpuValue = `${vm.cpuUsedCores.toFixed(2)} / ${vm.cpuTotalCores}`;
   const memValue = `${prettyBytes(vm.memUsedBytes)} / ${prettyBytes(vm.memTotalBytes)}`;
-  const diskValue = vm.diskUsedBytes == null ? null : `${prettyBytes(vm.diskUsedBytes)} / ${prettyBytes(vm.diskTotalBytes)}`;
+  const diskValue =
+    vm.diskUsedBytes == null ? null : `${prettyBytes(vm.diskUsedBytes)} / ${prettyBytes(vm.diskTotalBytes)}`;
 
   return (
     <div className={cardClassName} data-testid="vm-card" data-status={vm.status}>
@@ -869,7 +1008,9 @@ function VmCard({ vm, cardClassName }) {
             {vm.type.toUpperCase()} &middot; {formatUptime(vm.uptimeSeconds)}
           </p>
         </div>
-        <span className={classNames("w-2.5 h-2.5 rounded-full", STATUS_DOT_CLASS[vm.status] ?? STATUS_DOT_CLASS.stopped)} />
+        <span
+          className={classNames("w-2.5 h-2.5 rounded-full", STATUS_DOT_CLASS[vm.status] ?? STATUS_DOT_CLASS.stopped)}
+        />
       </div>
       <div className="flex flex-row">
         <Stat value={cpuValue} label="CPU" />

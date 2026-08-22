@@ -20,10 +20,12 @@
 ### Task 1: Extract `DisksGroup` component
 
 **Files:**
+
 - Create: `src/components/disks/group.jsx`
 - Test: `src/components/disks/group.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `GET /api/disks` (unchanged, existing route from the Disks & SMART plan).
 - Produces: `export default function DisksGroup()` — a self-contained component (own SWR fetch, own loading/error states, own grid) that Task 2 imports and renders directly in `index.jsx`. No props required.
 
@@ -241,7 +243,8 @@ export default function DisksGroup() {
       {!disks && !error && <p className="text-theme-500 dark:text-theme-300 text-sm">Loading...</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-4">
-        {Array.isArray(disks) && disks.map((disk) => <DiskCard key={disk.name} disk={disk} cardClassName={cardClassName} />)}
+        {Array.isArray(disks) &&
+          disks.map((disk) => <DiskCard key={disk.name} disk={disk} cardClassName={cardClassName} />)}
       </div>
     </div>
   );
@@ -265,12 +268,14 @@ git commit -m "feat: extract DisksGroup component from the /disks page"
 ### Task 2: Wire `DisksGroup` into the dashboard, remove the `/disks` page
 
 **Files:**
+
 - Modify: `src/pages/index.jsx`
 - Delete: `src/pages/disks.jsx`
 - Delete: `src/__tests__/pages/disks.test.jsx`
 - Modify: `README.md`
 
 **Interfaces:**
+
 - Consumes: `DisksGroup` from Task 1 (`src/components/disks/group.jsx`).
 - Produces: the "Disks" section now renders on `/` (the main dashboard) instead of at a separate `/disks` route. `/disks` becomes a 404.
 
@@ -285,15 +290,19 @@ import DisksGroup from "components/disks/group";
 Find this line (confirmed present in the current file):
 
 ```jsx
-        {servicesAndBookmarksGroups}
+{
+  servicesAndBookmarksGroups;
+}
 ```
 
 Replace it with:
 
 ```jsx
-        {servicesAndBookmarksGroups}
+{
+  servicesAndBookmarksGroups;
+}
 
-        <DisksGroup />
+<DisksGroup />;
 ```
 
 - [ ] **Step 2: Remove the old `/disks` nav link and its now-unused import**

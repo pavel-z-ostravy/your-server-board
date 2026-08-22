@@ -17,7 +17,7 @@ The current dashboard shows only cluster-wide aggregates (VM/LXC running counts,
 ## Non-goals
 
 - No changes to Quick VM/CT actions (start/stop/reboot) — still deferred to the Backups plan.
-- No changes to `smartClient.js`'s existing SMART/lsblk capability — this plan extends the *allowed command set* on the restricted SSH key, but doesn't touch the existing device-path validation logic.
+- No changes to `smartClient.js`'s existing SMART/lsblk capability — this plan extends the _allowed command set_ on the restricted SSH key, but doesn't touch the existing device-path validation logic.
 - No attempt at OS-update detection for every possible guest OS family — best-effort for common Linux package managers (apt/dpkg first; report `N/A` for anything else, including appliance OSes like Home Assistant OS which use image-based updates (`rauc`) rather than package management).
 - No arbitrary command execution capability anywhere, for any user, ever — every new remote command this plan adds is a fixed, server-side-validated allowlist entry, parameterized only by a validated container ID where necessary. This is a hard constraint, not a preference.
 
@@ -82,7 +82,7 @@ Moves onto the main dashboard as its own widget group (visual language unchanged
 Every new capability follows the exact pattern already reviewed and approved for `smartctl`/`lsblk` in Foundation:
 
 1. The restricted SSH key's forced command (`deploy/proxmox-smart-helper.sh`) is the sole enforcement point — the client-side code can request anything, but the server only ever executes one of a small number of fixed command shapes it recognizes.
-2. Any parameter (vmid, mountpoint, VG name) is extracted from the request and validated against a strict pattern (e.g. `^[0-9]+$` for a vmid) *before* being substituted into a hardcoded command template — never passed through to a shell that could interpret metacharacters. This is the identical technique already used for `smartctl`'s device-path parameter and already survived one round of adversarial security review during Foundation.
+2. Any parameter (vmid, mountpoint, VG name) is extracted from the request and validated against a strict pattern (e.g. `^[0-9]+$` for a vmid) _before_ being substituted into a hardcoded command template — never passed through to a shell that could interpret metacharacters. This is the identical technique already used for `smartctl`'s device-path parameter and already survived one round of adversarial security review during Foundation.
 3. No new command is a general-purpose exec primitive. `pct exec <vmid> -- ps aux --sort=-%cpu` and the combined OS-release/update-stamp probe are each one fixed, complete command — there is no way to ask the forced-command script to run anything other than these specific, named, read-only operations.
 4. This is genuinely a larger trust surface than Foundation's SMART-only key (it now reads live process lists across every container), so implementation planning should include a dedicated review pass specifically re-examining `proxmox-smart-helper.sh`'s new branches with the same adversarial rigor Foundation's final review applied to the original two.
 
