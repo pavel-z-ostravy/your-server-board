@@ -1,10 +1,11 @@
 # Restricted SSH key setup (Proxmox host)
 
 This key can only run `lsblk`, `smartctl -j -a <device>`, `df`, `lvs`,
-`pvs`, or `pct exec <vmid> -- ...` (process listing and OS-release probe)
-(each a single fixed, read-only, parameterless, path-validated, or
-vmid-validated command) — nothing else — enforced server-side by a forced
-command, not just by client-side discipline.
+`pvs`, a fixed host-level `ps` (process listing for the Proxmox host
+itself), or `pct exec <vmid> -- ...` (process listing and OS-release probe
+for a specific container) (each a single fixed, read-only, parameterless,
+path-validated, or vmid-validated command) — nothing else — enforced
+server-side by a forced command, not just by client-side discipline.
 
 If you ran `./install.sh`, it already did step 1 for you and printed the
 step 2/3 instructions on screen — it does not copy the script or edit

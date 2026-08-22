@@ -43,6 +43,9 @@ case "$cmd" in
   "pvs --noheadings -o pv_name,vg_name")
     exec pvs --noheadings -o pv_name,vg_name
     ;;
+  "ps -eo pid=,pcpu=,pmem=,comm= --sort=-pcpu")
+    exec ps -eo pid=,pcpu=,pmem=,comm= --sort=-pcpu
+    ;;
   "pct exec "[0-9]*" -- ps -eo pid=,pcpu=,pmem=,comm= --sort=-pcpu")
     vmid="${cmd#pct exec }"
     vmid="${vmid% -- ps -eo pid=,pcpu=,pmem=,comm= --sort=-pcpu}"
