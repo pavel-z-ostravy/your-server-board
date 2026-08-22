@@ -78,7 +78,7 @@ function NodeStatusHeader({ status, error }) {
       data-status={status.status}
     >
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium">Proxmox Host</span>
+        <span className="text-sm font-medium">Host</span>
         <div className="flex items-center gap-2">
           {status.status === "online" && status.uptimeSeconds != null && (
             <span className="text-theme-500 dark:text-theme-300 text-xs font-light">
@@ -239,9 +239,7 @@ export default function ProxmoxVmsGroup() {
   return (
     <div id="proxmox-vms-group" className="flex flex-col m-4 sm:m-8 sm:mt-4 mb-2">
       <div className="flex items-center justify-between">
-        <h2 className="flex text-theme-800 dark:text-theme-300 text-xl font-medium service-group-name">
-          Virtual Machines
-        </h2>
+        <h2 className="flex text-theme-800 dark:text-theme-300 text-xl font-medium service-group-name">Proxmox</h2>
         <button
           type="button"
           onClick={() => {
@@ -257,10 +255,12 @@ export default function ProxmoxVmsGroup() {
 
       <NodeStatusHeader status={hostStatus} error={hostError} />
 
+      <span className="text-sm font-medium">Virtual Machines</span>
+
       {error && <p className="text-rose-500/80">Failed to load VM/LXC data.</p>}
       {!vms && !error && <p className="text-theme-500 dark:text-theme-300 text-sm">Loading...</p>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-1">
         {Array.isArray(vms) && vms.map((vm) => <VmCard key={vm.vmid} vm={vm} cardClassName={cardClassName} />)}
       </div>
     </div>

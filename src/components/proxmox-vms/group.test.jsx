@@ -94,6 +94,7 @@ describe("components/proxmox-vms/group", () => {
 
     renderWithSWR(<ProxmoxVmsGroup />);
 
+    expect(screen.getByText("Proxmox")).toBeInTheDocument();
     expect(screen.getByText("Virtual Machines")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("example-vm")).toBeInTheDocument());
 
