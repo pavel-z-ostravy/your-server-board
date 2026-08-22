@@ -1,6 +1,6 @@
 // src/components/proxmox-vms/group.test.jsx
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { describe, expect, it, vi } from "vitest";
 
@@ -24,6 +24,7 @@ const onlineHostResponse = {
       uptimeSeconds: 93784,
       pveVersion: "9.1.1",
       loadAvg: [0.55, 0.61, 0.58],
+      ipAddress: "10.0.0.9",
     }),
 };
 
@@ -41,6 +42,7 @@ const offlineHostResponse = {
       uptimeSeconds: null,
       pveVersion: null,
       loadAvg: null,
+      ipAddress: null,
     }),
 };
 
@@ -111,7 +113,7 @@ describe("components/proxmox-vms/group", () => {
     expect(lxcCard).toHaveTextContent("-");
   });
 
-  it("renders the Proxmox host status header above the VM grid", async () => {
+  it("renders the Proxmox host status header above the VM grid, including its IP address", async () => {
     const listResponse = { ok: true, json: () => Promise.resolve([]) };
     global.fetch = vi.fn((url) =>
       url.includes("/api/proxmox/host") ? Promise.resolve(onlineHostResponse) : Promise.resolve(listResponse),
@@ -126,6 +128,7 @@ describe("components/proxmox-vms/group", () => {
     expect(header).toHaveTextContent("21.3 GB / 64.7 GB"); // Disk
     expect(header).toHaveTextContent("PVE 9.1.1");
     expect(header).toHaveTextContent("load 0.55 / 0.61 / 0.58");
+    expect(header).toHaveTextContent("10.0.0.9");
   });
 
   it("gracefully handles loadAvg with null values (NaN round-trip from JSON) without crashing", async () => {
@@ -143,6 +146,7 @@ describe("components/proxmox-vms/group", () => {
           uptimeSeconds: 93784,
           pveVersion: "9.1.1",
           loadAvg: [1.06, null, 0.83],
+          ipAddress: "10.0.0.9",
         }),
     };
     const listResponse = { ok: true, json: () => Promise.resolve([]) };
@@ -260,6 +264,69 @@ describe("components/proxmox-vms/group", () => {
     expect(urlsAfterRefresh.some((url) => url.includes("/api/proxmox/host"))).toBe(true);
   });
 
+  it("lazily fetches and shows the host's process detail only after the Details toggle is clicked", async () => {
+    const listResponse = { ok: true, json: () => Promise.resolve([]) };
+    const hostDetailResponse = {
+      ok: true,
+      json: () =>
+        Promise.resolve({ processes: [{ pid: 512, cpuPercent: 4.2, memPercent: 1.1, command: "pvedaemon" }] }),
+    };
+    global.fetch = vi.fn((url) => {
+      // "host-detail" must be checked before the plain "host" check below,
+      // since "/api/proxmox/host-detail" also contains "/api/proxmox/host".
+      if (url.includes("/api/proxmox/host-detail")) return Promise.resolve(hostDetailResponse);
+      if (url.includes("/api/proxmox/host")) return Promise.resolve(onlineHostResponse);
+      return Promise.resolve(listResponse);
+    });
+
+    renderWithSWR(<ProxmoxVmsGroup />);
+    await screen.findByTestId("node-status-header");
+
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining("host-detail"));
+    expect(screen.queryByText("pvedaemon")).not.toBeInTheDocument();
+
+    screen.getByText("Details").click();
+
+    await waitFor(() => expect(screen.getByText("pvedaemon")).toBeInTheDocument());
+    expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("/api/proxmox/host-detail"));
+  });
+
+  it("shows an explicit empty-state message when the host detail fetch succeeds with zero processes", async () => {
+    const listResponse = { ok: true, json: () => Promise.resolve([]) };
+    const emptyHostDetailResponse = { ok: true, json: () => Promise.resolve({ processes: [] }) };
+    global.fetch = vi.fn((url) => {
+      if (url.includes("/api/proxmox/host-detail")) return Promise.resolve(emptyHostDetailResponse);
+      if (url.includes("/api/proxmox/host")) return Promise.resolve(onlineHostResponse);
+      return Promise.resolve(listResponse);
+    });
+
+    renderWithSWR(<ProxmoxVmsGroup />);
+    await screen.findByTestId("node-status-header");
+
+    screen.getByText("Details").click();
+
+    await waitFor(() => expect(screen.getByText("No process data available.")).toBeInTheDocument());
+    expect(screen.queryByText("Failed to load details.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+  });
+
+  it("shows a failure message when the host detail fetch responds with a non-ok status", async () => {
+    const listResponse = { ok: true, json: () => Promise.resolve([]) };
+    const errorHostDetailResponse = { ok: false, json: () => Promise.resolve({ error: "boom" }) };
+    global.fetch = vi.fn((url) => {
+      if (url.includes("/api/proxmox/host-detail")) return Promise.resolve(errorHostDetailResponse);
+      if (url.includes("/api/proxmox/host")) return Promise.resolve(onlineHostResponse);
+      return Promise.resolve(listResponse);
+    });
+
+    renderWithSWR(<ProxmoxVmsGroup />);
+    await screen.findByTestId("node-status-header");
+
+    screen.getByText("Details").click();
+
+    await waitFor(() => expect(screen.getByText("Failed to load details.")).toBeInTheDocument());
+  });
+
   it("lazily fetches and shows process/update detail only after the Details toggle is clicked", async () => {
     const listResponse = {
       ok: true,
@@ -305,7 +372,8 @@ describe("components/proxmox-vms/group", () => {
     expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining("vm-detail"));
     expect(screen.queryByText("redis-server")).not.toBeInTheDocument();
 
-    screen.getByText("Details").click();
+    const vmCard = screen.getByText("example-lxc").closest('[data-testid="vm-card"]');
+    within(vmCard).getByText("Details").click();
 
     await waitFor(() => expect(screen.getByText("redis-server")).toBeInTheDocument());
     expect(global.fetch).toHaveBeenCalledWith(
@@ -314,7 +382,7 @@ describe("components/proxmox-vms/group", () => {
     expect(screen.getByText(/Last update: N\/A/)).toBeInTheDocument();
   });
 
-  it("shows an explicit empty-state message when the detail fetch succeeds with zero processes", async () => {
+  it("shows an explicit empty-state message when the VM detail fetch succeeds with zero processes", async () => {
     const listResponse = {
       ok: true,
       json: () =>
@@ -351,7 +419,8 @@ describe("components/proxmox-vms/group", () => {
     renderWithSWR(<ProxmoxVmsGroup />);
     await waitFor(() => expect(screen.getByText("example-lxc")).toBeInTheDocument());
 
-    screen.getByText("Details").click();
+    const vmCard = screen.getByText("example-lxc").closest('[data-testid="vm-card"]');
+    within(vmCard).getByText("Details").click();
 
     await waitFor(() => expect(screen.getByText("No process data available.")).toBeInTheDocument());
     expect(screen.queryByText(/redis-server/)).not.toBeInTheDocument();
@@ -359,7 +428,7 @@ describe("components/proxmox-vms/group", () => {
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
   });
 
-  it("shows a failure message when the detail fetch responds with a non-ok status", async () => {
+  it("shows a failure message when the VM detail fetch responds with a non-ok status", async () => {
     const listResponse = {
       ok: true,
       json: () =>
@@ -393,7 +462,8 @@ describe("components/proxmox-vms/group", () => {
     renderWithSWR(<ProxmoxVmsGroup />);
     await waitFor(() => expect(screen.getByText("example-lxc")).toBeInTheDocument());
 
-    screen.getByText("Details").click();
+    const vmCard = screen.getByText("example-lxc").closest('[data-testid="vm-card"]');
+    within(vmCard).getByText("Details").click();
 
     await waitFor(() => expect(screen.getByText("Failed to load details.")).toBeInTheDocument());
     expect(screen.queryByText("redis-server")).not.toBeInTheDocument();

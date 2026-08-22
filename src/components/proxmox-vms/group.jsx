@@ -57,6 +57,38 @@ function Stat({ value, label }) {
 // `error` come from an independent SWR call in ProxmoxVmsGroup, so a
 // host-status failure never blocks the VM grid from rendering.
 function NodeStatusHeader({ status, error }) {
+  // Hooks must run unconditionally on every render (Rules of Hooks), so
+  // these are declared before the error/loading early returns below, even
+  // though those returns mean this state is sometimes irrelevant.
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
+
+  // Fetch-on-first-expand, mirroring VmCard's toggleDetail below.
+  const toggleDetail = async () => {
+    if (detailOpen) {
+      setDetailOpen(false);
+      return;
+    }
+    setDetailOpen(true);
+    if (detail || detailLoading) return;
+    setDetailLoading(true);
+    setDetailError(false);
+    try {
+      const res = await fetch("/api/proxmox/host-detail");
+      if (res.ok) {
+        setDetail(await res.json());
+      } else {
+        setDetailError(true);
+      }
+    } catch {
+      setDetailError(true);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   if (error) {
     return <p className="text-rose-500/80 text-sm mb-2">Failed to load Proxmox host status.</p>;
   }
@@ -101,6 +133,28 @@ function NodeStatusHeader({ status, error }) {
       <p className="text-theme-500 dark:text-theme-300 text-xs font-light mt-2">
         {status.pveVersion ? `PVE ${status.pveVersion}` : "-"} &middot; load {loadAvgText}
       </p>
+      <p className="text-theme-500 dark:text-theme-300 text-xs font-light mt-1">{status.ipAddress ?? "-"}</p>
+      <button type="button" onClick={toggleDetail} className="text-xs text-theme-500 dark:text-theme-300 mt-2">
+        Details
+      </button>
+      {detailOpen && (
+        <div className="mt-2 text-xs">
+          {detailLoading && <p className="text-theme-500 dark:text-theme-300">Loading...</p>}
+          {detailError && <p className="text-rose-500/80">Failed to load details.</p>}
+          {detail &&
+            (detail.processes.length > 0 ? (
+              <ul>
+                {detail.processes.map((p) => (
+                  <li key={p.pid}>
+                    <span>{p.command}</span> — {p.cpuPercent}% CPU
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-theme-500 dark:text-theme-300">No process data available.</p>
+            ))}
+        </div>
+      )}
     </div>
   );
 }
