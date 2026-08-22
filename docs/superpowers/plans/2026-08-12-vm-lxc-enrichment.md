@@ -405,6 +405,7 @@ git commit -m "feat: add pct exec support to the restricted SSH allowlist and a 
 
 - Consumes: `httpProxy` (`utils/proxy/http`), `createLogger` (`utils/logger`) — same as Plan 3's route.
 - Produces:
+
   - `export async function getQemuProcesses(pveConfig, node, vmid)` → resolves to raw stdout string.
   - `export async function getQemuOsProbe(pveConfig, node, vmid)` → resolves to raw stdout string.
   - Both send a **hardcoded** `command` array — never anything derived from a parameter beyond `node`/`vmid` selecting the target. Both poll `exec-status` with a bounded timeout (`AGENT_EXEC_TIMEOUT_MS`, mirroring `smartClient.js`'s `SSH_COMMAND_TIMEOUT_MS` pattern) rather than polling forever.
@@ -648,6 +649,7 @@ git commit -m "feat: add QEMU guest-agent exec client for process listing and OS
 
 - Consumes: nothing (pure, standalone — the raw stdout strings Task 1/2's clients produce).
 - Produces:
+
   - `export function parseTopProcesses(stdout, limit = 5)` → `Array<{ pid: number, cpuPercent: number, memPercent: number, command: string }>`, already sorted CPU-descending by the upstream `ps --sort=-pcpu`, truncated to `limit`.
   - `export function parseOsProbe(stdout)` → `{ prettyName: string | null, lastUpdate: string | null }` — `lastUpdate` is an ISO 8601 date string derived from the Unix timestamp, or `null` for the literal `none` sentinel or a missing/unparseable timestamp.
 

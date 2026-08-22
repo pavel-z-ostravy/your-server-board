@@ -33,6 +33,7 @@
 **Interfaces:**
 
 - Produces (used by Task 2 and Task 4):
+
   - `KNOWN_SECTION_IDS: string[]` — `["layout-groups", "services", "bookmarks", "proxmox-vms", "disks"]`, in default render order.
   - `mergeLayoutOrder(savedOrder: unknown, knownIds = KNOWN_SECTION_IDS): string[]` — pure. Keeps ids from `savedOrder` that are in `knownIds`, in their saved relative order, deduped; appends any `knownIds` not mentioned, in `knownIds`' own relative order. Always returns every id in `knownIds` exactly once. Tolerates `savedOrder` being `undefined`/non-array (treats as empty).
   - `isValidSectionOrder(value: unknown, knownIds = KNOWN_SECTION_IDS): boolean` — true iff `value` is a non-empty array of strings, each in `knownIds`, no duplicates. Does not require every known id to be present (a client sending a partial/stale set is still valid input — the server merges the rest).
@@ -474,6 +475,7 @@ git commit -m "feat(layout): add GET/POST /api/layout-order route"
 
 - Consumes: `reorderSectionIds` from `utils/config/layoutOrder` (Task 1).
 - Produces (used by Task 4):
+
   - `SortableSection({ id: string, children: ReactNode })` — wraps `children` in a `useSortable({id})`-driven positioned `div`, with a small full-width drag-handle strip (its own row, never overlapping `children`) rendered above them. `children` render completely unmodified and stay fully interactive.
   - `SortableSectionList({ sections: {id: string, element: ReactNode}[], onReorder: (newIds: string[]) => void })` — renders each `sections[i].element` wrapped in a `SortableSection`, in array order, inside a `DndContext` + `SortableContext`. On drag end over a different section, calls `onReorder` with the new id order (via `reorderSectionIds`); does not call `onReorder` for a no-op drag (dropped on itself, or outside any droppable).
 

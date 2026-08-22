@@ -254,6 +254,7 @@ git commit -m "feat: add getPveConfig accessor and formatUptime helper"
 
 - Consumes: nothing from Task 1 (pure, independent).
 - Produces:
+
   - `export function extractMacFromQemuNet0(net0)` → given a QEMU `net0` config string (e.g. `"virtio=BC:24:11:85:3A:8F,bridge=vmbr0"`), returns the MAC (the value of the first `key=value` pair) or `null` if `net0` is falsy or has no recognizable MAC.
   - `export function extractMacFromLxcNet0(net0)` → given an LXC `net0` config string (e.g. `"name=eth0,bridge=vmbr0,hwaddr=BC:24:11:AE:7C:89,..."`), returns the value of the `hwaddr=` key or `null`.
   - `export function findIPv4ByMac(interfaces, mac, ipv4Type)` → given an array of interface objects (each with `"hardware-address"` and `"ip-addresses"`), a MAC to match, and the exact string used for IPv4 in this array's `"ip-address-type"` field (`"inet"` for LXC, `"ipv4"` for the QEMU guest agent — the two real, verified shapes are different, so the caller supplies which one applies), returns the matching IPv4 address string or `null`. Matching is case-insensitive on the MAC.
