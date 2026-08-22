@@ -74,6 +74,9 @@ importers:
       pretty-bytes:
         specifier: ^7.1.1
         version: 7.1.1
+      prism-react-renderer:
+        specifier: 2.4.1
+        version: 2.4.1(react@19.2.8)
       raw-body:
         specifier: ^4.0.0
         version: 4.0.0
