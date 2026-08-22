@@ -12,6 +12,10 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4]
+    env:
+      # step-level `if:` can't reference `secrets` directly, so mirror it
+      # into an env var here (job-level `env:` can use `secrets`).
+      HAS_CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -32,7 +36,7 @@ jobs:
         # upload was retired), and forks don't inherit repo secrets - skip
         # cleanly instead of failing the whole test run over a missing
         # CODECOV_TOKEN.
-        if: ${{ secrets.CODECOV_TOKEN != '' }}
+        if: ${{ env.HAS_CODECOV_TOKEN == 'true' }}
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
