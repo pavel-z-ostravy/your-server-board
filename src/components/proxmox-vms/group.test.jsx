@@ -127,6 +127,35 @@ describe("components/proxmox-vms/group", () => {
     expect(header).toHaveTextContent("load 0.55 / 0.61 / 0.58");
   });
 
+  it("gracefully handles loadAvg with null values (NaN round-trip from JSON) without crashing", async () => {
+    const hostResponseWithNullLoadAvg = {
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          status: "online",
+          cpuUsedCores: 3.2,
+          cpuTotalCores: 8,
+          memUsedBytes: 4210000000,
+          memTotalBytes: 8590000000,
+          diskUsedBytes: 21300000000,
+          diskTotalBytes: 64700000000,
+          uptimeSeconds: 93784,
+          pveVersion: "9.1.1",
+          loadAvg: [1.06, null, 0.83],
+        }),
+    };
+    const listResponse = { ok: true, json: () => Promise.resolve([]) };
+    global.fetch = vi.fn((url) =>
+      url.includes("/api/proxmox/host") ? Promise.resolve(hostResponseWithNullLoadAvg) : Promise.resolve(listResponse),
+    );
+
+    renderWithSWR(<ProxmoxVmsGroup />);
+
+    const header = await screen.findByTestId("node-status-header");
+    expect(header).toHaveAttribute("data-status", "online");
+    expect(header).toHaveTextContent("load 1.06 / - / 0.83");
+  });
+
   it("shows a degraded offline state for the host status header without hiding the VM grid", async () => {
     const listResponse = {
       ok: true,

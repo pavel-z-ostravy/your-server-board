@@ -67,7 +67,9 @@ function NodeStatusHeader({ status, error }) {
   const cpuValue = status.cpuUsedCores == null ? null : `${status.cpuUsedCores.toFixed(2)} / ${status.cpuTotalCores}`;
   const memValue = formatCapacity(status.memUsedBytes, status.memTotalBytes);
   const diskValue = formatCapacity(status.diskUsedBytes, status.diskTotalBytes);
-  const loadAvgText = Array.isArray(status.loadAvg) ? status.loadAvg.map((n) => n.toFixed(2)).join(" / ") : "-";
+  const loadAvgText = Array.isArray(status.loadAvg)
+    ? status.loadAvg.map((n) => (typeof n === "number" && Number.isFinite(n) ? n.toFixed(2) : "-")).join(" / ")
+    : "-";
 
   return (
     <div
