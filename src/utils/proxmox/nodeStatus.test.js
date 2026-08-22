@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parsePveVersion } from "./nodeStatus";
+import { parsePveVersion, pickPrimaryIpAddress } from "./nodeStatus";
 
 describe("parsePveVersion", () => {
   it("extracts the version segment from a real pve-manager string", () => {
@@ -18,5 +18,31 @@ describe("parsePveVersion", () => {
   it("returns null for non-string input", () => {
     expect(parsePveVersion(null)).toBeNull();
     expect(parsePveVersion(undefined)).toBeNull();
+  });
+});
+
+describe("pickPrimaryIpAddress", () => {
+  it("picks the first interface with an inet family and a populated address", () => {
+    // Shape verified against a live Proxmox 9.2 host's GET /nodes/{node}/network
+    // response: physical NICs have no address of their own; the bridge configured
+    // on top of them carries the actual IP.
+    const interfaces = [
+      { iface: "nic0", type: "eth", families: ["inet"] },
+      { iface: "vmbr0", type: "bridge", families: ["inet"], address: "10.0.0.9" },
+    ];
+    expect(pickPrimaryIpAddress(interfaces)).toBe("10.0.0.9");
+  });
+
+  it("returns null when no interface has both an inet family and an address", () => {
+    const interfaces = [
+      { iface: "nic0", families: ["inet"] },
+      { iface: "lo", families: ["inet6"] },
+    ];
+    expect(pickPrimaryIpAddress(interfaces)).toBeNull();
+  });
+
+  it("returns null for a non-array input", () => {
+    expect(pickPrimaryIpAddress(null)).toBeNull();
+    expect(pickPrimaryIpAddress(undefined)).toBeNull();
   });
 });

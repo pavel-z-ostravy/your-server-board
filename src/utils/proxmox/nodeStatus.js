@@ -8,3 +8,21 @@ export function parsePveVersion(raw) {
   const match = raw.match(/^pve-manager\/([^/]+)\//);
   return match ? match[1] : raw;
 }
+
+// Picks the host's primary IPv4 address from GET /nodes/{node}/network's
+// interface array (verified against a live Proxmox 9.2 host) - the address
+// lives on whichever entry has both an "inet" family and a populated
+// address field. That's typically the bridge with the IP configured on it,
+// not the raw physical NIC underneath it, which has no address field of its
+// own. Returns null if no such entry exists or interfaces isn't an array.
+export function pickPrimaryIpAddress(interfaces) {
+  if (!Array.isArray(interfaces)) return null;
+  const match = interfaces.find(
+    (iface) =>
+      Array.isArray(iface?.families) &&
+      iface.families.includes("inet") &&
+      typeof iface?.address === "string" &&
+      iface.address.length > 0,
+  );
+  return match ? match.address : null;
+}
