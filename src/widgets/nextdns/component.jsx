@@ -8,8 +8,12 @@ export default function Component({ service }) {
   const { t } = useTranslation();
 
   const { widget } = service;
+  const showDevices = widget.view === "devices";
 
-  const { data: nextdnsData, error: nextdnsError } = useWidgetAPI(widget, "analytics/status");
+  const { data: nextdnsData, error: nextdnsError } = useWidgetAPI(
+    widget,
+    showDevices ? "analytics/devices" : "analytics/status",
+  );
 
   if (nextdnsError) {
     return <Container service={service} error={nextdnsError} />;
@@ -27,6 +31,16 @@ export default function Component({ service }) {
     return (
       <Container service={service}>
         <Block key="status" label="widget.status" value={t("nextdns.no_devices")} />
+      </Container>
+    );
+  }
+
+  if (showDevices) {
+    return (
+      <Container service={service}>
+        {nextdnsData.data.map((d) => (
+          <Block key={d.id} label={d.name ?? d.id} value={t("common.number", { value: d.queries })} />
+        ))}
       </Container>
     );
   }

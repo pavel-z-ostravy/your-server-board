@@ -9,6 +9,10 @@ const widget = {
       endpoint: "analytics/status",
       validate: ["data"],
     },
+    "analytics/devices": {
+      endpoint: "analytics/devices",
+      validate: ["data"],
+    },
   },
 };
 
