@@ -350,6 +350,7 @@ Collision check for `new` mode intentionally checks the service name **globally*
 **Wizard steps:**
 
 1. **Target** (service widgets only — skipped entirely for info widgets, which go straight to step 2):
+
    - Radio choice: "Attach to an existing service" / "Add as a new service"
    - Attach: a `<select>` populated from a services list (new lightweight `GET /api/widgets-catalog/services` route — see below)
    - New: text inputs for service name, group (a `<select>` of existing group names plus a "+ New group" option that reveals a text input), href, description (optional)

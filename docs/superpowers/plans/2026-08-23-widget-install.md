@@ -35,6 +35,7 @@
 **Interfaces:**
 
 - Produces (used by Tasks 3 and 4):
+
   - `findServiceFieldsNode(servicesDoc: yaml.Document, serviceName: string): yaml.YAMLMap | null` — the fields map for a named service, searched across all groups.
   - `findGroupServicesSeq(servicesDoc: yaml.Document, groupName: string): yaml.YAMLSeq | null` — the services list for a named group.
   - `listServiceNames(servicesDoc: yaml.Document): string[]` — every service name across all groups, in document order.
@@ -309,6 +310,7 @@ git commit -m "feat(widget-install): add yaml dependency and yamlDocument helper
 - Consumes (from Task 1's `package.json` dependency, not its module): `parseDocument` from `yaml`.
 - Consumes: `checkAndCopyConfig` (default export), `CONF_DIR` (named export) from `utils/config/config`.
 - Produces (used by Tasks 3 and 4):
+
   - `readConfigDocument(filename: string): yaml.Document` — ensures the file exists (via `checkAndCopyConfig`), reads and parses it. Throws `Error` if the file's content isn't valid YAML.
   - `writeConfigDocument(filename: string, doc: { toString(): string }): string` — if a file already exists at `filename`, copies it to a timestamped backup first; re-parses the document's `toString()` output to confirm it's still valid YAML (throwing and refusing to write if not); writes the file; returns the backup file's basename (or `null` if no backup was made because the file didn't exist yet).
 
@@ -487,6 +489,7 @@ git commit -m "feat(widget-install): add configWriter read/backup/write layer"
 - Consumes (from Task 1): `findGroupServicesSeq`, `findServiceFieldsNode`, `listServiceNames`, `parseInfoWidgetSnippet`, `parseWidgetFragment` from `utils/config/yamlDocument`.
 - Consumes (from Task 2): `readConfigDocument`, `writeConfigDocument` from `utils/config/configWriter`.
 - Produces (used by Task 5's frontend wizard, as an HTTP contract, not a JS import):
+
   - `POST /api/widgets-catalog/install` with body `{ category: "info", yamlSnippet }` or `{ category: "service", mode: "attach", serviceName, yamlSnippet }` or `{ category: "service", mode: "new", serviceName, groupName, href, description, yamlSnippet }`.
   - `200 { success: true, backupFile: string | null }`, `400 { error }`, `404 { error }`, `405 { error }`, `409 { error }`, `500 { error }`.
 
@@ -1020,6 +1023,7 @@ git commit -m "feat(widget-install): add GET /api/widgets-catalog/services route
 
 - Consumes (as an HTTP contract, from Tasks 3 and 4): `POST /api/widgets-catalog/install`, `GET /api/widgets-catalog/services`.
 - Produces (used by Task 6):
+
   - `InstallWizardDialog({ entry: { slug, title, description, yamlExample, category: "service" | "info" }, open: boolean, onClose: () => void })` — a default-exported React component. Renders nothing when `entry` is falsy. Steps: `target` (service widgets only; skipped for `category: "info"`) → `preview` → `confirm` → `result`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1291,9 +1295,7 @@ export default function InstallWizardDialog({ entry, open, onClose }) {
   if (!entry) return null;
 
   const targetNextDisabled =
-    state.targetMode === "attach"
-      ? !state.attachServiceName
-      : !state.newServiceName || !groupName || !state.newHref;
+    state.targetMode === "attach" ? !state.attachServiceName : !state.newServiceName || !groupName || !state.newHref;
 
   return (
     <Dialog open={open} onClose={handleClose} className="relative z-50">
@@ -1442,9 +1444,9 @@ export default function InstallWizardDialog({ entry, open, onClose }) {
           {state.step === "confirm" && (
             <div>
               <p className="text-sm mb-3">
-                This will write directly to your <code>services.yaml</code>/<code>widgets.yaml</code> config file on
-                the server. A backup copy is created automatically before any change, but Homepage&apos;s behavior
-                after this change is your responsibility.
+                This will write directly to your <code>services.yaml</code>/<code>widgets.yaml</code> config file on the
+                server. A backup copy is created automatically before any change, but Homepage&apos;s behavior after
+                this change is your responsibility.
               </p>
               <label className="flex items-center gap-2 text-sm mb-4">
                 <input
