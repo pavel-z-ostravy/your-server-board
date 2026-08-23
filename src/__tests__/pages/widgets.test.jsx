@@ -136,6 +136,71 @@ describe("pages/widgets", () => {
     expect(screen.queryByText("Install...")).not.toBeInTheDocument();
   });
 
+  it('shows an "Installed on:" list with a trash icon for a service widget, and calls uninstall on confirm', async () => {
+    global.fetch = vi.fn((url) => {
+      if (url === "/api/widgets-catalog") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(catalogResponse) });
+      }
+      if (url === "/api/widgets-catalog/installed") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ services: { plex: ["My Plex"] }, info: {} }),
+        });
+      }
+      if (url === "/api/widgets-catalog/uninstall") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, backupFile: "x" }) });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    renderWithSWR(<WidgetsPage />);
+    await waitFor(() => expect(screen.getByText("Plex")).toBeInTheDocument());
+
+    screen.getByText("Plex").click();
+    await waitFor(() => expect(screen.getByText("Installed on:")).toBeInTheDocument());
+    expect(screen.getByText("My Plex")).toBeInTheDocument();
+
+    const installedCallsBefore = global.fetch.mock.calls.filter(
+      ([url]) => url === "/api/widgets-catalog/installed",
+    ).length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove My Plex" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove?" }));
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/widgets-catalog/uninstall",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ category: "service", serviceName: "My Plex" }),
+        }),
+      ),
+    );
+
+    await waitFor(() => {
+      const installedCallsAfter = global.fetch.mock.calls.filter(
+        ([url]) => url === "/api/widgets-catalog/installed",
+      ).length;
+      expect(installedCallsAfter).toBeGreaterThan(installedCallsBefore);
+    });
+  });
+
+  it('does not show an "Installed on:" section when nothing is installed', async () => {
+    global.fetch = vi.fn((url) => {
+      if (url === "/api/widgets-catalog") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(catalogResponse) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ services: {}, info: {} }) });
+    });
+
+    renderWithSWR(<WidgetsPage />);
+    await waitFor(() => expect(screen.getByText("Plex")).toBeInTheDocument());
+
+    screen.getByText("Plex").click();
+    await waitFor(() => expect(screen.getByText("Copy")).toBeInTheDocument());
+    expect(screen.queryByText("Installed on:")).not.toBeInTheDocument();
+  });
+
   it("shows a no-example message for a widget with no YAML block, and no Copy button", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(catalogResponse) });
 
