@@ -1,4 +1,4 @@
-import { Document, isSeq, parseDocument } from "yaml";
+import { Document, isMap, isSeq, parseDocument } from "yaml";
 
 // Stringifying a detached node directly (e.g. `String(node)`) does NOT
 // exercise the `yaml` package's real anchor/alias resolution: without a
@@ -42,6 +42,23 @@ export function findServiceFieldsNode(servicesDoc, serviceName) {
     }
   }
   return null;
+}
+
+// Returns a service's existing "widget:\n  ..." block as YAML text (ready to
+// drop straight into the install wizard's editable preview), or null if the
+// service has no widget configured yet. Re-serializing through a scratch
+// Document (rather than string-templating the fields) preserves comments,
+// quoting, and unresolved `${ENV_VAR}` references exactly as they're
+// written in the source file.
+export function getServiceWidgetYaml(servicesDoc, serviceName) {
+  const fieldsNode = findServiceFieldsNode(servicesDoc, serviceName);
+  if (!isMap(fieldsNode)) return null;
+  const widgetNode = fieldsNode.get("widget", true);
+  if (!widgetNode) return null;
+  const scratch = new Document();
+  scratch.contents = scratch.createNode({});
+  scratch.set("widget", widgetNode);
+  return scratch.toString().trimEnd();
 }
 
 export function findGroupServicesSeq(servicesDoc, groupName) {

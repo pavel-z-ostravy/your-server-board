@@ -19,6 +19,8 @@ function initialState(entry) {
     newHref: "",
     newDescription: "",
     yamlText: entry?.yamlExample ?? "",
+    prefilledFromExisting: false,
+    lastPrefillSignature: null,
     acknowledged: false,
     submitting: false,
     result: null,
@@ -38,9 +40,42 @@ export default function InstallWizardDialog({ entry, open, onClose }) {
     fetcher,
   );
 
+  // Looked up as soon as an existing service is selected in "attach" mode,
+  // so it's (usually) already resolved by the time the user clicks Next.
+  // Used to prefill the preview with the service's real current widget
+  // config instead of the catalog's generic example - installing used to
+  // always start from the doc example, so confirming it silently replaced
+  // (and discarded) any real credentials already configured for that
+  // service, e.g. an API key.
+  const attachLookupKey =
+    open && entry?.category === "service" && state.targetMode === "attach" && state.attachServiceName
+      ? `/api/widgets-catalog/services/${encodeURIComponent(state.attachServiceName)}`
+      : null;
+  const { data: existingWidgetData } = useSWR(attachLookupKey, fetcher);
+  const attachLookupPending = attachLookupKey !== null && existingWidgetData === undefined;
+
   const update = (patch) => setState((prev) => ({ ...prev, ...patch }));
   const handleClose = () => {
     if (!state.submitting) onClose();
+  };
+
+  // Re-prefilling only when the attach target actually changed (rather than
+  // on every visit to the preview step) means clicking Back then Next again
+  // - without changing the selected service - doesn't clobber edits the user
+  // already made to the preview text.
+  const goToPreview = () => {
+    const signature = state.targetMode === "attach" ? `attach:${state.attachServiceName}` : "new";
+    if (signature === state.lastPrefillSignature) {
+      update({ step: "preview" });
+      return;
+    }
+    const existingSnippet = state.targetMode === "attach" ? existingWidgetData?.yamlSnippet : null;
+    update({
+      step: "preview",
+      yamlText: existingSnippet ?? entry.yamlExample ?? "",
+      prefilledFromExisting: Boolean(existingSnippet),
+      lastPrefillSignature: signature,
+    });
   };
 
   const groupName = state.newGroupName === "__new__" ? state.newGroupCustom : state.newGroupName;
@@ -192,8 +227,8 @@ export default function InstallWizardDialog({ entry, open, onClose }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => update({ step: "preview" })}
-                  disabled={targetNextDisabled}
+                  onClick={goToPreview}
+                  disabled={targetNextDisabled || attachLookupPending}
                   className="text-sm px-3 py-1.5 rounded-md bg-theme-300/70 dark:bg-theme-900/70 disabled:opacity-50"
                 >
                   Next
@@ -204,7 +239,14 @@ export default function InstallWizardDialog({ entry, open, onClose }) {
 
           {state.step === "preview" && (
             <div>
-              <p className="text-sm mb-2">Review and edit the YAML before installing:</p>
+              {state.prefilledFromExisting ? (
+                <p className="text-sm mb-2">
+                  This service already has a widget configured - it&apos;s pre-filled below. Edit it in place; the
+                  Install step will replace the whole block, so keep anything you want to keep (like an API key).
+                </p>
+              ) : (
+                <p className="text-sm mb-2">Review and edit the YAML before installing:</p>
+              )}
               <textarea
                 aria-label="YAML preview"
                 value={state.yamlText}

@@ -5,6 +5,7 @@ import {
   ensureTopSeq,
   findGroupServicesSeq,
   findServiceFieldsNode,
+  getServiceWidgetYaml,
   listGroupNames,
   listServiceNames,
   parseInfoWidgetSnippet,
@@ -48,6 +49,49 @@ describe("findServiceFieldsNode", () => {
   it("returns null instead of throwing when the doc has no top-level Seq", () => {
     expect(EMPTY_DOC.contents).toBeNull();
     expect(findServiceFieldsNode(EMPTY_DOC, "Transmission")).toBeNull();
+  });
+});
+
+describe("getServiceWidgetYaml", () => {
+  it("returns the existing widget block as a standalone YAML snippet", () => {
+    const doc = parseDocument(`---
+- Media:
+    - Plex:
+        href: http://plex.local/
+        widget:
+          type: plex
+          url: http://plex.local:32400
+          key: mytokenhere
+`);
+    expect(getServiceWidgetYaml(doc, "Plex")).toBe(
+      "widget:\n  type: plex\n  url: http://plex.local:32400\n  key: mytokenhere",
+    );
+  });
+
+  it("returns null when the service has no widget configured", () => {
+    const doc = parseDocument(SERVICES_FIXTURE);
+    expect(getServiceWidgetYaml(doc, "Transmission")).toBeNull();
+  });
+
+  it("returns null when the service doesn't exist", () => {
+    const doc = parseDocument(SERVICES_FIXTURE);
+    expect(getServiceWidgetYaml(doc, "DoesNotExist")).toBeNull();
+  });
+
+  it("returns null instead of throwing when the doc has no top-level Seq", () => {
+    expect(getServiceWidgetYaml(EMPTY_DOC, "Plex")).toBeNull();
+  });
+
+  it("preserves unresolved ${ENV_VAR} references rather than expanding them", () => {
+    const doc = parseDocument(`---
+- Media:
+    - Plex:
+        href: http://plex.local/
+        widget:
+          type: plex
+          key: \${PLEX_KEY}
+`);
+    expect(getServiceWidgetYaml(doc, "Plex")).toBe("widget:\n  type: plex\n  key: ${PLEX_KEY}");
   });
 });
 
