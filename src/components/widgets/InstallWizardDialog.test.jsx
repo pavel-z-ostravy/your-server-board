@@ -69,6 +69,23 @@ describe("components/widgets/InstallWizardDialog", () => {
     expect(screen.queryByText("Attach to an existing service")).not.toBeInTheDocument();
   });
 
+  it("shows the widget's catalog description under the title, on both the target and preview steps", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ groups: [], services: ["Sonarr"] }) });
+
+    renderWithSWR(<InstallWizardDialog entry={SERVICE_ENTRY} open onClose={vi.fn()} />);
+
+    expect(await screen.findByText(SERVICE_ENTRY.description)).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByLabelText("Existing service")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Existing service"), { target: { value: "Sonarr" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    await screen.findByLabelText("YAML preview");
+    expect(screen.getByText(SERVICE_ENTRY.description)).toBeInTheDocument();
+  });
+
   it("service widget: attach flow requires selecting a service before continuing", async () => {
     mockFetchSequence([
       { match: (url) => url === "/api/widgets-catalog/services", body: { groups: ["Media"], services: ["Sonarr"] } },

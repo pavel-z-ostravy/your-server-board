@@ -97,7 +97,8 @@ export default function InstallWizardDialog({ entry, open, onClose }) {
       <DialogBackdrop className="fixed inset-0 bg-black/50" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <DialogPanel className="w-full max-w-lg rounded-md bg-theme-100 dark:bg-theme-800 p-6 text-theme-700 dark:text-theme-200">
-          <DialogTitle className="text-lg font-medium mb-4">Install {entry.title}</DialogTitle>
+          <DialogTitle className="text-lg font-medium mb-1">Install {entry.title}</DialogTitle>
+          {entry.description && <p className="text-sm text-theme-500 dark:text-theme-300 mb-4">{entry.description}</p>}
 
           {state.step === "target" && (
             <div>
