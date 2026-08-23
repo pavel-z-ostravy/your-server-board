@@ -30,7 +30,8 @@ export default function InstallWizardDialog({ entry, open, onClose }) {
 
   useEffect(() => {
     if (open) setState(initialState(entry));
-  }, [open, entry]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, entry?.slug]);
 
   const { data: servicesData } = useSWR(
     open && entry?.category === "service" ? "/api/widgets-catalog/services" : null,

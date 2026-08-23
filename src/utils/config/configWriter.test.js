@@ -70,4 +70,44 @@ describe("writeConfigDocument", () => {
     expect(() => writeConfigDocument("widgets.yaml", doc)).toThrow("failed to re-parse");
     expect(writeFileSync).not.toHaveBeenCalled();
   });
+
+  it("never creates a backup when the document fails to serialize, even if the file exists", () => {
+    existsSync.mockReturnValue(true);
+    const doc = {
+      toString: () => {
+        throw new Error("Unresolved alias (the anchor must be set before the alias): b");
+      },
+    };
+
+    expect(() => writeConfigDocument("widgets.yaml", doc)).toThrow("Unresolved alias");
+    expect(copyFileSync).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it("never creates a backup when the mutated document fails to re-parse, even if the file exists", () => {
+    existsSync.mockReturnValue(true);
+    const doc = { toString: () => "- resources:\n\tcpu: true\n" }; // tab indentation is invalid YAML
+
+    expect(() => writeConfigDocument("widgets.yaml", doc)).toThrow("failed to re-parse");
+    expect(copyFileSync).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it("refuses to write when js-yaml fails to load the output, even though the yaml package accepts it", async () => {
+    existsSync.mockReturnValue(false);
+    const doc = { toString: () => "- resources:\n    cpu: true\n" };
+
+    const jsYaml = (await import("js-yaml")).default;
+    const loadSpy = vi.spyOn(jsYaml, "load").mockImplementation(() => {
+      throw new Error("js-yaml: simulated divergence from the yaml package");
+    });
+
+    try {
+      expect(() => writeConfigDocument("widgets.yaml", doc)).toThrow("failed to re-parse");
+      expect(copyFileSync).not.toHaveBeenCalled();
+      expect(writeFileSync).not.toHaveBeenCalled();
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
 });

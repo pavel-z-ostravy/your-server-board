@@ -27,6 +27,11 @@ const SERVICES_FIXTURE = `---
         href: http://transmission.local/
 `;
 
+// parseDocument("") and parseDocument of a comment-only string both produce
+// a document whose `.contents` is `null` (not a Seq) - this is what an
+// empty/malformed services.yaml parses to.
+const EMPTY_DOC = parseDocument("# just a comment\n");
+
 describe("findServiceFieldsNode", () => {
   it("finds a service's fields node across multiple groups", () => {
     const doc = parseDocument(SERVICES_FIXTURE);
@@ -37,6 +42,11 @@ describe("findServiceFieldsNode", () => {
   it("returns null when the service doesn't exist", () => {
     const doc = parseDocument(SERVICES_FIXTURE);
     expect(findServiceFieldsNode(doc, "DoesNotExist")).toBeNull();
+  });
+
+  it("returns null instead of throwing when the doc has no top-level Seq", () => {
+    expect(EMPTY_DOC.contents).toBeNull();
+    expect(findServiceFieldsNode(EMPTY_DOC, "Transmission")).toBeNull();
   });
 });
 
@@ -51,6 +61,10 @@ describe("findGroupServicesSeq", () => {
     const doc = parseDocument(SERVICES_FIXTURE);
     expect(findGroupServicesSeq(doc, "DoesNotExist")).toBeNull();
   });
+
+  it("returns null instead of throwing when the doc has no top-level Seq", () => {
+    expect(findGroupServicesSeq(EMPTY_DOC, "Media")).toBeNull();
+  });
 });
 
 describe("listServiceNames", () => {
@@ -58,12 +72,20 @@ describe("listServiceNames", () => {
     const doc = parseDocument(SERVICES_FIXTURE);
     expect(listServiceNames(doc)).toEqual(["Plex", "Sonarr", "Transmission"]);
   });
+
+  it("returns an empty array instead of throwing when the doc has no top-level Seq", () => {
+    expect(listServiceNames(EMPTY_DOC)).toEqual([]);
+  });
 });
 
 describe("listGroupNames", () => {
   it("returns every group name, in document order", () => {
     const doc = parseDocument(SERVICES_FIXTURE);
     expect(listGroupNames(doc)).toEqual(["Media", "Downloads"]);
+  });
+
+  it("returns an empty array instead of throwing when the doc has no top-level Seq", () => {
+    expect(listGroupNames(EMPTY_DOC)).toEqual([]);
   });
 });
 
@@ -86,6 +108,12 @@ describe("parseWidgetFragment", () => {
   it("throws when yamlSnippet is missing or empty", () => {
     expect(() => parseWidgetFragment("")).toThrow("yamlSnippet is required");
     expect(() => parseWidgetFragment(undefined)).toThrow("yamlSnippet is required");
+  });
+
+  it("throws when the fragment contains an alias whose anchor is defined outside the 'widget' subtree", () => {
+    expect(() => parseWidgetFragment("base: &b {u: 1}\nwidget:\n  type: x\n  cfg: *b\n")).toThrow(
+      "Invalid widget YAML",
+    );
   });
 });
 

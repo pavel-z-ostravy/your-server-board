@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
+import yaml from "js-yaml";
 import { parseDocument } from "yaml";
 
 import checkAndCopyConfig, { CONF_DIR } from "utils/config/config";
@@ -32,17 +33,30 @@ export function writeConfigDocument(filename, doc) {
   const backupName = `${filename}.bak.${timestamp}`;
   const backupPath = join(CONF_DIR, backupName);
 
-  let backupFile = null;
-  if (existsSync(filePath)) {
-    copyFileSync(filePath, backupPath);
-    backupFile = backupName;
-  }
-
+  // Compute and validate the output BEFORE touching the filesystem, so a
+  // serialization or re-parse failure never leaves a stray backup copy with
+  // nothing actually written.
   const output = doc.toString();
 
   const revalidation = parseDocument(output);
   if (revalidation.errors.length > 0) {
     throw new Error(`Refusing to write ${filename}: mutated document failed to re-parse`);
+  }
+
+  // Every other config read path in this app (see utils/config/config.js)
+  // loads YAML with js-yaml, not the `yaml` package - confirm js-yaml can
+  // load the output too, since the two libraries can diverge on edge cases
+  // like alias/anchor expansion.
+  try {
+    yaml.load(output);
+  } catch (e) {
+    throw new Error(`Refusing to write ${filename}: mutated document failed to re-parse: ${e.message}`);
+  }
+
+  let backupFile = null;
+  if (existsSync(filePath)) {
+    copyFileSync(filePath, backupPath);
+    backupFile = backupName;
   }
 
   writeFileSync(filePath, output, "utf8");

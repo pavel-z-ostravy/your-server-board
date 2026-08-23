@@ -1,5 +1,5 @@
 import { Highlight, themes } from "prism-react-renderer";
-import { useContext, useRef, useState } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 
 import InstallWizardDialog from "components/widgets/InstallWizardDialog";
@@ -23,6 +23,7 @@ function WidgetRow({ entry, category }) {
   const [installOpen, setInstallOpen] = useState(false);
   const preRef = useRef(null);
   const themeContext = useContext(ThemeContext);
+  const dialogEntry = useMemo(() => ({ ...entry, category }), [entry, category]);
 
   const handleCopy = async () => {
     try {
@@ -83,11 +84,7 @@ function WidgetRow({ entry, category }) {
                   Install...
                 </button>
               </div>
-              <InstallWizardDialog
-                entry={{ ...entry, category }}
-                open={installOpen}
-                onClose={() => setInstallOpen(false)}
-              />
+              <InstallWizardDialog entry={dialogEntry} open={installOpen} onClose={() => setInstallOpen(false)} />
             </>
           ) : (
             <p className="text-theme-500 dark:text-theme-300">No example available.</p>

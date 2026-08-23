@@ -188,4 +188,26 @@ describe("components/widgets/InstallWizardDialog", () => {
     await screen.findByRole("button", { name: "Install" });
     expect(screen.queryByText("Service 'Sonarr' not found")).not.toBeInTheDocument();
   });
+
+  it("does not reset user-edited YAML when a new-but-equal entry object is passed while open", async () => {
+    const { rerender } = renderWithSWR(<InstallWizardDialog entry={INFO_ENTRY} open onClose={vi.fn()} />);
+
+    const textarea = await screen.findByLabelText("YAML preview");
+    fireEvent.change(textarea, { target: { value: "- datetime:\n    text_size: xxl # user edit" } });
+    expect(textarea).toHaveValue("- datetime:\n    text_size: xxl # user edit");
+
+    // Same slug/content, but a brand-new object identity - simulates a parent
+    // re-render (e.g. WidgetRow's copied/theme state changing) that recreates
+    // the entry object literal.
+    const sameEntryNewIdentity = { ...INFO_ENTRY };
+    expect(sameEntryNewIdentity).not.toBe(INFO_ENTRY);
+
+    rerender(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <InstallWizardDialog entry={sameEntryNewIdentity} open onClose={vi.fn()} />
+      </SWRConfig>,
+    );
+
+    expect(screen.getByLabelText("YAML preview")).toHaveValue("- datetime:\n    text_size: xxl # user edit");
+  });
 });
