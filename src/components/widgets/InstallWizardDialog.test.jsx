@@ -158,4 +158,34 @@ describe("components/widgets/InstallWizardDialog", () => {
     await waitFor(() => expect(screen.getByText("Service 'Sonarr' not found")).toBeInTheDocument());
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("clears a stale install error when navigating back from confirm and returning without resubmitting", async () => {
+    mockFetchSequence([
+      { match: (url) => url === "/api/widgets-catalog/services", body: { groups: [], services: ["Sonarr"] } },
+      {
+        match: (url, options) => url === "/api/widgets-catalog/install" && options?.method === "POST",
+        ok: false,
+        body: { error: "Service 'Sonarr' not found" },
+      },
+    ]);
+
+    renderWithSWR(<InstallWizardDialog entry={SERVICE_ENTRY} open onClose={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByLabelText("Existing service")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Existing service"), { target: { value: "Sonarr" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByLabelText("YAML preview");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByLabelText(/I understand the risk/));
+    fireEvent.click(screen.getByRole("button", { name: "Install" }));
+
+    await waitFor(() => expect(screen.getByText("Service 'Sonarr' not found")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await screen.findByLabelText("YAML preview");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    await screen.findByRole("button", { name: "Install" });
+    expect(screen.queryByText("Service 'Sonarr' not found")).not.toBeInTheDocument();
+  });
 });

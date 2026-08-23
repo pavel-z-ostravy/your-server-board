@@ -254,7 +254,7 @@ export default function InstallWizardDialog({ entry, open, onClose }) {
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => update({ step: "preview" })}
+                  onClick={() => update({ step: "preview", result: null })}
                   className="text-sm px-3 py-1.5 mr-auto"
                 >
                   Back
