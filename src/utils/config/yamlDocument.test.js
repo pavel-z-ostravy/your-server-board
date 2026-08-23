@@ -6,6 +6,8 @@ import {
   findGroupServicesSeq,
   findServiceFieldsNode,
   listGroupNames,
+  listInstalledInfoWidgets,
+  listInstalledServiceWidgets,
   listServiceNames,
   parseInfoWidgetSnippet,
   parseWidgetFragment,
@@ -167,5 +169,55 @@ describe("parseInfoWidgetSnippet", () => {
 
   it("throws when yamlSnippet is missing or empty", () => {
     expect(() => parseInfoWidgetSnippet("")).toThrow("yamlSnippet is required");
+  });
+});
+
+describe("listInstalledServiceWidgets", () => {
+  it("returns type and serviceName for every service that has a widget, across all groups", () => {
+    const doc = parseDocument(`---
+- Media:
+    - Plex:
+        href: http://plex.local/
+        widget:
+          type: plex
+          url: http://x
+    - Sonarr:
+        href: http://sonarr.local/
+- Downloads:
+    - Transmission:
+        href: http://transmission.local/
+        widget:
+          type: transmission
+`);
+    expect(listInstalledServiceWidgets(doc)).toEqual([
+      { type: "plex", serviceName: "Plex" },
+      { type: "transmission", serviceName: "Transmission" },
+    ]);
+  });
+
+  it("returns an empty array instead of throwing when the doc has no top-level Seq", () => {
+    expect(listInstalledServiceWidgets(EMPTY_DOC)).toEqual([]);
+  });
+});
+
+describe("listInstalledInfoWidgets", () => {
+  it("returns slug and index for every entry, including duplicate slugs", () => {
+    const doc = parseDocument(`---
+- resources:
+    cpu: true
+- resources:
+    disk: /mnt
+- datetime:
+    text_size: xl
+`);
+    expect(listInstalledInfoWidgets(doc)).toEqual([
+      { slug: "resources", index: 0 },
+      { slug: "resources", index: 1 },
+      { slug: "datetime", index: 2 },
+    ]);
+  });
+
+  it("returns an empty array instead of throwing when the doc has no top-level Seq", () => {
+    expect(listInstalledInfoWidgets(EMPTY_DOC)).toEqual([]);
   });
 });

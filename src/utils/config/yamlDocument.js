@@ -1,4 +1,4 @@
-import { Document, isSeq, parseDocument } from "yaml";
+import { Document, isMap, isSeq, parseDocument } from "yaml";
 
 // Stringifying a detached node directly (e.g. `String(node)`) does NOT
 // exercise the `yaml` package's real anchor/alias resolution: without a
@@ -144,4 +144,45 @@ export function parseInfoWidgetSnippet(yamlSnippet) {
   const listItemNode = doc.contents.items[0];
   assertStringifiable(listItemNode);
   return listItemNode;
+}
+
+// Returns { type, serviceName } for every service, across every group, that
+// currently has a widget: block.
+export function listInstalledServiceWidgets(servicesDoc) {
+  const results = [];
+  const topSeq = servicesDoc.contents;
+  if (!isSeq(topSeq)) return results;
+  for (const groupMap of topSeq.items) {
+    for (const groupPair of groupMap.items) {
+      const servicesSeq = groupPair.value;
+      for (const serviceMapWrapper of servicesSeq.items) {
+        for (const servicePair of serviceMapWrapper.items) {
+          const fieldsNode = servicePair.value;
+          const widgetNode = fieldsNode.get("widget", true);
+          if (isMap(widgetNode)) {
+            const type = widgetNode.get("type");
+            if (typeof type === "string") {
+              results.push({ type, serviceName: servicePair.key.value });
+            }
+          }
+        }
+      }
+    }
+  }
+  return results;
+}
+
+// Returns { slug, index } for every top-level widgets.yaml entry - slug is
+// the entry's single key, index is its position in the top-level Seq.
+// Duplicate slugs (e.g. two "resources" blocks) each get their own entry.
+export function listInstalledInfoWidgets(widgetsDoc) {
+  const results = [];
+  const topSeq = widgetsDoc.contents;
+  if (!isSeq(topSeq)) return results;
+  topSeq.items.forEach((itemMap, index) => {
+    if (isMap(itemMap) && itemMap.items.length > 0) {
+      results.push({ slug: itemMap.items[0].key.value, index });
+    }
+  });
+  return results;
 }
