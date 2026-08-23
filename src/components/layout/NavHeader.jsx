@@ -1,11 +1,14 @@
 import { Menu, Transition } from "@headlessui/react";
 import Link from "next/link";
 import { Fragment } from "react";
-import { BiExtension, BiMenu } from "react-icons/bi";
+import { BiExtension, BiHome, BiMenu } from "react-icons/bi";
 
 // Plain array of { href, label, icon } - adding a page later is adding an
 // entry here, not touching this component's rendering logic.
-const NAV_ITEMS = [{ href: "/widgets", label: "Widgets", icon: BiExtension }];
+const NAV_ITEMS = [
+  { href: "/", label: "Dashboard", icon: BiHome },
+  { href: "/widgets", label: "Widgets", icon: BiExtension },
+];
 
 export default function NavHeader() {
   return (

@@ -47,10 +47,14 @@ import { describe, expect, it, vi } from "vitest";
 import NavHeader from "./NavHeader";
 
 describe("components/layout/NavHeader", () => {
-  it("renders a hamburger button and a link to the Widgets page", () => {
+  it("renders a hamburger button and links to the Dashboard and Widgets pages", () => {
     render(<NavHeader />);
 
     expect(screen.getByRole("button", { name: "Open menu" })).toBeInTheDocument();
+
+    const dashboardLink = screen.getByRole("link", { name: "Dashboard" });
+    expect(dashboardLink).toBeInTheDocument();
+    expect(dashboardLink).toHaveAttribute("href", "/");
 
     const widgetsLink = screen.getByRole("link", { name: "Widgets" });
     expect(widgetsLink).toBeInTheDocument();
