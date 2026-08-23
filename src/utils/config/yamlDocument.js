@@ -74,6 +74,22 @@ export function findGroupServicesSeq(servicesDoc, groupName) {
   return null;
 }
 
+// Like findServiceFieldsNode, but scoped to one named group - use this when
+// the caller already knows which group a service lives in, to avoid
+// matching a same-named service in a different group.
+export function findServiceFieldsNodeInGroup(servicesDoc, groupName, serviceName) {
+  const servicesSeq = findGroupServicesSeq(servicesDoc, groupName);
+  if (!isSeq(servicesSeq)) return null;
+  for (const serviceMapWrapper of servicesSeq.items) {
+    for (const servicePair of serviceMapWrapper.items) {
+      if (servicePair.key.value === serviceName) {
+        return servicePair.value;
+      }
+    }
+  }
+  return null;
+}
+
 export function listServiceNames(servicesDoc) {
   const names = [];
   const topSeq = servicesDoc.contents;
@@ -161,4 +177,53 @@ export function parseInfoWidgetSnippet(yamlSnippet) {
   const listItemNode = doc.contents.items[0];
   assertStringifiable(listItemNode);
   return listItemNode;
+}
+
+// Returns { type, serviceName } for every service, across every group, that
+// currently has a widget: block.
+export function listInstalledServiceWidgets(servicesDoc) {
+  const results = [];
+  const topSeq = servicesDoc.contents;
+  if (!isSeq(topSeq)) return results;
+  for (const groupMap of topSeq.items) {
+    for (const groupPair of groupMap.items) {
+      const servicesSeq = groupPair.value;
+      for (const serviceMapWrapper of servicesSeq.items) {
+        for (const servicePair of serviceMapWrapper.items) {
+          const fieldsNode = servicePair.value;
+          const widgetNode = fieldsNode.get("widget", true);
+          if (isMap(widgetNode)) {
+            const type = widgetNode.get("type");
+            if (typeof type === "string") {
+              results.push({ type, serviceName: servicePair.key.value });
+            }
+          }
+        }
+      }
+    }
+  }
+  return results;
+}
+
+// Returns { slug, index, fingerprint } for every top-level widgets.yaml
+// entry - slug is the entry's single key, index is its position in the
+// top-level Seq, fingerprint is a content hash of that entry (JSON of its
+// parsed value). Duplicate slugs (e.g. two "resources" blocks) each get
+// their own entry - the fingerprint is what lets a removal request detect
+// "the entry that's now at this index isn't the one I meant to remove"
+// even when the slug alone can't tell the difference.
+export function listInstalledInfoWidgets(widgetsDoc) {
+  const results = [];
+  const topSeq = widgetsDoc.contents;
+  if (!isSeq(topSeq)) return results;
+  topSeq.items.forEach((itemMap, index) => {
+    if (isMap(itemMap) && itemMap.items.length > 0) {
+      results.push({
+        slug: itemMap.items[0].key.value,
+        index,
+        fingerprint: JSON.stringify(itemMap.toJSON()),
+      });
+    }
+  });
+  return results;
 }

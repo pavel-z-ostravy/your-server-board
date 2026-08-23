@@ -1,5 +1,6 @@
 import { Highlight, themes } from "prism-react-renderer";
 import { useContext, useMemo, useRef, useState } from "react";
+import { BiTrash } from "react-icons/bi";
 import useSWR from "swr";
 
 import InstallWizardDialog from "components/widgets/InstallWizardDialog";
@@ -17,13 +18,79 @@ function matchesQuery(entry, query) {
   return entry.title.toLowerCase().includes(q) || entry.description.toLowerCase().includes(q);
 }
 
-function WidgetRow({ entry, category }) {
+function InstalledInstanceRow({ label, onRemove }) {
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleRemove = async () => {
+    setRemoving(true);
+    setError(null);
+    const result = await onRemove();
+    setRemoving(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setConfirming(false);
+  };
+
+  const handleCancel = () => {
+    setConfirming(false);
+    setError(null);
+  };
+
+  return (
+    <li className="flex items-center justify-between gap-2 py-0.5 text-xs">
+      <span>{label}</span>
+      {confirming ? (
+        <span className="flex items-center gap-2">
+          {error && <span className="text-rose-500/80">{error}</span>}
+          <button type="button" onClick={handleRemove} disabled={removing} className="text-rose-500/80">
+            {removing ? "Removing..." : "Remove?"}
+          </button>
+          <button type="button" onClick={handleCancel} disabled={removing}>
+            Cancel
+          </button>
+        </span>
+      ) : (
+        <button type="button" onClick={() => setConfirming(true)} aria-label={`Remove ${label}`}>
+          <BiTrash size={14} />
+        </button>
+      )}
+    </li>
+  );
+}
+
+function WidgetRow({ entry, category, installed, mutateInstalled }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const preRef = useRef(null);
   const themeContext = useContext(ThemeContext);
   const dialogEntry = useMemo(() => ({ ...entry, category }), [entry, category]);
+
+  const installedServiceNames = category === "service" ? (installed?.services?.[entry.slug] ?? []) : [];
+  const installedInfoInstances = category === "info" ? (installed?.info?.[entry.slug] ?? []) : [];
+  const hasInstalled = installedServiceNames.length > 0 || installedInfoInstances.length > 0;
+
+  const removeInstance = async (body) => {
+    try {
+      const res = await fetch("/api/widgets-catalog/uninstall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const resBody = await res.json().catch(() => ({}));
+        return { ok: false, error: resBody.error ?? "Failed to remove widget" };
+      }
+      await mutateInstalled();
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Network error - failed to remove widget" };
+    }
+  };
 
   const handleCopy = async () => {
     try {
@@ -51,6 +118,27 @@ function WidgetRow({ entry, category }) {
       </button>
       {expanded && (
         <div className="mt-2 text-xs">
+          {hasInstalled && (
+            <div className="mb-2">
+              <p className="font-medium mb-1">Installed on:</p>
+              <ul>
+                {installedServiceNames.map((name) => (
+                  <InstalledInstanceRow
+                    key={name}
+                    label={name}
+                    onRemove={() => removeInstance({ category: "service", serviceName: name })}
+                  />
+                ))}
+                {installedInfoInstances.map(({ index, fingerprint }, i) => (
+                  <InstalledInstanceRow
+                    key={index}
+                    label={`Instance #${i + 1}`}
+                    onRemove={() => removeInstance({ category: "info", slug: entry.slug, index, fingerprint })}
+                  />
+                ))}
+              </ul>
+            </div>
+          )}
           {entry.yamlExample ? (
             <>
               <Highlight
@@ -97,6 +185,7 @@ function WidgetRow({ entry, category }) {
 
 export default function WidgetsPage() {
   const { data, error } = useSWR("/api/widgets-catalog", fetcher);
+  const { data: installed, mutate: mutateInstalled } = useSWR("/api/widgets-catalog/installed", fetcher);
   const [query, setQuery] = useState("");
 
   return (
@@ -121,7 +210,13 @@ export default function WidgetsPage() {
             {data.services
               .filter((entry) => matchesQuery(entry, query))
               .map((entry) => (
-                <WidgetRow key={entry.slug} entry={entry} category="service" />
+                <WidgetRow
+                  key={entry.slug}
+                  entry={entry}
+                  category="service"
+                  installed={installed}
+                  mutateInstalled={mutateInstalled}
+                />
               ))}
           </ul>
 
@@ -130,7 +225,13 @@ export default function WidgetsPage() {
             {data.info
               .filter((entry) => matchesQuery(entry, query))
               .map((entry) => (
-                <WidgetRow key={entry.slug} entry={entry} category="info" />
+                <WidgetRow
+                  key={entry.slug}
+                  entry={entry}
+                  category="info"
+                  installed={installed}
+                  mutateInstalled={mutateInstalled}
+                />
               ))}
           </ul>
         </>

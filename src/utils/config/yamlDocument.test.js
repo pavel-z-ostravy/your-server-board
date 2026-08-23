@@ -5,8 +5,11 @@ import {
   ensureTopSeq,
   findGroupServicesSeq,
   findServiceFieldsNode,
+  findServiceFieldsNodeInGroup,
   getServiceWidgetYaml,
   listGroupNames,
+  listInstalledInfoWidgets,
+  listInstalledServiceWidgets,
   listServiceNames,
   parseInfoWidgetSnippet,
   parseWidgetFragment,
@@ -112,6 +115,33 @@ describe("findGroupServicesSeq", () => {
   });
 });
 
+describe("findServiceFieldsNodeInGroup", () => {
+  const AMBIGUOUS_FIXTURE = `---
+- Media:
+    - Plex:
+        href: http://media-plex.local/
+- Remote:
+    - Plex:
+        href: http://remote-plex.local/
+`;
+
+  it("finds the service scoped to the named group, not the first match anywhere", () => {
+    const doc = parseDocument(AMBIGUOUS_FIXTURE);
+    const fields = findServiceFieldsNodeInGroup(doc, "Remote", "Plex");
+    expect(fields.toJSON()).toEqual({ href: "http://remote-plex.local/" });
+  });
+
+  it("returns null when the group exists but the service isn't in it", () => {
+    const doc = parseDocument(AMBIGUOUS_FIXTURE);
+    expect(findServiceFieldsNodeInGroup(doc, "Media", "DoesNotExist")).toBeNull();
+  });
+
+  it("returns null when the group doesn't exist", () => {
+    const doc = parseDocument(AMBIGUOUS_FIXTURE);
+    expect(findServiceFieldsNodeInGroup(doc, "DoesNotExist", "Plex")).toBeNull();
+  });
+});
+
 describe("listServiceNames", () => {
   it("returns every service name across all groups, in document order", () => {
     const doc = parseDocument(SERVICES_FIXTURE);
@@ -211,5 +241,66 @@ describe("parseInfoWidgetSnippet", () => {
 
   it("throws when yamlSnippet is missing or empty", () => {
     expect(() => parseInfoWidgetSnippet("")).toThrow("yamlSnippet is required");
+  });
+});
+
+describe("listInstalledServiceWidgets", () => {
+  it("returns type and serviceName for every service that has a widget, across all groups", () => {
+    const doc = parseDocument(`---
+- Media:
+    - Plex:
+        href: http://plex.local/
+        widget:
+          type: plex
+          url: http://x
+    - Sonarr:
+        href: http://sonarr.local/
+- Downloads:
+    - Transmission:
+        href: http://transmission.local/
+        widget:
+          type: transmission
+`);
+    expect(listInstalledServiceWidgets(doc)).toEqual([
+      { type: "plex", serviceName: "Plex" },
+      { type: "transmission", serviceName: "Transmission" },
+    ]);
+  });
+
+  it("returns an empty array instead of throwing when the doc has no top-level Seq", () => {
+    expect(listInstalledServiceWidgets(EMPTY_DOC)).toEqual([]);
+  });
+});
+
+describe("listInstalledInfoWidgets", () => {
+  it("returns slug, index, and a content fingerprint for every entry, including duplicate slugs", () => {
+    const doc = parseDocument(`---
+- resources:
+    cpu: true
+- resources:
+    disk: /mnt
+- datetime:
+    text_size: xl
+`);
+    expect(listInstalledInfoWidgets(doc)).toEqual([
+      { slug: "resources", index: 0, fingerprint: '{"resources":{"cpu":true}}' },
+      { slug: "resources", index: 1, fingerprint: '{"resources":{"disk":"/mnt"}}' },
+      { slug: "datetime", index: 2, fingerprint: '{"datetime":{"text_size":"xl"}}' },
+    ]);
+  });
+
+  it("gives a different fingerprint to entries with the same slug but different content", () => {
+    const doc = parseDocument(`---
+- resources:
+    cpu: true
+- resources:
+    disk: /mnt
+`);
+    const [first, second] = listInstalledInfoWidgets(doc);
+    expect(first.fingerprint).not.toBe(second.fingerprint);
+  });
+
+  it("returns an empty array instead of throwing when the doc has no top-level Seq", () => {
+    expect(listInstalledInfoWidgets(EMPTY_DOC)).toEqual([]);
   });
 });
