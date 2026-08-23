@@ -85,6 +85,27 @@ export function listGroupNames(servicesDoc) {
   return names;
 }
 
+// Ensures doc.contents is a top-level Seq, ready to .items.push(...) onto.
+// A brand-new or fully-emptied services.yaml/widgets.yaml (nothing left but
+// header comments, or a genuinely empty file) parses to a Scalar or null
+// contents node rather than a Seq - installing into one of those is exactly
+// how a user reaches this, since it's the state of a config file before its
+// first-ever install. Replacing contents outright would silently drop any
+// header comment attached to that placeholder node, so it's carried over
+// onto the new Seq first.
+export function ensureTopSeq(doc) {
+  if (!isSeq(doc.contents)) {
+    const oldContents = doc.contents;
+    const newSeq = doc.createNode([]);
+    if (oldContents) {
+      const carried = [oldContents.comment, oldContents.commentBefore].filter(Boolean);
+      if (carried.length > 0) newSeq.commentBefore = carried.join("\n");
+    }
+    doc.contents = newSeq;
+  }
+  return doc.contents;
+}
+
 function assertYamlSnippet(yamlSnippet) {
   if (typeof yamlSnippet !== "string" || !yamlSnippet.trim()) {
     throw new Error("yamlSnippet is required");

@@ -81,6 +81,23 @@ describe("pages/api/widgets-catalog/install", () => {
       await handler(req, res);
       expect(res.statusCode).toBe(400);
     });
+
+    it("appends into a widgets.yaml that has nothing but a header comment (first-ever install)", async () => {
+      readConfigDocument.mockReturnValue(
+        parseDocument("---\n# For configuration options, see:\n# https://example.com\n"),
+      );
+      writeConfigDocument.mockReturnValue("widgets.yaml.bak.2026-08-23T00-00-00-000Z");
+
+      const req = { method: "POST", body: { category: "info", yamlSnippet: INFO_SNIPPET } };
+      const res = createMockRes();
+      await handler(req, res);
+
+      expect(res.statusCode).toBe(200);
+      const [, doc] = writeConfigDocument.mock.calls[0];
+      const out = doc.toString();
+      expect(out).toContain("datetime");
+      expect(out).toContain("# For configuration options, see:");
+    });
   });
 
   describe("category: service, mode: attach", () => {
@@ -196,6 +213,34 @@ describe("pages/api/widgets-catalog/install", () => {
       const out = doc.toString();
       expect(out).toContain("Downloads");
       expect(out).toContain("Transmission");
+    });
+
+    it("creates a new group in a services.yaml that has nothing but a header comment (first-ever install)", async () => {
+      readConfigDocument.mockReturnValue(
+        parseDocument("---\n# For configuration options, see:\n# https://example.com\n"),
+      );
+      writeConfigDocument.mockReturnValue("services.yaml.bak.2026-08-23T00-00-00-000Z");
+
+      const req = {
+        method: "POST",
+        body: {
+          category: "service",
+          mode: "new",
+          serviceName: "NextDNS",
+          groupName: "NextDNS",
+          href: "https://my.nextdns.io/",
+          description: "",
+          yamlSnippet: WIDGET_FRAGMENT,
+        },
+      };
+      const res = createMockRes();
+      await handler(req, res);
+
+      expect(res.statusCode).toBe(200);
+      const [, doc] = writeConfigDocument.mock.calls[0];
+      const out = doc.toString();
+      expect(out).toContain("NextDNS");
+      expect(out).toContain("# For configuration options, see:");
     });
 
     it("returns 409 when the service name already exists anywhere", async () => {

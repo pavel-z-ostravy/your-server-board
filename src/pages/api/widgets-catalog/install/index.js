@@ -1,5 +1,6 @@
 import { readConfigDocument, writeConfigDocument } from "utils/config/configWriter";
 import {
+  ensureTopSeq,
   findGroupServicesSeq,
   findServiceFieldsNode,
   listServiceNames,
@@ -21,7 +22,7 @@ async function handleInfoInstall(req, res) {
   }
 
   const doc = readConfigDocument("widgets.yaml");
-  doc.contents.items.push(itemNode);
+  ensureTopSeq(doc).items.push(itemNode);
   const backupFile = writeConfigDocument("widgets.yaml", doc);
 
   return res.status(200).json({ success: true, backupFile });
@@ -55,7 +56,7 @@ function addNewService(doc, req, widgetNode, res) {
   let servicesSeq = findGroupServicesSeq(doc, groupName);
   if (!servicesSeq) {
     const newGroupNode = doc.createNode({ [groupName]: [] });
-    doc.contents.items.push(newGroupNode);
+    ensureTopSeq(doc).items.push(newGroupNode);
     servicesSeq = newGroupNode.items[0].value;
   }
   servicesSeq.items.push(newServiceNode);

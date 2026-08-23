@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
 
 import {
+  ensureTopSeq,
   findGroupServicesSeq,
   findServiceFieldsNode,
   listGroupNames,
@@ -86,6 +87,33 @@ describe("listGroupNames", () => {
 
   it("returns an empty array instead of throwing when the doc has no top-level Seq", () => {
     expect(listGroupNames(EMPTY_DOC)).toEqual([]);
+  });
+});
+
+describe("ensureTopSeq", () => {
+  it("returns the existing Seq unchanged when contents is already a Seq", () => {
+    const doc = parseDocument(SERVICES_FIXTURE);
+    const seq = ensureTopSeq(doc);
+    expect(seq).toBe(doc.contents);
+    expect(seq.items).toHaveLength(2);
+  });
+
+  it("replaces a comment-only (non-Seq) contents with an empty Seq, preserving the header comment", () => {
+    const doc = parseDocument("---\n# For configuration options, see:\n# https://example.com\n");
+    const seq = ensureTopSeq(doc);
+    expect(seq.items).toEqual([]);
+    seq.items.push(doc.createNode({ NextDNS: [] }));
+    const out = doc.toString();
+    expect(out).toContain("# For configuration options, see:");
+    expect(out.indexOf("# For configuration options")).toBeLessThan(out.indexOf("NextDNS"));
+  });
+
+  it("replaces a fully-empty (null contents) doc with an empty Seq", () => {
+    const doc = parseDocument("");
+    const seq = ensureTopSeq(doc);
+    expect(seq.items).toEqual([]);
+    seq.items.push(doc.createNode({ resources: { cpu: true } }));
+    expect(doc.toString().trim()).toBe("- resources:\n    cpu: true".trim());
   });
 });
 
