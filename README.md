@@ -82,16 +82,17 @@ in front of it too.
 
 ## What this fork adds on top of Homepage
 
-| Area                                                  | Upstream Homepage      | This fork                                              |
-| ----------------------------------------------------- | ---------------------- | ------------------------------------------------------ |
-| Service widgets, bookmarks, search, theming, i18n     | ✅ full support        | unchanged                                              |
-| Proxmox VM/CT status widget                           | ✅ read-only           | unchanged (used for the live data above)               |
-| Disk health (SMART)                                   | ❌ none                | ✅ live (dashboard section + `/api/disks`)             |
-| Drag-and-drop section reordering                      | ❌ none                | ✅ live (drag whole dashboard sections into any order) |
-| Backup lifecycle (list/run/download/delete/retention) | ❌ none                | planned                                                |
-| VM/CT power actions                                   | ❌ none                | planned                                                |
-| Login                                                 | optional password only | password today, TOTP 2FA planned                       |
-| Alerting                                              | ❌ none                | planned (SMART/disk/backup-failure via email)          |
+| Area                                                                   | Upstream Homepage      | This fork                                              |
+| ---------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------ |
+| Service widgets, bookmarks, search, theming, i18n                      | ✅ full support        | unchanged                                              |
+| Proxmox VM/CT status widget                                            | ✅ read-only           | unchanged (used for the live data above)               |
+| Disk health (SMART)                                                    | ❌ none                | ✅ live (dashboard section + `/api/disks`)             |
+| Drag-and-drop section reordering                                       | ❌ none                | ✅ live (drag whole dashboard sections into any order) |
+| Widget catalog browser (search, live GitHub-synced, copy-to-clipboard) | ❌ none                | ✅ live (`/widgets` page)                              |
+| Backup lifecycle (list/run/download/delete/retention)                  | ❌ none                | planned                                                |
+| VM/CT power actions                                                    | ❌ none                | planned                                                |
+| Login                                                                  | optional password only | password today, TOTP 2FA planned                       |
+| Alerting                                                               | ❌ none                | planned (SMART/disk/backup-failure via email)          |
 
 For everything in the "unchanged" row — the config format, the 100+
 third-party service integrations, custom CSS/JS, layout options — the
