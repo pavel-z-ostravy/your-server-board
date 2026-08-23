@@ -12,6 +12,7 @@ import ProxmoxStatus from "./proxmox-status";
 import SiteMonitor from "./site-monitor";
 import Status from "./status";
 import Widget from "./widget";
+import WidgetRemoveButton from "./widget-remove-button";
 
 export default function Item({ service, groupName, useEqualHeights }) {
   const hasLink = service.href && service.href !== "#";
@@ -133,6 +134,7 @@ export default function Item({ service, groupName, useEqualHeights }) {
                 <span className="sr-only">View Proxmox stats</span>
               </button>
             )}
+            {service.widgets?.length === 1 && <WidgetRemoveButton serviceName={service.name} />}
           </div>
         </div>
 

@@ -246,4 +246,45 @@ describe("components/services/item", () => {
 
     expect(screen.queryByTestId("kubernetes-status")).not.toBeInTheDocument();
   });
+
+  it("shows the remove-widget button only when the service has exactly one widget", () => {
+    renderWithProviders(
+      <Item
+        groupName="G"
+        useEqualHeights={false}
+        service={{ id: "svc1", name: "My Service", href: "https://example.com", widgets: [] }}
+      />,
+      { settings: { showStats: false, statusStyle: "basic" } },
+    );
+    expect(screen.queryByRole("button", { name: "Remove widget" })).not.toBeInTheDocument();
+
+    renderWithProviders(
+      <Item
+        groupName="G"
+        useEqualHeights={false}
+        service={{ id: "svc2", name: "Plex", href: "https://example.com", widgets: [{ type: "plex", index: 0 }] }}
+      />,
+      { settings: { showStats: false, statusStyle: "basic" } },
+    );
+    expect(screen.getByRole("button", { name: "Remove widget" })).toBeInTheDocument();
+
+    renderWithProviders(
+      <Item
+        groupName="G"
+        useEqualHeights={false}
+        service={{
+          id: "svc3",
+          name: "Multi",
+          href: "https://example.com",
+          widgets: [
+            { type: "plex", index: 0 },
+            { type: "sonarr", index: 1 },
+          ],
+        }}
+      />,
+      { settings: { showStats: false, statusStyle: "basic" } },
+    );
+    // Still exactly one - contributed by svc2 only, since svc1 has zero widgets and svc3 has two.
+    expect(screen.getAllByRole("button", { name: "Remove widget" })).toHaveLength(1);
+  });
 });
