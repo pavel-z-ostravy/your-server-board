@@ -1,17 +1,21 @@
 import { readConfigDocument, writeConfigDocument } from "utils/config/configWriter";
-import { findServiceFieldsNode } from "utils/config/yamlDocument";
+import { findServiceFieldsNode, findServiceFieldsNodeInGroup } from "utils/config/yamlDocument";
 import createLogger from "utils/logger";
 
 const logger = createLogger("widgetUninstall");
 
 function uninstallService(req, res) {
-  const { serviceName } = req.body ?? {};
+  const { serviceName, groupName } = req.body ?? {};
   if (typeof serviceName !== "string" || !serviceName.trim()) {
     return res.status(400).json({ error: "serviceName is required" });
   }
 
   const doc = readConfigDocument("services.yaml");
-  const fieldsNode = findServiceFieldsNode(doc, serviceName);
+  const groupScoped =
+    typeof groupName === "string" && groupName.trim()
+      ? findServiceFieldsNodeInGroup(doc, groupName, serviceName)
+      : null;
+  const fieldsNode = groupScoped ?? findServiceFieldsNode(doc, serviceName);
   if (!fieldsNode) {
     return res.status(404).json({ error: `Service '${serviceName}' not found` });
   }
@@ -25,9 +29,16 @@ function uninstallService(req, res) {
 }
 
 function uninstallInfo(req, res) {
-  const { slug, index } = req.body ?? {};
-  if (typeof slug !== "string" || !slug.trim() || typeof index !== "number" || index < 0) {
-    return res.status(400).json({ error: "slug and index are required" });
+  const { slug, index, fingerprint } = req.body ?? {};
+  if (
+    typeof slug !== "string" ||
+    !slug.trim() ||
+    typeof index !== "number" ||
+    index < 0 ||
+    typeof fingerprint !== "string" ||
+    !fingerprint
+  ) {
+    return res.status(400).json({ error: "slug, index, and fingerprint are required" });
   }
 
   const doc = readConfigDocument("widgets.yaml");
@@ -37,7 +48,8 @@ function uninstallInfo(req, res) {
     return res.status(404).json({ error: `No widgets.yaml entry at index ${index}` });
   }
   const actualSlug = itemMap.items?.[0]?.key?.value;
-  if (actualSlug !== slug) {
+  const actualFingerprint = JSON.stringify(itemMap.toJSON());
+  if (actualSlug !== slug || actualFingerprint !== fingerprint) {
     return res.status(409).json({ error: "widgets.yaml has changed since this list was loaded - please refresh" });
   }
 

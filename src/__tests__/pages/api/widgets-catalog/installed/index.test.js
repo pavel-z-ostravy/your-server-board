@@ -53,7 +53,13 @@ describe("pages/api/widgets-catalog/installed", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({
       services: { plex: ["Plex"] },
-      info: { resources: [0, 1], datetime: [2] },
+      info: {
+        resources: [
+          { index: 0, fingerprint: '{"resources":{"cpu":true}}' },
+          { index: 1, fingerprint: '{"resources":{"disk":"/mnt"}}' },
+        ],
+        datetime: [{ index: 2, fingerprint: '{"datetime":{"text_size":"xl"}}' }],
+      },
     });
   });
 

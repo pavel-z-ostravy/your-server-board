@@ -68,6 +68,48 @@ describe("pages/api/widgets-catalog/uninstall", () => {
       expect(out).toContain("http://plex.local/");
     });
 
+    it("uses the group-scoped lookup to avoid deleting a same-named service's widget in a different group", async () => {
+      const AMBIGUOUS_FIXTURE = `---
+- Media:
+    - Plex:
+        href: http://media-plex.local/
+        widget:
+          type: plex
+          url: http://media-plex-api
+- Remote:
+    - Plex:
+        href: http://remote-plex.local/
+        widget:
+          type: plex
+          url: http://remote-plex-api
+`;
+      readConfigDocument.mockReturnValue(parseDocument(AMBIGUOUS_FIXTURE));
+      writeConfigDocument.mockReturnValue("services.yaml.bak.2026-08-23T00-00-00-000Z");
+
+      const req = { method: "POST", body: { category: "service", serviceName: "Plex", groupName: "Remote" } };
+      const res = createMockRes();
+      await handler(req, res);
+
+      expect(res.statusCode).toBe(200);
+      const [, doc] = writeConfigDocument.mock.calls[0];
+      const out = doc.toString();
+      expect(out).toContain("media-plex-api"); // Media's Plex widget untouched
+      expect(out).not.toContain("remote-plex-api"); // Remote's Plex widget removed
+    });
+
+    it("falls back to the global lookup when groupName doesn't match any group", async () => {
+      readConfigDocument.mockReturnValue(parseDocument(SERVICES_FIXTURE));
+      writeConfigDocument.mockReturnValue("services.yaml.bak.2026-08-23T00-00-00-000Z");
+
+      const req = { method: "POST", body: { category: "service", serviceName: "Plex", groupName: "WrongGroup" } };
+      const res = createMockRes();
+      await handler(req, res);
+
+      expect(res.statusCode).toBe(200);
+      const [, doc] = writeConfigDocument.mock.calls[0];
+      expect(doc.toString()).not.toContain("widget:");
+    });
+
     it("returns 400 when serviceName is missing", async () => {
       const req = { method: "POST", body: { category: "service" } };
       const res = createMockRes();
@@ -104,7 +146,10 @@ describe("pages/api/widgets-catalog/uninstall", () => {
       readConfigDocument.mockReturnValue(parseDocument(WIDGETS_FIXTURE));
       writeConfigDocument.mockReturnValue("widgets.yaml.bak.2026-08-23T00-00-00-000Z");
 
-      const req = { method: "POST", body: { category: "info", slug: "resources", index: 0 } };
+      const req = {
+        method: "POST",
+        body: { category: "info", slug: "resources", index: 0, fingerprint: '{"resources":{"cpu":true}}' },
+      };
       const res = createMockRes();
       await handler(req, res);
 
@@ -115,8 +160,8 @@ describe("pages/api/widgets-catalog/uninstall", () => {
       expect(out).toContain("datetime");
     });
 
-    it("returns 400 when slug or index is missing", async () => {
-      const req = { method: "POST", body: { category: "info", slug: "resources" } };
+    it("returns 400 when slug, index, or fingerprint is missing", async () => {
+      const req = { method: "POST", body: { category: "info", slug: "resources", index: 0 } };
       const res = createMockRes();
       await handler(req, res);
       expect(res.statusCode).toBe(400);
@@ -125,7 +170,10 @@ describe("pages/api/widgets-catalog/uninstall", () => {
     it("returns 404 when the index is out of range", async () => {
       readConfigDocument.mockReturnValue(parseDocument(WIDGETS_FIXTURE));
 
-      const req = { method: "POST", body: { category: "info", slug: "resources", index: 99 } };
+      const req = {
+        method: "POST",
+        body: { category: "info", slug: "resources", index: 99, fingerprint: '{"resources":{"cpu":true}}' },
+      };
       const res = createMockRes();
       await handler(req, res);
 
@@ -136,7 +184,24 @@ describe("pages/api/widgets-catalog/uninstall", () => {
     it("returns 409 when the slug at that index no longer matches (stale client)", async () => {
       readConfigDocument.mockReturnValue(parseDocument(WIDGETS_FIXTURE));
 
-      const req = { method: "POST", body: { category: "info", slug: "datetime", index: 0 } };
+      const req = {
+        method: "POST",
+        body: { category: "info", slug: "datetime", index: 0, fingerprint: '{"datetime":{"text_size":"xl"}}' },
+      };
+      const res = createMockRes();
+      await handler(req, res);
+
+      expect(res.statusCode).toBe(409);
+      expect(writeConfigDocument).not.toHaveBeenCalled();
+    });
+
+    it("returns 409 when the slug matches but the fingerprint doesn't (same-slug entry shifted into this index)", async () => {
+      readConfigDocument.mockReturnValue(parseDocument(WIDGETS_FIXTURE));
+
+      const req = {
+        method: "POST",
+        body: { category: "info", slug: "resources", index: 0, fingerprint: '{"resources":{"disk":"/mnt"}}' },
+      };
       const res = createMockRes();
       await handler(req, res);
 

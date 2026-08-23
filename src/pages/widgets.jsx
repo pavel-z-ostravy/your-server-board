@@ -21,18 +21,23 @@ function matchesQuery(entry, query) {
 function InstalledInstanceRow({ label, onRemove }) {
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleRemove = async () => {
     setRemoving(true);
-    setError(false);
-    const ok = await onRemove();
+    setError(null);
+    const result = await onRemove();
     setRemoving(false);
-    if (!ok) {
-      setError(true);
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
     setConfirming(false);
+  };
+
+  const handleCancel = () => {
+    setConfirming(false);
+    setError(null);
   };
 
   return (
@@ -40,11 +45,11 @@ function InstalledInstanceRow({ label, onRemove }) {
       <span>{label}</span>
       {confirming ? (
         <span className="flex items-center gap-2">
-          {error && <span className="text-rose-500/80">Failed</span>}
+          {error && <span className="text-rose-500/80">{error}</span>}
           <button type="button" onClick={handleRemove} disabled={removing} className="text-rose-500/80">
             {removing ? "Removing..." : "Remove?"}
           </button>
-          <button type="button" onClick={() => setConfirming(false)} disabled={removing}>
+          <button type="button" onClick={handleCancel} disabled={removing}>
             Cancel
           </button>
         </span>
@@ -66,8 +71,8 @@ function WidgetRow({ entry, category, installed, mutateInstalled }) {
   const dialogEntry = useMemo(() => ({ ...entry, category }), [entry, category]);
 
   const installedServiceNames = category === "service" ? (installed?.services?.[entry.slug] ?? []) : [];
-  const installedInfoIndexes = category === "info" ? (installed?.info?.[entry.slug] ?? []) : [];
-  const hasInstalled = installedServiceNames.length > 0 || installedInfoIndexes.length > 0;
+  const installedInfoInstances = category === "info" ? (installed?.info?.[entry.slug] ?? []) : [];
+  const hasInstalled = installedServiceNames.length > 0 || installedInfoInstances.length > 0;
 
   const removeInstance = async (body) => {
     try {
@@ -76,11 +81,14 @@ function WidgetRow({ entry, category, installed, mutateInstalled }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) return false;
+      if (!res.ok) {
+        const resBody = await res.json().catch(() => ({}));
+        return { ok: false, error: resBody.error ?? "Failed to remove widget" };
+      }
       await mutateInstalled();
-      return true;
+      return { ok: true };
     } catch {
-      return false;
+      return { ok: false, error: "Network error - failed to remove widget" };
     }
   };
 
@@ -121,11 +129,11 @@ function WidgetRow({ entry, category, installed, mutateInstalled }) {
                     onRemove={() => removeInstance({ category: "service", serviceName: name })}
                   />
                 ))}
-                {installedInfoIndexes.map((index, i) => (
+                {installedInfoInstances.map(({ index, fingerprint }, i) => (
                   <InstalledInstanceRow
                     key={index}
                     label={`Instance #${i + 1}`}
-                    onRemove={() => removeInstance({ category: "info", slug: entry.slug, index })}
+                    onRemove={() => removeInstance({ category: "info", slug: entry.slug, index, fingerprint })}
                   />
                 ))}
               </ul>

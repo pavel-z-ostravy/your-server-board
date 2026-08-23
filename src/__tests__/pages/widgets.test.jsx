@@ -185,6 +185,44 @@ describe("pages/widgets", () => {
     });
   });
 
+  it('shows an "Installed on:" list for an info widget and includes the fingerprint when removing it', async () => {
+    global.fetch = vi.fn((url) => {
+      if (url === "/api/widgets-catalog") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(catalogResponse) });
+      }
+      if (url === "/api/widgets-catalog/installed") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ services: {}, info: { datetime: [{ index: 0, fingerprint: "abc123" }] } }),
+        });
+      }
+      if (url === "/api/widgets-catalog/uninstall") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, backupFile: "x" }) });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    renderWithSWR(<WidgetsPage />);
+    await waitFor(() => expect(screen.getByText("Date & Time")).toBeInTheDocument());
+
+    screen.getByText("Date & Time").click();
+    await waitFor(() => expect(screen.getByText("Installed on:")).toBeInTheDocument());
+    expect(screen.getByText("Instance #1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Instance #1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove?" }));
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/widgets-catalog/uninstall",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ category: "info", slug: "datetime", index: 0, fingerprint: "abc123" }),
+        }),
+      ),
+    );
+  });
+
   it('does not show an "Installed on:" section when nothing is installed', async () => {
     global.fetch = vi.fn((url) => {
       if (url === "/api/widgets-catalog") {

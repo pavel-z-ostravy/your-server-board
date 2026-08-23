@@ -19,8 +19,8 @@ export default async function handler(req, res) {
     }
 
     const info = {};
-    for (const { slug, index } of listInstalledInfoWidgets(widgetsDoc)) {
-      (info[slug] ??= []).push(index);
+    for (const { slug, index, fingerprint } of listInstalledInfoWidgets(widgetsDoc)) {
+      (info[slug] ??= []).push({ index, fingerprint });
     }
 
     return res.status(200).json({ services, info });

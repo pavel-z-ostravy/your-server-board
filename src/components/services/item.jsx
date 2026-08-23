@@ -134,7 +134,7 @@ export default function Item({ service, groupName, useEqualHeights }) {
                 <span className="sr-only">View Proxmox stats</span>
               </button>
             )}
-            {service.widgets?.length === 1 && <WidgetRemoveButton serviceName={service.name} />}
+            {service.widgets?.length === 1 && <WidgetRemoveButton serviceName={service.name} groupName={groupName} />}
           </div>
         </div>
 
