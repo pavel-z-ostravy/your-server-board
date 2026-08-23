@@ -127,6 +127,20 @@ describe("pages/api/widgets-catalog/install", () => {
       expect(res.statusCode).toBe(400);
       expect(readConfigDocument).not.toHaveBeenCalled();
     });
+
+    it("returns 400 when serviceName is missing", async () => {
+      readConfigDocument.mockReturnValue(parseDocument(SERVICES_FIXTURE));
+
+      const req = {
+        method: "POST",
+        body: { category: "service", mode: "attach", yamlSnippet: WIDGET_FRAGMENT },
+      };
+      const res = createMockRes();
+      await handler(req, res);
+
+      expect(res.statusCode).toBe(400);
+      expect(writeConfigDocument).not.toHaveBeenCalled();
+    });
   });
 
   describe("category: service, mode: new", () => {
@@ -195,6 +209,28 @@ describe("pages/api/widgets-catalog/install", () => {
           serviceName: "Sonarr",
           groupName: "Media",
           href: "http://sonarr2.local/",
+          description: "",
+          yamlSnippet: WIDGET_FRAGMENT,
+        },
+      };
+      const res = createMockRes();
+      await handler(req, res);
+
+      expect(res.statusCode).toBe(409);
+      expect(writeConfigDocument).not.toHaveBeenCalled();
+    });
+
+    it("returns 409 when the service name collides with a different group (global check, not per-group)", async () => {
+      readConfigDocument.mockReturnValue(parseDocument(SERVICES_FIXTURE));
+
+      const req = {
+        method: "POST",
+        body: {
+          category: "service",
+          mode: "new",
+          serviceName: "Plex",
+          groupName: "Downloads",
+          href: "http://plex2.local/",
           description: "",
           yamlSnippet: WIDGET_FRAGMENT,
         },
