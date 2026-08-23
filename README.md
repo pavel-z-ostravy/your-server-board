@@ -8,6 +8,11 @@
 
 # your-server-board
 
+> 🚧 **Work in progress.** This is an actively developed personal homelab
+> project, not a finished or production-hardened release — expect breaking
+> changes, incomplete features, and rough edges. See [`progress.md`](progress.md)
+> for exactly what's shipped, in progress, and planned.
+
 A self-hosted homelab dashboard for Proxmox — forked from [Homepage](https://github.com/gethomepage/homepage)
 and extended with real disk-health monitoring and Proxmox backup lifecycle
 management, the two things a homelab operator actually needs from a status
@@ -31,8 +36,19 @@ for exactly what in this repo is original vs. derivative.
   model, size, temperature, health status — confirmed against real hardware
   (a SATA SSD and a USB-enclosure NVMe drive), both reporting
   `"status": "ok"`.
+- **Dashboard layout, Proxmox host detail, widget catalog, and one-click
+  install deployed and live.** Drag-and-drop section reordering, a Proxmox
+  host status header (CPU/RAM/disk/uptime/PVE version/load) with IP address
+  and a process-detail toggle, a searchable `/widgets` catalog synced live
+  from upstream, and an "Install..." wizard that writes a chosen widget's
+  config directly into `services.yaml`/`widgets.yaml` (automatic backup
+  before every write, disclaimer + risk acknowledgement required). The
+  install feature explicitly has **no new authentication** yet — see
+  `progress.md` for what that means and what's planned to close it.
 - **Not yet implemented — tracked as separate follow-up plans**
-  (see `docs/superpowers/plans/`):
+  (see `docs/superpowers/plans/` and [`progress.md`](progress.md) for the
+  full list):
+  - Security hardening (auth) for the widget-install write path
   - Backup lifecycle management for Proxmox VMs/CTs (list/run/download/delete, retention)
   - Quick VM/CT actions (start/stop/reboot)
   - TOTP-based 2FA login
@@ -88,7 +104,9 @@ in front of it too.
 | Proxmox VM/CT status widget                                            | ✅ read-only           | unchanged (used for the live data above)               |
 | Disk health (SMART)                                                    | ❌ none                | ✅ live (dashboard section + `/api/disks`)             |
 | Drag-and-drop section reordering                                       | ❌ none                | ✅ live (drag whole dashboard sections into any order) |
+| Proxmox host status header (CPU/RAM/disk/uptime/PVE version/IP)        | ❌ none                | ✅ live (above the VM/LXC card grid)                   |
 | Widget catalog browser (search, live GitHub-synced, copy-to-clipboard) | ❌ none                | ✅ live (`/widgets` page)                              |
+| Widget one-click install (writes to services.yaml/widgets.yaml)        | ❌ none                | ✅ live, **no auth yet** — see `progress.md`           |
 | Backup lifecycle (list/run/download/delete/retention)                  | ❌ none                | planned                                                |
 | VM/CT power actions                                                    | ❌ none                | planned                                                |
 | Login                                                                  | optional password only | password today, TOTP 2FA planned                       |
