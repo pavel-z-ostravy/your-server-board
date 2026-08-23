@@ -2,6 +2,7 @@ import { Highlight, themes } from "prism-react-renderer";
 import { useContext, useRef, useState } from "react";
 import useSWR from "swr";
 
+import InstallWizardDialog from "components/widgets/InstallWizardDialog";
 import { ThemeContext } from "utils/contexts/theme";
 
 const fetcher = (url) =>
@@ -16,9 +17,10 @@ function matchesQuery(entry, query) {
   return entry.title.toLowerCase().includes(q) || entry.description.toLowerCase().includes(q);
 }
 
-function WidgetRow({ entry }) {
+function WidgetRow({ entry, category }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [installOpen, setInstallOpen] = useState(false);
   const preRef = useRef(null);
   const themeContext = useContext(ThemeContext);
 
@@ -69,9 +71,23 @@ function WidgetRow({ entry }) {
                   </pre>
                 )}
               </Highlight>
-              <button type="button" onClick={handleCopy} className="text-xs text-theme-500 dark:text-theme-300 mt-2">
-                {copied ? "Copied!" : "Copy"}
-              </button>
+              <div className="flex gap-3 mt-2">
+                <button type="button" onClick={handleCopy} className="text-xs text-theme-500 dark:text-theme-300">
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInstallOpen(true)}
+                  className="text-xs text-theme-500 dark:text-theme-300"
+                >
+                  Install...
+                </button>
+              </div>
+              <InstallWizardDialog
+                entry={{ ...entry, category }}
+                open={installOpen}
+                onClose={() => setInstallOpen(false)}
+              />
             </>
           ) : (
             <p className="text-theme-500 dark:text-theme-300">No example available.</p>
@@ -108,7 +124,7 @@ export default function WidgetsPage() {
             {data.services
               .filter((entry) => matchesQuery(entry, query))
               .map((entry) => (
-                <WidgetRow key={entry.slug} entry={entry} />
+                <WidgetRow key={entry.slug} entry={entry} category="service" />
               ))}
           </ul>
 
@@ -117,7 +133,7 @@ export default function WidgetsPage() {
             {data.info
               .filter((entry) => matchesQuery(entry, query))
               .map((entry) => (
-                <WidgetRow key={entry.slug} entry={entry} />
+                <WidgetRow key={entry.slug} entry={entry} category="info" />
               ))}
           </ul>
         </>

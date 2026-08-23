@@ -14,6 +14,20 @@ vi.mock("prism-react-renderer", () => ({
   themes: { nightOwl: {}, github: {} },
 }));
 
+vi.mock("components/widgets/InstallWizardDialog", () => ({
+  default: ({ entry, open, onClose }) =>
+    open ? (
+      <div>
+        <p>
+          Install dialog: {entry.title} ({entry.category})
+        </p>
+        <button type="button" onClick={onClose}>
+          Close dialog
+        </button>
+      </div>
+    ) : null,
+}));
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,6 +110,30 @@ describe("pages/widgets", () => {
 
     await waitFor(() => expect(screen.getByText("Copied!")).toBeInTheDocument());
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(catalogResponse.services[0].yamlExample);
+  });
+
+  it('shows an "Install..." button next to Copy and opens the install dialog with the entry', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(catalogResponse) });
+
+    renderWithSWR(<WidgetsPage />);
+    await waitFor(() => expect(screen.getByText("Plex")).toBeInTheDocument());
+
+    screen.getByText("Plex").click();
+    await waitFor(() => expect(screen.getByText("Install...")).toBeInTheDocument());
+
+    screen.getByText("Install...").click();
+    await waitFor(() => expect(screen.getByText("Install dialog: Plex (service)")).toBeInTheDocument());
+  });
+
+  it("does not show an Install button for a widget with no YAML example", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(catalogResponse) });
+
+    renderWithSWR(<WidgetsPage />);
+    await waitFor(() => expect(screen.getByText("Date & Time")).toBeInTheDocument());
+
+    screen.getByText("Date & Time").click();
+    await waitFor(() => expect(screen.getByText("No example available.")).toBeInTheDocument());
+    expect(screen.queryByText("Install...")).not.toBeInTheDocument();
   });
 
   it("shows a no-example message for a widget with no YAML block, and no Copy button", async () => {
