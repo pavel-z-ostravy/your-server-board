@@ -43,13 +43,19 @@ describe("widgets/nextdns/component", () => {
       error: undefined,
     });
 
-    renderWithProviders(<Component service={{ widget: { type: "nextdns" } }} />, { settings: { hideErrors: false } });
+    renderWithProviders(<Component service={{ widget: { type: "nextdns", profile: "abc123" } }} />, {
+      settings: { hideErrors: false },
+    });
 
-    expect(useWidgetAPI).toHaveBeenCalledWith({ type: "nextdns" }, "analytics/status");
+    expect(useWidgetAPI).toHaveBeenCalledWith({ type: "nextdns", profile: "abc123" }, "analytics/status");
     expect(screen.getByText("nextdns.active")).toBeInTheDocument();
     expect(screen.getByText("nextdns.offline")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("12")).toBeInTheDocument();
+    expect(screen.getByText("abc123")).toBeInTheDocument();
+    expect(screen.getByText("2a07:a8c0::ab:c123")).toBeInTheDocument();
+    expect(screen.getByText("2a07:a8c1::ab:c123")).toBeInTheDocument();
   });
 
   it("fetches the devices endpoint and renders a block per device when view is 'devices'", () => {
@@ -63,15 +69,19 @@ describe("widgets/nextdns/component", () => {
       error: undefined,
     });
 
-    renderWithProviders(<Component service={{ widget: { type: "nextdns", view: "devices" } }} />, {
+    renderWithProviders(<Component service={{ widget: { type: "nextdns", view: "devices", profile: "abc123" } }} />, {
       settings: { hideErrors: false },
     });
 
-    expect(useWidgetAPI).toHaveBeenCalledWith({ type: "nextdns", view: "devices" }, "analytics/devices");
+    expect(useWidgetAPI).toHaveBeenCalledWith(
+      { type: "nextdns", view: "devices", profile: "abc123" },
+      "analytics/devices",
+    );
     expect(screen.getByText("Living Room TV")).toBeInTheDocument();
     expect(screen.getByText("__UNIDENTIFIED__")).toBeInTheDocument();
     expect(screen.getByText("42")).toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
+    expect(screen.getByText("47")).toBeInTheDocument();
   });
 
   it("shows the waiting state for the devices view too, before data arrives", () => {

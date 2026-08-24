@@ -666,7 +666,11 @@
     },
     "nextdns": {
         "wait": "Please Wait",
-        "no_devices": "No Device Data Received"
+        "no_devices": "No Device Data Received",
+        "total_queries": "Total Queries",
+        "config_id": "Config ID",
+        "dns_primary": "DNS Server 1",
+        "dns_secondary": "DNS Server 2"
     },
     "mikrotik": {
         "cpuLoad": "CPU Load",
