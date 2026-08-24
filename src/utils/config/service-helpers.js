@@ -375,6 +375,9 @@ export function cleanServiceGroups(groups) {
           fit,
           stream,
 
+          // nextdns
+          profile,
+
           // openmediavault
           method,
 
@@ -554,6 +557,7 @@ export function cleanServiceGroups(groups) {
         }
         if (type === "nextdns") {
           if (view !== undefined) widget.view = view;
+          if (profile) widget.profile = profile;
         }
         if (["sonarr", "radarr"].includes(type)) {
           if (enableQueue !== undefined) widget.enableQueue = JSON.parse(enableQueue);

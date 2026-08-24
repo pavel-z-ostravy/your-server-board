@@ -321,7 +321,7 @@ describe("utils/config/service-helpers", () => {
                 enableUser: "true",
                 view: "both",
               },
-              { type: "nextdns", view: "devices" },
+              { type: "nextdns", view: "devices", profile: "abc123" },
               { type: "wgeasy", threshold: "10", version: "1" },
               { type: "technitium", range: "24h" },
               { type: "lubelogger", vehicleID: "12" },
@@ -368,7 +368,9 @@ describe("utils/config/service-helpers", () => {
         view: "both",
       }),
     );
-    expect(widgets.find((w) => w.type === "nextdns")).toEqual(expect.objectContaining({ view: "devices" }));
+    expect(widgets.find((w) => w.type === "nextdns")).toEqual(
+      expect.objectContaining({ view: "devices", profile: "abc123" }),
+    );
     expect(widgets.find((w) => w.type === "jellystat")).toEqual(expect.objectContaining({ days: 7 }));
     expect(widgets.find((w) => w.type === "lubelogger")).toEqual(expect.objectContaining({ vehicleID: 12 }));
   });
