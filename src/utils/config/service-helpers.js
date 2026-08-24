@@ -552,6 +552,9 @@ export function cleanServiceGroups(groups) {
         if (type === "tracearr") {
           if (view !== undefined) widget.view = view;
         }
+        if (type === "nextdns") {
+          if (view !== undefined) widget.view = view;
+        }
         if (["sonarr", "radarr"].includes(type)) {
           if (enableQueue !== undefined) widget.enableQueue = JSON.parse(enableQueue);
         }
