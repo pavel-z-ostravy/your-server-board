@@ -9,7 +9,7 @@
 
 ## Goals
 
-- A dedicated `/backups` page (same "own page, not a dashboard widget" pattern as `/disks` and `/widgets`) listing every VM/CT and, per guest, its existing backups: date, size, storage, and that storage's configured retention (`prune-backups`).
+- A dedicated `/backups` page (same "own page, not a dashboard widget" pattern `/widgets` uses today — confirmed with Pavel, who noted Disks used to be its own page too but was later relocated onto the main dashboard as a section; Backups stays a standalone page because it needs room for backup tables and run/delete dialogs, more like the Widgets catalog than a stat card) listing every VM/CT and, per guest, its existing backups: date, size, storage, and that storage's configured retention (`prune-backups`).
 - **List** — enumerate every storage on the guest's node with `backup` content enabled, and every backup file on each that belongs to that `vmid`.
 - **Run** — trigger an ad-hoc backup of a chosen VM/CT to a chosen storage right now (not tied to an existing scheduled vzdump job), with progress shown via task polling.
 - **Delete** — remove a specific backup file, gated by a type-to-confirm dialog (retype the VM/CT name) — stricter than the lightweight inline confirm the widget-uninstall feature uses, because losing a backup is a more serious mistake than losing a widget's config.
