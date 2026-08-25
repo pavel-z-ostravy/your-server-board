@@ -35,8 +35,9 @@ visitors; this file is the fuller running log.
   required "I understand the risk" checkbox. **Explicitly phase 1 of a
   two-phase plan** — this phase adds no new authentication/authorization;
   anyone who can already reach the dashboard can now also write to its
-  config through this feature. Hardening (auth around the write path) is
-  planned as a separate follow-up, not yet built.
+  config through this feature when `HOMEPAGE_AUTH_ENABLED` is off (the
+  default) — see "Widget-install write path hardening" below for what
+  happens when auth is turned on.
   - Spec: `docs/superpowers/specs/2026-08-23-widget-install-design.md`
   - Plan: `docs/superpowers/plans/2026-08-23-widget-install.md`
 - **Widget uninstall** — a trash-can icon on any live dashboard service card
@@ -51,12 +52,23 @@ visitors; this file is the fuller running log.
   `configWriter.writeConfigDocument` the install feature already uses.
   - Spec: `docs/superpowers/specs/2026-08-23-widget-uninstall-design.md`
   - Plan: `docs/superpowers/plans/2026-08-23-widget-uninstall.md`
+- **Widget-install write path hardening** (phase 2 of the install feature
+  above) — turned out the global `middleware.js` already gates every route,
+  including the widgets-catalog install/uninstall/services/installed
+  endpoints, whenever `HOMEPAGE_AUTH_ENABLED` is on: a route handler with its
+  own session check would never even run, since middleware intercepts first.
+  The actual gap was UX, not authorization — an unauthenticated `fetch()` to
+  any JSON API route followed the signin redirect and got HTML back,
+  breaking `res.json()` with a confusing parse error instead of a clean 401.
+  Fixed at the middleware level: unauthenticated requests to any `/api/...`
+  path now get `401 { error: "Unauthorized" }` instead of a redirect; page
+  routes still redirect to `/auth/signin` as before. Deliberately scoped to
+  this fix — Pavel declined the larger alternative of a separate write-gate
+  that would apply even with auth turned off, since that would contradict
+  this project's documented "no login at all by default" model.
 
 ## Not yet implemented — tracked as separate follow-up plans
 
-- **Security hardening for the widget-install write path** (phase 2 of the
-  install feature above) — authentication/authorization around
-  `POST /api/widgets-catalog/install` and `GET /api/widgets-catalog/services`.
 - Backup lifecycle management for Proxmox VMs/CTs (list/run/download/delete,
   retention)
 - Quick VM/CT actions (start/stop/reboot)
