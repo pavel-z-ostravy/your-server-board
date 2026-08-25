@@ -670,8 +670,10 @@
         "total_queries": "Total Queries",
         "blocked_queries": "Blocked Queries",
         "config_id": "Config ID",
-        "dns_primary": "DNS Server 1",
-        "dns_secondary": "DNS Server 2"
+        "dns_primary_v6": "DNS Server 1 (IPv6)",
+        "dns_secondary_v6": "DNS Server 2 (IPv6)",
+        "dns_primary_v4": "DNS Server 1 (IPv4)",
+        "dns_secondary_v4": "DNS Server 2 (IPv4)"
     },
     "mikrotik": {
         "cpuLoad": "CPU Load",

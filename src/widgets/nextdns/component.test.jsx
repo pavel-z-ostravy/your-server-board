@@ -59,6 +59,8 @@ describe("widgets/nextdns/component", () => {
     expect(screen.getByText("abc123")).toBeInTheDocument();
     expect(screen.getByText("2a07:a8c0::ab:c123")).toBeInTheDocument();
     expect(screen.getByText("2a07:a8c1::ab:c123")).toBeInTheDocument();
+    expect(screen.getByText("45.90.28.0")).toBeInTheDocument();
+    expect(screen.getByText("45.90.30.0")).toBeInTheDocument();
   });
 
   it("fetches the devices endpoint and renders a block per device when view is 'devices', keeping status totals", () => {
