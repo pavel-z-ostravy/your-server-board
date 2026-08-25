@@ -20,16 +20,19 @@ export default function Component({ service }) {
   const { widget } = service;
   const showDevices = widget.view === "devices";
 
-  const { data: nextdnsData, error: nextdnsError } = useWidgetAPI(
-    widget,
-    showDevices ? "analytics/devices" : "analytics/status",
-  );
+  // analytics/status is always fetched: it's the only endpoint that breaks queries down by
+  // status, which the total/blocked summary blocks need regardless of the selected view.
+  const { data: statusData, error: statusError } = useWidgetAPI(widget, "analytics/status");
+  const { data: devicesData, error: devicesError } = useWidgetAPI(widget, showDevices ? "analytics/devices" : "");
 
+  const nextdnsError = statusError || devicesError;
   if (nextdnsError) {
     return <Container service={service} error={nextdnsError} />;
   }
 
-  if (!nextdnsData) {
+  const breakdownData = showDevices ? devicesData : statusData;
+
+  if (!statusData || (showDevices && !devicesData)) {
     return (
       <Container service={service}>
         <Block key="status" label="widget.status" value={t("nextdns.wait")} />
@@ -37,7 +40,7 @@ export default function Component({ service }) {
     );
   }
 
-  if (!nextdnsData?.data?.length) {
+  if (!breakdownData?.data?.length) {
     return (
       <Container service={service}>
         <Block key="status" label="widget.status" value={t("nextdns.no_devices")} />
@@ -45,33 +48,28 @@ export default function Component({ service }) {
     );
   }
 
-  const totalQueries = nextdnsData.data.reduce((sum, d) => sum + d.queries, 0);
+  const totalQueries = statusData.data.reduce((sum, d) => sum + d.queries, 0);
+  const blockedQueries = statusData.data.filter((d) => d.status === "blocked").reduce((sum, d) => sum + d.queries, 0);
   const [primaryDns, secondaryDns] = dnsServerAddresses(widget.profile);
 
-  const infoBlocks = [
-    <Block key="total" label="nextdns.total_queries" value={t("common.number", { value: totalQueries })} />,
-    <Block key="config_id" label="nextdns.config_id" value={widget.profile} />,
-    <Block key="dns_primary" label="nextdns.dns_primary" value={primaryDns} />,
-    <Block key="dns_secondary" label="nextdns.dns_secondary" value={secondaryDns} />,
-  ];
-
-  if (showDevices) {
-    return (
-      <Container service={service}>
-        {infoBlocks}
-        {nextdnsData.data.map((d) => (
-          <Block key={d.id} label={d.name ?? d.id} value={t("common.number", { value: d.queries })} />
-        ))}
-      </Container>
-    );
-  }
-
   return (
-    <Container service={service}>
-      {infoBlocks}
-      {nextdnsData.data.map((d) => (
-        <Block key={d.status} label={d.status} value={t("common.number", { value: d.queries })} />
-      ))}
-    </Container>
+    <>
+      <Container service={service}>
+        <Block key="total" label="nextdns.total_queries" value={t("common.number", { value: totalQueries })} />
+        <Block key="blocked" label="nextdns.blocked_queries" value={t("common.number", { value: blockedQueries })} />
+        <Block key="config_id" label="nextdns.config_id" value={widget.profile} />
+        <Block key="dns_primary" label="nextdns.dns_primary" value={primaryDns} />
+        <Block key="dns_secondary" label="nextdns.dns_secondary" value={secondaryDns} />
+      </Container>
+      <Container service={service}>
+        {showDevices
+          ? breakdownData.data.map((d) => (
+              <Block key={d.id} label={d.name ?? d.id} value={t("common.number", { value: d.queries })} />
+            ))
+          : breakdownData.data.map((d) => (
+              <Block key={d.status} label={d.status} value={t("common.number", { value: d.queries })} />
+            ))}
+      </Container>
+    </>
   );
 }
