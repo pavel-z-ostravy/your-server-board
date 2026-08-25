@@ -41,6 +41,12 @@ export async function middleware(req) {
 
     const token = await getToken({ req, secret: authSecret });
     if (!token) {
+      // JSON API routes expect a JSON body they can parse - a redirect to an HTML signin
+      // page just breaks their `res.json()` call. Pages still get redirected to signin.
+      if (pathname.startsWith("/api/")) {
+        return withPrivateCache(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+      }
+
       const signInUrl = new URL("/auth/signin", req.url);
       signInUrl.searchParams.set("callbackUrl", "/");
       return withPrivateCache(NextResponse.redirect(signInUrl));

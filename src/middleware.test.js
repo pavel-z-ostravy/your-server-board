@@ -128,6 +128,48 @@ describe("middleware", () => {
     expect(String(res.url)).toContain("/auth/signin");
   });
 
+  it("returns a JSON 401 instead of redirecting for unauthenticated API requests", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_SECRET = "secret";
+
+    getToken.mockResolvedValueOnce(null);
+
+    const middleware = await loadMiddleware();
+    const res = await middleware(createReq("localhost:3000", "http://localhost:3000/api/widgets-catalog/install"));
+
+    expect(NextResponse.redirect).not.toHaveBeenCalled();
+    expect(NextResponse.json).toHaveBeenCalledWith({ error: "Unauthorized" }, { status: 401 });
+    expect(res.type).toBe("json");
+    expect(res.init.status).toBe(401);
+  });
+
+  it("marks the API 401 response private as well", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_SECRET = "secret";
+
+    getToken.mockResolvedValueOnce(null);
+
+    const middleware = await loadMiddleware();
+    const res = await middleware(createReq("localhost:3000", "http://localhost:3000/api/widgets-catalog/services"));
+
+    expect(res.type).toBe("json");
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
+  it("still redirects unauthenticated page requests to signin, not JSON", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_SECRET = "secret";
+
+    getToken.mockResolvedValueOnce(null);
+
+    const middleware = await loadMiddleware();
+    const res = await middleware(createReq("localhost:3000", "http://localhost:3000/widgets"));
+
+    expect(NextResponse.json).not.toHaveBeenCalled();
+    expect(res.type).toBe("redirect");
+    expect(String(res.url)).toContain("/auth/signin");
+  });
+
   it("allows requests when auth is enabled and a token is present", async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
     process.env.HOMEPAGE_AUTH_SECRET = "secret";
