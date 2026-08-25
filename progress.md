@@ -39,6 +39,18 @@ visitors; this file is the fuller running log.
   planned as a separate follow-up, not yet built.
   - Spec: `docs/superpowers/specs/2026-08-23-widget-install-design.md`
   - Plan: `docs/superpowers/plans/2026-08-23-widget-install.md`
+- **Widget uninstall** — a trash-can icon on any live dashboard service card
+  that currently has a widget removes just that service's `widget:` block
+  (the service tile itself stays, reverting to a plain link card), with a
+  lightweight inline confirm instead of a wizard. The `/widgets` catalog page
+  shows an "Installed on:" list with a trash-can per instance for every
+  installed entry, covering both service widgets and info widgets
+  (`resources`, `datetime`, `search`, ...) — info widgets have no
+  dashboard-side removal affordance yet, only the catalog page. Every removal
+  reuses the same backup-before-write, re-parse-validated
+  `configWriter.writeConfigDocument` the install feature already uses.
+  - Spec: `docs/superpowers/specs/2026-08-23-widget-uninstall-design.md`
+  - Plan: `docs/superpowers/plans/2026-08-23-widget-uninstall.md`
 
 ## Not yet implemented — tracked as separate follow-up plans
 
