@@ -33,9 +33,20 @@ import { SWRConfig } from "swr";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import WidgetsPage from "pages/widgets";
+import { ColorProvider } from "utils/contexts/color";
+import { ThemeProvider } from "utils/contexts/theme";
 
+// WidgetsPage renders SyncThemeColor, which reads ThemeContext/ColorContext -
+// both are undefined unless wrapped in their real providers, same as the
+// actual app tree in _app.jsx wraps every page.
 function renderWithSWR(ui) {
-  return render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>{ui}</SWRConfig>);
+  return render(
+    <ColorProvider>
+      <ThemeProvider>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>{ui}</SWRConfig>
+      </ThemeProvider>
+    </ColorProvider>,
+  );
 }
 
 const catalogResponse = {
@@ -68,6 +79,10 @@ beforeEach(() => {
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
     configurable: true,
   });
+
+  // jsdom doesn't implement matchMedia by default; ThemeProvider needs it.
+  window.matchMedia =
+    window.matchMedia || vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
 });
 
 describe("pages/widgets", () => {

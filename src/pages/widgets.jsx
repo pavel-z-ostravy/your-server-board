@@ -3,7 +3,9 @@ import { useContext, useMemo, useRef, useState } from "react";
 import { BiTrash } from "react-icons/bi";
 import useSWR from "swr";
 
+import SyncThemeColor from "components/layout/SyncThemeColor";
 import InstallWizardDialog from "components/widgets/InstallWizardDialog";
+import { getSettings } from "utils/config/config";
 import { ThemeContext } from "utils/contexts/theme";
 
 // Same card wrapper classes src/components/disks/group.jsx and
@@ -190,13 +192,19 @@ function WidgetRow({ entry, category, installed, mutateInstalled }) {
   );
 }
 
-export default function WidgetsPage() {
+export async function getStaticProps() {
+  const { providers, ...settings } = getSettings();
+  return { props: { initialSettings: settings } };
+}
+
+export default function WidgetsPage({ initialSettings }) {
   const { data, error } = useSWR("/api/widgets-catalog", fetcher);
   const { data: installed, mutate: mutateInstalled } = useSWR("/api/widgets-catalog/installed", fetcher);
   const [query, setQuery] = useState("");
 
   return (
     <div className="flex flex-col m-4 sm:m-8 sm:mt-16 mb-2">
+      <SyncThemeColor settings={initialSettings} />
       <h1 className="text-theme-800 dark:text-theme-300 text-xl font-medium mb-4">Widgets</h1>
 
       <input
