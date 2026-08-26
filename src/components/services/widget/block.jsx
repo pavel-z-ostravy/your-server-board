@@ -37,7 +37,7 @@ export default function Block({ value, highlightValue, label, field }) {
   return (
     <div
       className={classNames(
-        "bg-theme-200/50 dark:bg-theme-900/20 rounded-sm m-1 flex-1 min-w-0 flex flex-col items-center justify-center text-center p-1",
+        "bg-theme-200/50 dark:bg-theme-900/20 rounded-sm m-1 flex-1 min-w-[84px] flex flex-col items-center justify-center text-center p-1",
         value === undefined ? "animate-pulse" : "",
         highlightClass,
         "service-block",
