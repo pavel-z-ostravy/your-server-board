@@ -3,7 +3,7 @@ import { useContext, useMemo, useRef, useState } from "react";
 import { BiTrash } from "react-icons/bi";
 import useSWR from "swr";
 
-import SyncThemeColor from "components/layout/SyncThemeColor";
+import PageBackground from "components/layout/PageBackground";
 import InstallWizardDialog from "components/widgets/InstallWizardDialog";
 import { getSettings } from "utils/config/config";
 import { ThemeContext } from "utils/contexts/theme";
@@ -203,54 +203,55 @@ export default function WidgetsPage({ initialSettings }) {
   const [query, setQuery] = useState("");
 
   return (
-    <div className="flex flex-col m-4 sm:m-8 sm:mt-16 mb-2">
-      <SyncThemeColor settings={initialSettings} />
-      <h1 className="text-theme-800 dark:text-theme-300 text-xl font-medium mb-4">Widgets</h1>
+    <PageBackground initialSettings={initialSettings}>
+      <div className="flex flex-col m-4 sm:m-8 sm:mt-16 mb-2">
+        <h1 className="text-theme-800 dark:text-theme-300 text-xl font-medium mb-4">Widgets</h1>
 
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search widgets..."
-        className="mb-4 px-3 py-1.5 rounded-md bg-theme-200/50 dark:bg-theme-900/20 text-sm"
-      />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search widgets..."
+          className="mb-4 px-3 py-1.5 rounded-md bg-theme-200/50 dark:bg-theme-900/20 text-sm"
+        />
 
-      {error && <p className="text-rose-500/80">Failed to load widget catalog.</p>}
-      {!data && !error && <p className="text-theme-500 dark:text-theme-300 text-sm">Loading...</p>}
+        {error && <p className="text-rose-500/80">Failed to load widget catalog.</p>}
+        {!data && !error && <p className="text-theme-500 dark:text-theme-300 text-sm">Loading...</p>}
 
-      {data && (
-        <>
-          <h2 className="text-sm font-medium mt-2">Service Widgets</h2>
-          <ul>
-            {data.services
-              .filter((entry) => matchesQuery(entry, query))
-              .map((entry) => (
-                <WidgetRow
-                  key={entry.slug}
-                  entry={entry}
-                  category="service"
-                  installed={installed}
-                  mutateInstalled={mutateInstalled}
-                />
-              ))}
-          </ul>
+        {data && (
+          <>
+            <h2 className="text-sm font-medium mt-2">Service Widgets</h2>
+            <ul>
+              {data.services
+                .filter((entry) => matchesQuery(entry, query))
+                .map((entry) => (
+                  <WidgetRow
+                    key={entry.slug}
+                    entry={entry}
+                    category="service"
+                    installed={installed}
+                    mutateInstalled={mutateInstalled}
+                  />
+                ))}
+            </ul>
 
-          <h2 className="text-sm font-medium mt-4">Info Widgets</h2>
-          <ul>
-            {data.info
-              .filter((entry) => matchesQuery(entry, query))
-              .map((entry) => (
-                <WidgetRow
-                  key={entry.slug}
-                  entry={entry}
-                  category="info"
-                  installed={installed}
-                  mutateInstalled={mutateInstalled}
-                />
-              ))}
-          </ul>
-        </>
-      )}
-    </div>
+            <h2 className="text-sm font-medium mt-4">Info Widgets</h2>
+            <ul>
+              {data.info
+                .filter((entry) => matchesQuery(entry, query))
+                .map((entry) => (
+                  <WidgetRow
+                    key={entry.slug}
+                    entry={entry}
+                    category="info"
+                    installed={installed}
+                    mutateInstalled={mutateInstalled}
+                  />
+                ))}
+            </ul>
+          </>
+        )}
+      </div>
+    </PageBackground>
   );
 }
