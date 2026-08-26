@@ -66,11 +66,28 @@ visitors; this file is the fuller running log.
   this fix — Pavel declined the larger alternative of a separate write-gate
   that would apply even with auth turned off, since that would contradict
   this project's documented "no login at all by default" model.
+- **Backup lifecycle management** — a new `/backups` page lists every VM/CT
+  with an expandable table of its Proxmox backups (date, size, storage,
+  read-only retention from that storage's `prune-backups`), plus buttons to
+  trigger an immediate ad-hoc backup, download a backup (streamed through a
+  new forced-command SSH capability, never buffered — a backup archive can be
+  many GB), and delete one (gated by a type-to-confirm dialog, stricter than
+  the widget-uninstall feature's lightweight confirm, since losing a backup
+  is a more serious mistake). This is the first feature in this codebase that
+  mutates real state on the Proxmox host — everything before it was
+  read-only. Development caught and fixed a real path-traversal bug in the
+  first draft of the new forced-command's filename validation, and a real
+  regex bug that broke the run→poll flow 100% of the time in production
+  (surfaced only by the whole-branch final review, invisible to every
+  task-level test). Live-verified against the real Proxmox host: real
+  backups list correctly, the forced-command's security boundary rejects a
+  crafted path-traversal payload, and an ad-hoc backup was triggered for
+  real via `/backups`.
+  - Spec: `docs/superpowers/specs/2026-08-25-backup-lifecycle-design.md`
+  - Plan: `docs/superpowers/plans/2026-08-25-backup-lifecycle.md`
 
 ## Not yet implemented — tracked as separate follow-up plans
 
-- Backup lifecycle management for Proxmox VMs/CTs (list/run/download/delete,
-  retention)
 - Quick VM/CT actions (start/stop/reboot)
 - TOTP-based 2FA login
 - SMART/disk/backup-failure alerting and load history
@@ -91,6 +108,17 @@ visitors; this file is the fuller running log.
   single-user homelab dashboard; the automatic backup covers recovery.
 - No in-app restore UI for the timestamped `.bak` files — restoring a
   backup after a bad install is a manual file operation today.
+- Backup download logs an error line even for a normal client-cancelled
+  download (the SSH exit code is `null`, not `0`, on cancellation) — cosmetic
+  log noise, not a functional defect.
+- The "Backup running..." dialog has no way to close it if the status poll
+  fails persistently (vs. transiently) — strictly better than the pre-fix
+  behavior, but still no escape hatch beyond a page reload.
+- A failed post-delete list revalidation isn't surfaced to the user (the
+  delete itself succeeds and the dialog closes correctly either way).
+- `pveGet`-style helpers are now duplicated across four files
+  (`agentExec.js`, `backups.js`, `host/index.js`, `vms/index.js`) — worth
+  consolidating into a shared module in a future cleanup pass.
 
 ## How this project is being built
 
