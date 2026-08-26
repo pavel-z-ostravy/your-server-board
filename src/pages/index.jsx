@@ -204,12 +204,17 @@ function Index({ initialSettings, fallback }) {
   );
 }
 
+// mt-16 (unprefixed) reserves enough top clearance on mobile for the
+// absolutely-positioned hamburger button (NavHeader) not to overlap the
+// resource stats row - sm:mt-9 immediately below restores each variant's
+// original desktop top margin (previously just sm:m-9's implicit value),
+// since NavHeader doesn't collide with anything at that width.
 const headerStyles = {
   boxed:
-    "m-5 mb-0 sm:m-9 sm:mb-0 rounded-md shadow-md shadow-theme-900/10 dark:shadow-theme-900/20 bg-theme-100/20 dark:bg-white/5 p-3",
-  underlined: "m-5 mb-0 sm:m-9 sm:mb-1 border-b-2 pb-4 border-theme-800 dark:border-theme-200/50",
-  clean: "m-5 mb-0 sm:m-9 sm:mb-0",
-  boxedWidgets: "m-5 mb-0 sm:m-9 sm:mb-0 sm:mt-1",
+    "m-5 mb-0 mt-16 sm:m-9 sm:mb-0 sm:mt-9 rounded-md shadow-md shadow-theme-900/10 dark:shadow-theme-900/20 bg-theme-100/20 dark:bg-white/5 p-3",
+  underlined: "m-5 mb-0 mt-16 sm:m-9 sm:mb-1 sm:mt-9 border-b-2 pb-4 border-theme-800 dark:border-theme-200/50",
+  clean: "m-5 mb-0 mt-16 sm:m-9 sm:mb-0 sm:mt-9",
+  boxedWidgets: "m-5 mb-0 mt-16 sm:m-9 sm:mb-0 sm:mt-1",
 };
 
 function getAllServices(services) {

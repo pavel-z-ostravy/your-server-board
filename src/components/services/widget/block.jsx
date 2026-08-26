@@ -37,7 +37,7 @@ export default function Block({ value, highlightValue, label, field }) {
   return (
     <div
       className={classNames(
-        "bg-theme-200/50 dark:bg-theme-900/20 rounded-sm m-1 flex-1 flex flex-col items-center justify-center text-center p-1",
+        "bg-theme-200/50 dark:bg-theme-900/20 rounded-sm m-1 flex-1 min-w-0 flex flex-col items-center justify-center text-center p-1",
         value === undefined ? "animate-pulse" : "",
         highlightClass,
         "service-block",
@@ -45,9 +45,12 @@ export default function Block({ value, highlightValue, label, field }) {
       data-highlight-level={highlight?.level}
       data-highlight-source={highlight?.source}
     >
-      <div className="font-thin text-sm">{value === undefined || value === null ? "-" : value}</div>
+      <div className="font-thin text-sm break-words">{value === undefined || value === null ? "-" : value}</div>
       <div
-        className={classNames("font-bold text-xs uppercase", applyToValueOnly && "text-theme-700 dark:text-theme-200")}
+        className={classNames(
+          "font-bold text-xs uppercase break-words",
+          applyToValueOnly && "text-theme-700 dark:text-theme-200",
+        )}
       >
         {t(label)}
       </div>

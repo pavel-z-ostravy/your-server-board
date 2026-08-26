@@ -61,7 +61,7 @@ export default function Container({ error = false, children, service }) {
       }),
     );
   }
-  const content = <div className="relative flex flex-row w-full service-container">{visibleChildren}</div>;
+  const content = <div className="relative flex flex-row flex-wrap w-full service-container">{visibleChildren}</div>;
 
   if (!highlightConfig) {
     return content;
