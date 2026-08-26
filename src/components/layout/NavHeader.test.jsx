@@ -60,4 +60,11 @@ describe("components/layout/NavHeader", () => {
     expect(widgetsLink).toBeInTheDocument();
     expect(widgetsLink).toHaveAttribute("href", "/widgets");
   });
+
+  it("links to both the Widgets catalog and the Backups page", () => {
+    render(<NavHeader />);
+
+    expect(screen.getByRole("link", { name: /Widgets/ })).toHaveAttribute("href", "/widgets");
+    expect(screen.getByRole("link", { name: /Backups/ })).toHaveAttribute("href", "/backups");
+  });
 });
