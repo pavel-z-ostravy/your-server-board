@@ -85,6 +85,53 @@ visitors; this file is the fuller running log.
   real via `/backups`.
   - Spec: `docs/superpowers/specs/2026-08-25-backup-lifecycle-design.md`
   - Plan: `docs/superpowers/plans/2026-08-25-backup-lifecycle.md`
+- **NextDNS widget enhancements** — surfaces account-level context that
+  disappeared when switching to `widget.view: devices`: total queries,
+  blocked queries, the NextDNS config ID, and the profile's DNS server
+  addresses (IPv6 first, then the generic IPv4 anycast pair, since NextDNS
+  doesn't expose per-profile IPv4 addresses). Verified against the real
+  NextDNS dashboard. Laid out as two visual rows — an account-summary row,
+  then the per-client breakdown — after a single combined row read as
+  confusing once both were present.
+- **Page styling/theme unification** — `/widgets` and `/backups` now match
+  the dashboard: same card classes, same wallpaper background, and the same
+  color/theme settings from `settings.yaml` (previously only the dashboard
+  applied them). Caught a real bug in the process: both pages used
+  `getStaticProps`, which this Docker image's multi-stage build evaluates
+  *before* the real `config/` volume is mounted, so they silently served
+  whatever the auto-copied template config contained at build time, not the
+  user's actual settings — fixed by switching both to
+  `getServerSideProps`. Nav order changed so Backups appears above Widgets.
+- **Proxmox host configuration backup** — a "Proxmox Configuration" card at
+  the top of `/backups` streams a fresh `tar` of `/etc/pve` (the
+  cluster/storage/VM-config filesystem the Proxmox host itself relies on,
+  not a VM/CT disk image) on demand, through a new parameterless
+  forced-command SSH entry. Tiny and cheap to generate compared to a VM/CT
+  backup, so there's no list/run/delete lifecycle, just download.
+- **Mobile responsiveness fixes** — three bugs found testing at a real
+  390×844 viewport (Chrome's OS-window resize floor at 500px had been
+  silently masking all three in earlier "mobile" checks): (1) the shared
+  widget `Block`/`Container` components let flex items shrink without
+  limit, so a widget with many fields (e.g. NextDNS's 7 blocks) crammed
+  onto one line and either overflowed the page horizontally, or — once
+  `flex-wrap`/`min-w-0` were added — shrank to unreadable ~47px columns
+  where multi-character values wrapped one character per line; fixed with a
+  real `min-width` (84px) so rows wrap into a readable grid instead; (2)
+  the hamburger nav button had no top clearance on mobile, overlapping the
+  page heading on `/widgets`/`/backups` and the resource-stats row on the
+  dashboard; (3) the hamburger button is a sibling of the scrollable
+  content container, absolutely positioned against the document root
+  rather than the viewport, so it never scrolls away — with no background
+  at rest it visually merged with whatever content scrolled underneath it
+  (e.g. the Proxmox card's "Host" label). Fixed with a persistent
+  semi-opaque backdrop.
+- **Card visibility/contrast pass** — the card background/shadow shared by
+  Disks, Proxmox, Backups, and Widgets was subtle enough to be hard to
+  distinguish from the page background; bumped background opacity and
+  shadow one notch and added a hairline border on all four. The Proxmox
+  "Host" summary previously had no card background at all (just a bottom
+  divider) despite sitting directly above VM/CT cards that do have one —
+  given the same card treatment for visual consistency.
 
 ## Not yet implemented — tracked as separate follow-up plans
 
@@ -119,6 +166,11 @@ visitors; this file is the fuller running log.
 - `pveGet`-style helpers are now duplicated across four files
   (`agentExec.js`, `backups.js`, `host/index.js`, `vms/index.js`) — worth
   consolidating into a shared module in a future cleanup pass.
+- The `CARD_CLASS`/`STAT_CLASS` style strings are duplicated across five
+  files (`disks/group.jsx`, `proxmox-vms/group.jsx`, `backups/vm-list.jsx`,
+  `backups/config-backup.jsx`, `pages/widgets.jsx`) instead of a shared
+  constant — every visual tweak (e.g. the contrast pass above) currently
+  means editing all five in lockstep.
 
 ## How this project is being built
 
