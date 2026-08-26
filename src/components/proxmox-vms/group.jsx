@@ -21,7 +21,7 @@ const STAT_CLASS =
 // Same card wrapper classes src/components/services/item.jsx uses, including its
 // trailing "service-card" hook class (custom user CSS / cardBlur target it).
 const CARD_CLASS =
-  "transition-all mb-2 p-3 rounded-md font-medium text-theme-700 dark:text-theme-200 shadow-md shadow-theme-900/10 dark:shadow-theme-900/20 bg-theme-100/20 dark:bg-white/5 relative overflow-clip service-card";
+  "transition-all mb-2 p-3 rounded-md font-medium text-theme-700 dark:text-theme-200 border border-theme-300/30 dark:border-theme-500/20 shadow-md shadow-theme-900/20 dark:shadow-theme-900/40 bg-theme-100/30 dark:bg-white/10 relative overflow-clip service-card";
 
 // Throw on non-ok responses so SWR's `error` populates correctly instead of
 // resolving "successfully" with an API error body (e.g. { error: "..." } from a
@@ -56,7 +56,7 @@ function Stat({ value, label }) {
 // status - the "parent" row for the "children" grid below it. `status` and
 // `error` come from an independent SWR call in ProxmoxVmsGroup, so a
 // host-status failure never blocks the VM grid from rendering.
-function NodeStatusHeader({ status, error }) {
+function NodeStatusHeader({ status, error, cardClassName }) {
   // Hooks must run unconditionally on every render (Rules of Hooks), so
   // these are declared before the error/loading early returns below, even
   // though those returns mean this state is sometimes irrelevant.
@@ -104,11 +104,7 @@ function NodeStatusHeader({ status, error }) {
     : "-";
 
   return (
-    <div
-      className="mb-2 pb-2 border-b border-theme-300/30 dark:border-theme-500/10"
-      data-testid="node-status-header"
-      data-status={status.status}
-    >
+    <div className={cardClassName} data-testid="node-status-header" data-status={status.status}>
       <div className="flex items-center justify-between mb-1">
         <span className="text-sm font-medium">Host</span>
         <div className="flex items-center gap-2">
@@ -307,7 +303,7 @@ export default function ProxmoxVmsGroup() {
         </button>
       </div>
 
-      <NodeStatusHeader status={hostStatus} error={hostError} />
+      <NodeStatusHeader status={hostStatus} error={hostError} cardClassName={cardClassName} />
 
       <span className="text-sm font-medium">Virtual Machines</span>
 

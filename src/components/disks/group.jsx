@@ -23,7 +23,7 @@ const STAT_CLASS =
 // Same card wrapper classes src/components/services/item.jsx uses, including its
 // trailing "service-card" hook class (custom user CSS / cardBlur target it).
 const CARD_CLASS =
-  "transition-all mb-2 p-3 rounded-md font-medium text-theme-700 dark:text-theme-200 shadow-md shadow-theme-900/10 dark:shadow-theme-900/20 bg-theme-100/20 dark:bg-white/5 relative overflow-clip service-card";
+  "transition-all mb-2 p-3 rounded-md font-medium text-theme-700 dark:text-theme-200 border border-theme-300/30 dark:border-theme-500/20 shadow-md shadow-theme-900/20 dark:shadow-theme-900/40 bg-theme-100/30 dark:bg-white/10 relative overflow-clip service-card";
 
 // Throw on non-ok responses so SWR's `error` populates correctly instead of
 // resolving "successfully" with an API error body (e.g. { error: "..." } from a

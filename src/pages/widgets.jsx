@@ -13,7 +13,7 @@ import { ThemeContext } from "utils/contexts/theme";
 // hook class, so this page reads as native dashboard UI rather than a
 // separate list-y page.
 const CARD_CLASS =
-  "transition-all mb-2 p-3 rounded-md font-medium text-theme-700 dark:text-theme-200 shadow-md shadow-theme-900/10 dark:shadow-theme-900/20 bg-theme-100/20 dark:bg-white/5 relative overflow-clip service-card";
+  "transition-all mb-2 p-3 rounded-md font-medium text-theme-700 dark:text-theme-200 border border-theme-300/30 dark:border-theme-500/20 shadow-md shadow-theme-900/20 dark:shadow-theme-900/40 bg-theme-100/30 dark:bg-white/10 relative overflow-clip service-card";
 
 const fetcher = (url) =>
   fetch(url).then((r) => {
