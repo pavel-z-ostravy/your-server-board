@@ -45,10 +45,10 @@ export default function Block({ value, highlightValue, label, field }) {
       data-highlight-level={highlight?.level}
       data-highlight-source={highlight?.source}
     >
-      <div className="font-thin text-sm break-words">{value === undefined || value === null ? "-" : value}</div>
+      <div className="w-full font-thin text-sm break-words">{value === undefined || value === null ? "-" : value}</div>
       <div
         className={classNames(
-          "font-bold text-xs uppercase break-words",
+          "w-full font-bold text-xs uppercase break-words",
           applyToValueOnly && "text-theme-700 dark:text-theme-200",
         )}
       >
