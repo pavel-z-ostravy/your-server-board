@@ -2,10 +2,13 @@
 
 This key can only run `lsblk`, `smartctl -j -a <device>`, `df`, `lvs`,
 `pvs`, a fixed host-level `ps` (process listing for the Proxmox host
-itself), or `pct exec <vmid> -- ...` (process listing and OS-release probe
-for a specific container) (each a single fixed, read-only, parameterless,
-path-validated, or vmid-validated command) — nothing else — enforced
-server-side by a forced command, not just by client-side discipline.
+itself), `pct exec <vmid> -- ...` (process listing and OS-release probe
+for a specific container), or `cat-backup <storage>:<volid>` (streams one
+backup archive's bytes, after validating the storage id and vzdump
+filename shape and resolving the real path via Proxmox's own `pvesm path`)
+(each a single fixed, read-only, parameterless, path-validated, or
+vmid-validated command) — nothing else — enforced server-side by a forced
+command, not just by client-side discipline.
 
 If you ran `./install.sh`, it already did step 1 for you and printed the
 step 2/3 instructions on screen — it does not copy the script or edit
@@ -19,7 +22,9 @@ whenever this file changes. The forced-command script lives on the Proxmox
 host, not on the app's own host, so deploying a new version of the app does
 NOT update it automatically. If you skip this, LXC process/OS-detail fetches and the Proxmox host's own
 Details toggle will fail with `refused: command not permitted for this key`
-until you re-copy the script.
+until you re-copy the script. As of the Backup Lifecycle Management plan,
+this also applies to the `/backups` page's Download button, which uses the
+same key's new `cat-backup` command.
 
 1. Generate a dedicated keypair (run on your workstation, not the Proxmox host).
    Generate it under `config/ssh/` (gitignored) — not the repo root, which is

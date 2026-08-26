@@ -80,6 +80,51 @@ case "$cmd" in
     esac
     exec pct exec "$vmid" -- sh -c 'cat /etc/os-release 2>/dev/null; echo ---; (stat -c %Y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || echo none)'
     ;;
+  "cat-backup "*)
+    rest="${cmd#cat-backup }"
+    storage="${rest%%:*}"
+    aftercolon="${rest#*:}"
+    case "$storage" in
+      ''|*[!A-Za-z0-9_-]*)
+        echo "refused: invalid storage id" >&2
+        exit 1
+        ;;
+    esac
+    case "$aftercolon" in
+      backup/vzdump-qemu-*|backup/vzdump-lxc-*)
+        ;;
+      *)
+        echo "refused: invalid backup path" >&2
+        exit 1
+        ;;
+    esac
+    filename="${aftercolon#backup/}"
+    case "$filename" in
+      vzdump-qemu-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].vma|\
+      vzdump-qemu-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].vma.gz|\
+      vzdump-qemu-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].vma.zst|\
+      vzdump-lxc-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].tar|\
+      vzdump-lxc-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].tar.gz|\
+      vzdump-lxc-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].tar.zst)
+        ;;
+      *)
+        echo "refused: invalid backup filename" >&2
+        exit 1
+        ;;
+    esac
+    path=$(pvesm path "${storage}:backup/${filename}") || {
+      echo "refused: could not resolve backup path" >&2
+      exit 1
+    }
+    case "$path" in
+      /*) ;;
+      *)
+        echo "refused: resolved path not absolute" >&2
+        exit 1
+        ;;
+    esac
+    exec cat "$path"
+    ;;
   *)
     echo "refused: command not permitted for this key" >&2
     exit 1
