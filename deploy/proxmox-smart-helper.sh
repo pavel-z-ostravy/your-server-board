@@ -91,7 +91,13 @@ case "$cmd" in
         ;;
     esac
     case "$aftercolon" in
-      backup/vzdump-qemu-*|backup/vzdump-lxc-*)
+      backup/vzdump-qemu-*)
+        vmtype_prefix="vzdump-qemu-"
+        vmtype=qemu
+        ;;
+      backup/vzdump-lxc-*)
+        vmtype_prefix="vzdump-lxc-"
+        vmtype=lxc
         ;;
       *)
         echo "refused: invalid backup path" >&2
@@ -99,19 +105,38 @@ case "$cmd" in
         ;;
     esac
     filename="${aftercolon#backup/}"
-    case "$filename" in
-      vzdump-qemu-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].vma|\
-      vzdump-qemu-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].vma.gz|\
-      vzdump-qemu-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].vma.zst|\
-      vzdump-lxc-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].tar|\
-      vzdump-lxc-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].tar.gz|\
-      vzdump-lxc-[0-9]*-[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].tar.zst)
-        ;;
-      *)
-        echo "refused: invalid backup filename" >&2
+    vmid_and_suffix="${filename#"$vmtype_prefix"}"
+    vmid="${vmid_and_suffix%%-*}"
+    case "$vmid" in
+      ''|*[!0-9]*)
+        echo "refused: invalid vmid in backup filename" >&2
         exit 1
         ;;
     esac
+    suffix="${vmid_and_suffix#"$vmid"-}"
+    if [ "$vmtype" = qemu ]; then
+      case "$suffix" in
+        [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].vma|\
+        [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].vma.gz|\
+        [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].vma.zst)
+          ;;
+        *)
+          echo "refused: invalid backup filename" >&2
+          exit 1
+          ;;
+      esac
+    else
+      case "$suffix" in
+        [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].tar|\
+        [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].tar.gz|\
+        [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]-[0-9][0-9]_[0-9][0-9]_[0-9][0-9].tar.zst)
+          ;;
+        *)
+          echo "refused: invalid backup filename" >&2
+          exit 1
+          ;;
+      esac
+    fi
     path=$(pvesm path "${storage}:backup/${filename}") || {
       echo "refused: could not resolve backup path" >&2
       exit 1
