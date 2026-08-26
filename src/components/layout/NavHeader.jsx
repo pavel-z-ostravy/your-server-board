@@ -17,7 +17,7 @@ export default function NavHeader() {
       <Menu as="div" className="relative inline-block text-left">
         <Menu.Button
           aria-label="Open menu"
-          className="flex items-center justify-center w-8 h-8 rounded-md text-theme-500 dark:text-theme-300 hover:bg-theme-200/50 dark:hover:bg-theme-900/40"
+          className="flex items-center justify-center w-8 h-8 rounded-md text-theme-500 dark:text-theme-300 bg-theme-100/50 dark:bg-theme-900/50 backdrop-blur-sm hover:bg-theme-200/70 dark:hover:bg-theme-900/70"
         >
           <BiMenu size={20} />
         </Menu.Button>
