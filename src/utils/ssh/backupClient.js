@@ -13,11 +13,10 @@ export const SSH_CONNECT_TIMEOUT_MS = 15000;
 const VOLID_PATTERN =
   /^[A-Za-z0-9_-]+:backup\/vzdump-(qemu|lxc)-\d+-\d{4}_\d{2}_\d{2}-\d{2}_\d{2}_\d{2}\.(vma(\.(gz|zst))?|tar(\.(gz|zst))?)$/;
 
-export function streamBackupFile(sshConfig, volid) {
-  if (!VOLID_PATTERN.test(volid)) {
-    return Promise.reject(new Error(`Refusing to stream unsafe backup path: ${volid}`));
-  }
-
+// Shared connect/exec/settle skeleton for both streamBackupFile and
+// streamConfigBackup below - each just picks a different forced-command
+// string to run on the same restricted SSH key.
+function execAndStreamCommand(sshConfig, command) {
   return new Promise((resolve, reject) => {
     const conn = new Client();
     let settled = false;
@@ -38,7 +37,7 @@ export function streamBackupFile(sshConfig, volid) {
 
     conn
       .on("ready", () => {
-        conn.exec(`cat-backup ${volid}`, (err, stream) => {
+        conn.exec(command, (err, stream) => {
           if (err) {
             conn.end();
             settle(reject, err);
@@ -58,4 +57,18 @@ export function streamBackupFile(sshConfig, volid) {
         privateKey: readFileSync(sshConfig.privateKeyPath),
       });
   });
+}
+
+export function streamBackupFile(sshConfig, volid) {
+  if (!VOLID_PATTERN.test(volid)) {
+    return Promise.reject(new Error(`Refusing to stream unsafe backup path: ${volid}`));
+  }
+
+  return execAndStreamCommand(sshConfig, `cat-backup ${volid}`);
+}
+
+// No parameters at all - the forced command on the Proxmox host runs a
+// single fixed `tar czf - -C / etc/pve`, so there's nothing here to validate.
+export function streamConfigBackup(sshConfig) {
+  return execAndStreamCommand(sshConfig, "pve-config-backup");
 }

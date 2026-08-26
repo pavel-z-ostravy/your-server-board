@@ -150,6 +150,9 @@ case "$cmd" in
     esac
     exec cat "$path"
     ;;
+  "pve-config-backup")
+    exec tar czf - -C / etc/pve
+    ;;
   *)
     echo "refused: command not permitted for this key" >&2
     exit 1

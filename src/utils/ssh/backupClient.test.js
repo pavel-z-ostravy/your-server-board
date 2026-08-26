@@ -42,7 +42,7 @@ class FakeClient extends EventEmitter {
 
 vi.mock("ssh2", () => ({ Client: FakeClient }));
 
-const { SSH_CONNECT_TIMEOUT_MS, streamBackupFile } = await import("./backupClient");
+const { SSH_CONNECT_TIMEOUT_MS, streamBackupFile, streamConfigBackup } = await import("./backupClient");
 
 const sshConfig = { host: "proxmox.local", username: "root", privateKeyPath: "/fake/key" };
 
@@ -99,6 +99,49 @@ describe("streamBackupFile", () => {
     const endSpy = vi.spyOn(FakeClient.prototype, "end");
 
     await expect(streamBackupFile(sshConfig, VALID_VOLID)).rejects.toThrow("connection refused");
+    expect(endSpy).toHaveBeenCalled();
+
+    endSpy.mockRestore();
+  });
+});
+
+describe("streamConfigBackup", () => {
+  it("resolves with the live stream and connection, running the fixed pve-config-backup command", async () => {
+    const result = await streamConfigBackup(sshConfig);
+
+    expect(result.stream).toBeInstanceOf(EventEmitter);
+    expect(result.conn).toBeInstanceOf(FakeClient);
+    expect(result.conn.lastCommand).toBe("pve-config-backup");
+  });
+
+  it("rejects when the SSH connection itself errors", async () => {
+    connectBehavior = "error";
+
+    await expect(streamConfigBackup(sshConfig)).rejects.toThrow("connection refused");
+  });
+
+  it("rejects when exec itself fails", async () => {
+    execBehavior = "exec-error";
+
+    await expect(streamConfigBackup(sshConfig)).rejects.toThrow("exec failed");
+  });
+
+  it("rejects if the SSH connection never becomes ready, within the configured timeout", async () => {
+    vi.useFakeTimers();
+    connectBehavior = "hang";
+
+    const promise = streamConfigBackup(sshConfig);
+    const assertion = expect(promise).rejects.toThrow(/timed out/i);
+
+    await vi.advanceTimersByTimeAsync(SSH_CONNECT_TIMEOUT_MS);
+    await assertion;
+  });
+
+  it("cleans up the connection when the SSH connection itself errors", async () => {
+    connectBehavior = "error";
+    const endSpy = vi.spyOn(FakeClient.prototype, "end");
+
+    await expect(streamConfigBackup(sshConfig)).rejects.toThrow("connection refused");
     expect(endSpy).toHaveBeenCalled();
 
     endSpy.mockRestore();
