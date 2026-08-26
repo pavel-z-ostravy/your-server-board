@@ -2,9 +2,22 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { SWRConfig } from "swr";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import RunBackupDialog from "./run-backup-dialog";
+
+// Each test reuses the same node/vmid, so without a per-test SWR cache the
+// storages fetch from one test's SWR cache would bleed into the next (SWR's
+// default cache is a module-level singleton). Isolate it here per SWR's own
+// documented pattern for resetting the cache between test cases:
+// https://swr.vercel.app/docs/advanced/cache#reset-cache-between-test-cases
+const renderDialog = (props) =>
+  render(
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <RunBackupDialog {...props} />
+    </SWRConfig>,
+  );
 
 describe("components/backups/run-backup-dialog", () => {
   beforeEach(() => {
@@ -18,7 +31,7 @@ describe("components/backups/run-backup-dialog", () => {
       json: () => Promise.resolve({ storages: [{ storage: "local", prunePolicy: null }] }),
     });
 
-    render(<RunBackupDialog open node="proxmox" vmid="100" onClose={vi.fn()} onDone={vi.fn()} />);
+    renderDialog({ open: true, node: "proxmox", vmid: "100", onClose: vi.fn(), onDone: vi.fn() });
 
     expect(screen.getByRole("button", { name: "Start" })).toBeDisabled();
 
@@ -39,7 +52,7 @@ describe("components/backups/run-backup-dialog", () => {
       .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ status: "stopped", exitstatus: "OK" }) });
 
     const onDone = vi.fn();
-    render(<RunBackupDialog open node="proxmox" vmid="100" onClose={vi.fn()} onDone={onDone} />);
+    renderDialog({ open: true, node: "proxmox", vmid: "100", onClose: vi.fn(), onDone });
 
     await waitFor(() => expect(screen.getByRole("option", { name: "local" })).toBeInTheDocument());
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "local" } });
@@ -58,7 +71,7 @@ describe("components/backups/run-backup-dialog", () => {
       })
       .mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ error: "Backup already running" }) });
 
-    render(<RunBackupDialog open node="proxmox" vmid="100" onClose={vi.fn()} onDone={vi.fn()} />);
+    renderDialog({ open: true, node: "proxmox", vmid: "100", onClose: vi.fn(), onDone: vi.fn() });
 
     await waitFor(() => expect(screen.getByRole("option", { name: "local" })).toBeInTheDocument());
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "local" } });

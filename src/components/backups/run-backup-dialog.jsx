@@ -1,7 +1,7 @@
 // src/components/backups/run-backup-dialog.jsx
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import { useEffect, useState } from "react";
-import useSWR, { SWRConfig } from "swr";
+import useSWR from "swr";
 
 const fetcher = (url) =>
   fetch(url).then((r) => {
@@ -11,21 +11,7 @@ const fetcher = (url) =>
 
 const POLL_INTERVAL_MS = 2000;
 
-// Give each dialog instance its own SWR cache instead of sharing the global
-// one. Without this, reusing the same storages key across multiple mounts
-// (e.g. opening the dialog for the same node twice) can serve stale cached
-// data instead of issuing a fresh request.
-const swrCacheProvider = () => new Map();
-
-export default function RunBackupDialog(props) {
-  return (
-    <SWRConfig value={{ provider: swrCacheProvider }}>
-      <RunBackupDialogInner {...props} />
-    </SWRConfig>
-  );
-}
-
-function RunBackupDialogInner({ open, node, vmid, onClose, onDone }) {
+export default function RunBackupDialog({ open, node, vmid, onClose, onDone }) {
   const [storage, setStorage] = useState("");
   const [upid, setUpid] = useState(null);
   const [result, setResult] = useState(null);
