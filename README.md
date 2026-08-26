@@ -73,7 +73,10 @@ for exactly what in this repo is original vs. derivative.
    dashboard publicly (e.g. via a Cloudflare Tunnel), replace it with a
    token scoped to a custom least-privilege Proxmox role — verify exact
    privilege names against current Proxmox ACL docs when doing so, rather
-   than guessing them.
+   than guessing them. If you use the `/backups` page, that role also needs
+   `VM.Backup` (trigger an ad-hoc backup), `Datastore.AllocateSpace`
+   (write/delete backup content), and `Datastore.Audit` (list backup
+   content and storage retention settings).
 
    Also uncomment and fill in the `smart:` block in the same file, pointing
    at the SSH key `install.sh` just generated — see
