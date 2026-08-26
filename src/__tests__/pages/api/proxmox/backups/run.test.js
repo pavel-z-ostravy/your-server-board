@@ -32,14 +32,15 @@ it("returns 400 for an invalid storage parameter", async () => {
 });
 
 it("starts a backup and returns the upid", async () => {
-  startBackup.mockResolvedValue({ upid: "UPID:proxmox:...:" });
+  const upid = "UPID:proxmox:00001234:00005678:6501234A:vzdump:100:root@pam!ysb:";
+  startBackup.mockResolvedValue({ upid });
   const res = createMockRes();
 
   await handler({ method: "POST", body: { node: "proxmox", vmid: "100", storage: "local" } }, res);
 
   expect(startBackup).toHaveBeenCalledWith(pveConfig, "proxmox", "100", "local");
   expect(res.status).toHaveBeenCalledWith(200);
-  expect(res.json).toHaveBeenCalledWith({ upid: "UPID:proxmox:...:" });
+  expect(res.json).toHaveBeenCalledWith({ upid });
 });
 
 it("returns 500 when startBackup throws", async () => {

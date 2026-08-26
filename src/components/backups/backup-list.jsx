@@ -1,5 +1,5 @@
 // src/components/backups/backup-list.jsx
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import useSWR, { mutate } from "swr";
 
 import DeleteConfirmDialog from "./delete-confirm-dialog";
@@ -35,10 +35,15 @@ export default function BackupList({ node, vmid, vmName }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const handleDelete = async (volid) => {
-    const res = await fetch(
-      `/api/proxmox/backups/delete?node=${encodeURIComponent(node)}&volid=${encodeURIComponent(volid)}`,
-      { method: "DELETE" },
-    );
+    let res;
+    try {
+      res = await fetch(
+        `/api/proxmox/backups/delete?node=${encodeURIComponent(node)}&volid=${encodeURIComponent(volid)}`,
+        { method: "DELETE" },
+      );
+    } catch {
+      return { ok: false, error: "Network error - failed to delete backup" };
+    }
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       return { ok: false, error: body.error ?? "Failed to delete backup" };
@@ -46,6 +51,8 @@ export default function BackupList({ node, vmid, vmName }) {
     await mutate(listKey);
     return { ok: true };
   };
+
+  const handleBackupDone = useCallback(() => mutate(listKey), [listKey]);
 
   if (error) {
     return <p className="text-xs text-rose-500/80">Failed to load backups.</p>;
@@ -106,7 +113,7 @@ export default function BackupList({ node, vmid, vmName }) {
         node={node}
         vmid={vmid}
         onClose={() => setRunOpen(false)}
-        onDone={() => mutate(listKey)}
+        onDone={handleBackupDone}
       />
       <DeleteConfirmDialog
         open={deleteTarget !== null}

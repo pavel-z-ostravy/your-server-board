@@ -55,6 +55,7 @@ it("returns 500 when SMART SSH configuration is missing", async () => {
 it("sets download headers and pipes the stream on success", async () => {
   const fakeStream = new EventEmitter();
   fakeStream.pipe = vi.fn();
+  fakeStream.stderr = new EventEmitter();
   const fakeConn = { end: vi.fn() };
   streamBackupFile.mockResolvedValue({ stream: fakeStream, conn: fakeConn });
 
@@ -86,6 +87,7 @@ it("returns 500 when opening the SSH stream fails", async () => {
 it("cleans up the SSH connection when the stream closes", async () => {
   const fakeStream = new EventEmitter();
   fakeStream.pipe = vi.fn();
+  fakeStream.stderr = new EventEmitter();
   const fakeConn = { end: vi.fn() };
   streamBackupFile.mockResolvedValue({ stream: fakeStream, conn: fakeConn });
 
@@ -93,14 +95,39 @@ it("cleans up the SSH connection when the stream closes", async () => {
   const res = createMockRes();
 
   await handler(req, res);
-  fakeStream.emit("close");
+  fakeStream.emit("close", 0);
 
   expect(fakeConn.end).toHaveBeenCalled();
+  expect(logger.error).not.toHaveBeenCalled();
+});
+
+it("logs an error when the remote command exits non-zero, with stderr for context", async () => {
+  const fakeStream = new EventEmitter();
+  fakeStream.pipe = vi.fn();
+  fakeStream.stderr = new EventEmitter();
+  const fakeConn = { end: vi.fn() };
+  streamBackupFile.mockResolvedValue({ stream: fakeStream, conn: fakeConn });
+
+  const req = createFakeReq();
+  const res = createMockRes();
+
+  await handler(req, res);
+  fakeStream.stderr.emit("data", Buffer.from("refused: command not permitted for this key"));
+  fakeStream.emit("close", 1);
+
+  expect(fakeConn.end).toHaveBeenCalled();
+  expect(logger.error).toHaveBeenCalledWith(
+    "Backup download command exited with code %d for %s: %s",
+    1,
+    VALID_VOLID,
+    "refused: command not permitted for this key",
+  );
 });
 
 it("logs, ends the response, and cleans up the connection on a mid-stream error without touching the status code", async () => {
   const fakeStream = new EventEmitter();
   fakeStream.pipe = vi.fn();
+  fakeStream.stderr = new EventEmitter();
   const fakeConn = { end: vi.fn() };
   streamBackupFile.mockResolvedValue({ stream: fakeStream, conn: fakeConn });
 
@@ -120,6 +147,7 @@ it("logs, ends the response, and cleans up the connection on a mid-stream error 
 it("cleans up the SSH connection when the client aborts the request", async () => {
   const fakeStream = new EventEmitter();
   fakeStream.pipe = vi.fn();
+  fakeStream.stderr = new EventEmitter();
   const fakeConn = { end: vi.fn() };
   streamBackupFile.mockResolvedValue({ stream: fakeStream, conn: fakeConn });
 

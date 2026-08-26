@@ -32,20 +32,25 @@ export default function RunBackupDialog({ open, node, vmid, onClose, onDone }) {
   }, [open]);
 
   useEffect(() => {
-    if (!upid) return undefined;
+    if (!upid || result) return undefined;
     const interval = setInterval(async () => {
-      const res = await fetch(
-        `/api/proxmox/backups/status?node=${encodeURIComponent(node)}&upid=${encodeURIComponent(upid)}`,
-      );
-      const body = await res.json();
-      if (body.status !== "running") {
-        clearInterval(interval);
-        setResult(body);
-        if (body.exitstatus === "OK") onDone();
+      try {
+        const res = await fetch(
+          `/api/proxmox/backups/status?node=${encodeURIComponent(node)}&upid=${encodeURIComponent(upid)}`,
+        );
+        if (!res.ok) return;
+        const body = await res.json();
+        if (body.status !== "running") {
+          clearInterval(interval);
+          setResult(body);
+          if (body.exitstatus === "OK") onDone();
+        }
+      } catch {
+        // Transient network/fetch failure - skip this poll cycle and try again.
       }
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [upid, node, onDone]);
+  }, [upid, node, onDone, result]);
 
   const handleStart = async () => {
     setError(null);

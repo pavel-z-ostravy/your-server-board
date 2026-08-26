@@ -63,6 +63,72 @@ describe("components/backups/run-backup-dialog", () => {
     expect(onDone).toHaveBeenCalled();
   });
 
+  it("does not restart polling after completion even if onDone's identity changes", async () => {
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ storages: [{ storage: "local", prunePolicy: null }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ upid: "UPID:proxmox:00001234:00005678:6501234A:vzdump:100:root@pam!ysb:" }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ status: "stopped", exitstatus: "OK" }) });
+
+    const onClose = vi.fn();
+    const { rerender } = renderDialog({ open: true, node: "proxmox", vmid: "100", onClose, onDone: vi.fn() });
+
+    await waitFor(() => expect(screen.getByRole("option", { name: "local" })).toBeInTheDocument());
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "local" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    await waitFor(() => expect(screen.getByText("Backup completed.")).toBeInTheDocument(), { timeout: 6000 });
+
+    const callsAfterCompletion = global.fetch.mock.calls.length;
+
+    // Simulate the parent re-rendering with a brand new onDone identity (as
+    // BackupList does after mutate() runs) - this used to restart the poll
+    // interval because onDone was in the effect's dependency array with no
+    // guard on `result` already being set.
+    rerender(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <RunBackupDialog open node="proxmox" vmid="100" onClose={onClose} onDone={() => {}} />
+      </SWRConfig>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    expect(global.fetch.mock.calls.length).toBe(callsAfterCompletion);
+  }, 10000);
+
+  it("keeps polling through a non-2xx or errored status response instead of treating it as finished", async () => {
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ storages: [{ storage: "local", prunePolicy: null }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ upid: "UPID:proxmox:00001234:00005678:6501234A:vzdump:100:root@pam!ysb:" }),
+      })
+      .mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ error: "Unauthorized" }) })
+      .mockRejectedValueOnce(new Error("network error"))
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ status: "stopped", exitstatus: "OK" }) });
+
+    const onDone = vi.fn();
+    renderDialog({ open: true, node: "proxmox", vmid: "100", onClose: vi.fn(), onDone });
+
+    await waitFor(() => expect(screen.getByRole("option", { name: "local" })).toBeInTheDocument());
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "local" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    await waitFor(() => expect(screen.getByText("Backup running...")).toBeInTheDocument());
+    // A non-ok response and a rejected fetch should both be skipped rather
+    // than shown as "Backup failed: undefined" - polling should continue
+    // until a real terminal status arrives.
+    await waitFor(() => expect(screen.getByText("Backup completed.")).toBeInTheDocument(), { timeout: 10000 });
+    expect(onDone).toHaveBeenCalled();
+  }, 15000);
+
   it("shows an inline error when starting the backup fails", async () => {
     global.fetch
       .mockResolvedValueOnce({

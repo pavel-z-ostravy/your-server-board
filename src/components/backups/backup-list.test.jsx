@@ -103,4 +103,40 @@ describe("components/backups/backup-list", () => {
     );
     expect(mutate).toHaveBeenCalledWith("/api/proxmox/backups/list?node=proxmox&vmid=100");
   });
+
+  it("recovers from a rejected delete fetch instead of getting stuck disabled", async () => {
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            backups: [
+              {
+                volid: "local:backup/vzdump-qemu-100-2026_08_24-10_00_00.vma.zst",
+                size: 1,
+                ctime: 1,
+                notes: null,
+                storage: "local",
+                prunePolicy: null,
+              },
+            ],
+          }),
+      })
+      .mockRejectedValueOnce(new Error("network down"));
+
+    renderList({ node: "proxmox", vmid: "100", vmName: "my-vm" });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "my-vm" } });
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(screen.getByText("Network error - failed to delete backup")).toBeInTheDocument());
+
+    // The dialog must not be stuck permanently disabled - Cancel should be
+    // re-enabled and reachable again after the rejected fetch settles.
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByText("Network error - failed to delete backup")).not.toBeInTheDocument());
+  });
 });

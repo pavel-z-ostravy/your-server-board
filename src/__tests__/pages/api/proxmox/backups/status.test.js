@@ -42,3 +42,15 @@ it("returns the task status on success", async () => {
   expect(res.status).toHaveBeenCalledWith(200);
   expect(res.json).toHaveBeenCalledWith({ status: "stopped", exitstatus: "OK" });
 });
+
+it("returns the task status for a realistic UPID with an auth-id segment", async () => {
+  pollBackupTask.mockResolvedValue({ status: "stopped", exitstatus: "OK" });
+  const res = createMockRes();
+  const upid = "UPID:proxmox:00001234:00005678:6501234A:vzdump:100:root@pam!ysb:";
+
+  await handler({ method: "GET", query: { node: "proxmox", upid } }, res);
+
+  expect(pollBackupTask).toHaveBeenCalledWith(pveConfig, "proxmox", upid);
+  expect(res.status).toHaveBeenCalledWith(200);
+  expect(res.json).toHaveBeenCalledWith({ status: "stopped", exitstatus: "OK" });
+});

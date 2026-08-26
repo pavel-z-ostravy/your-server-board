@@ -4,7 +4,7 @@ import { pollBackupTask } from "utils/proxmox/backups";
 
 const logger = createLogger("backupsStatusService");
 const VALID_NODE = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
-const VALID_UPID = /^UPID:[\w.:-]+$/;
+const VALID_UPID = /^UPID:[A-Za-z0-9_.:@!-]+$/;
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {

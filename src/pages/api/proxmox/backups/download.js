@@ -12,6 +12,7 @@ const VALID_VOLID =
 export const config = {
   api: {
     externalResolver: true,
+    responseLimit: false,
   },
 };
 
@@ -43,12 +44,25 @@ export default async function handler(req, res) {
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.setHeader("Content-Type", "application/octet-stream");
 
+  // Headers/body are already streaming by the time we know whether the
+  // remote command actually succeeded (see stream.exec launching before the
+  // command completes), so the HTTP response can't be changed here on
+  // failure - the best we can do is make a non-zero exit visible in the
+  // server logs instead of the browser silently saving a 0-byte file.
+  let stderrOutput = "";
+  stream.stderr.on("data", (data) => {
+    stderrOutput += data.toString();
+  });
+
   stream.on("error", (error) => {
     logger.error("Backup download stream failed for %s:", volid, error);
     conn.end();
     res.end();
   });
-  stream.on("close", () => {
+  stream.on("close", (code) => {
+    if (code !== 0) {
+      logger.error("Backup download command exited with code %d for %s: %s", code, volid, stderrOutput.trim());
+    }
     conn.end();
   });
   req.on("close", () => {

@@ -23,13 +23,16 @@ export default function DeleteConfirmDialog({ open, vmName, onConfirm, onClose }
   const handleDelete = async () => {
     setDeleting(true);
     setError(null);
-    const result = await onConfirm();
-    setDeleting(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await onConfirm();
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      onClose();
+    } finally {
+      setDeleting(false);
     }
-    onClose();
   };
 
   return (
