@@ -6,6 +6,13 @@ import useSWR from "swr";
 import InstallWizardDialog from "components/widgets/InstallWizardDialog";
 import { ThemeContext } from "utils/contexts/theme";
 
+// Same card wrapper classes src/components/disks/group.jsx and
+// src/components/services/item.jsx use, including the trailing "service-card"
+// hook class, so this page reads as native dashboard UI rather than a
+// separate list-y page.
+const CARD_CLASS =
+  "transition-all mb-2 p-3 rounded-md font-medium text-theme-700 dark:text-theme-200 shadow-md shadow-theme-900/10 dark:shadow-theme-900/20 bg-theme-100/20 dark:bg-white/5 relative overflow-clip service-card";
+
 const fetcher = (url) =>
   fetch(url).then((r) => {
     if (!r.ok) throw new Error("request failed");
@@ -111,7 +118,7 @@ function WidgetRow({ entry, category, installed, mutateInstalled }) {
   };
 
   return (
-    <li className="border-b border-theme-300/30 dark:border-theme-500/10 py-2">
+    <li className={CARD_CLASS}>
       <button type="button" onClick={() => setExpanded((prev) => !prev)} className="w-full text-left">
         <span className="text-sm font-medium">{entry.title}</span>
         <p className="text-theme-500 dark:text-theme-300 text-xs font-light">{entry.description}</p>

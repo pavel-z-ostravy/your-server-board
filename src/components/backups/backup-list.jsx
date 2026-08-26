@@ -77,21 +77,21 @@ export default function BackupList({ node, vmid, vmName }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="text-left">
-              <th>Date</th>
-              <th>Size</th>
-              <th>Storage</th>
-              <th>Retention</th>
+              <th className="font-bold uppercase text-theme-500 dark:text-theme-400 pb-1">Date</th>
+              <th className="font-bold uppercase text-theme-500 dark:text-theme-400 pb-1">Size</th>
+              <th className="font-bold uppercase text-theme-500 dark:text-theme-400 pb-1">Storage</th>
+              <th className="font-bold uppercase text-theme-500 dark:text-theme-400 pb-1">Retention</th>
               <th aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
             {data.backups.map((b) => (
-              <tr key={b.volid}>
-                <td>{formatDate(b.ctime)}</td>
-                <td>{formatBytes(b.size)}</td>
-                <td>{b.storage}</td>
-                <td>{b.prunePolicy ?? "-"}</td>
-                <td className="flex gap-2">
+              <tr key={b.volid} className="border-t border-theme-300/20 dark:border-theme-500/10">
+                <td className="py-1 font-thin">{formatDate(b.ctime)}</td>
+                <td className="py-1 font-thin">{formatBytes(b.size)}</td>
+                <td className="py-1 font-thin">{b.storage}</td>
+                <td className="py-1 font-thin">{b.prunePolicy ?? "-"}</td>
+                <td className="py-1 flex gap-2">
                   <a
                     href={`/api/proxmox/backups/download?volid=${encodeURIComponent(b.volid)}`}
                     download

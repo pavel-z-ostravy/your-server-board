@@ -7,8 +7,8 @@ import { BiCloudUpload, BiExtension, BiHome, BiMenu } from "react-icons/bi";
 // entry here, not touching this component's rendering logic.
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: BiHome },
-  { href: "/widgets", label: "Widgets", icon: BiExtension },
   { href: "/backups", label: "Backups", icon: BiCloudUpload },
+  { href: "/widgets", label: "Widgets", icon: BiExtension },
 ];
 
 export default function NavHeader() {
