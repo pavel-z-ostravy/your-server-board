@@ -45,6 +45,7 @@ export default async function handler(req, res) {
 
   stream.on("error", (error) => {
     logger.error("Backup download stream failed for %s:", volid, error);
+    conn.end();
     res.end();
   });
   stream.on("close", () => {
