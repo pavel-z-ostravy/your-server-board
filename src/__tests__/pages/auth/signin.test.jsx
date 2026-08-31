@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getSettingsMock } = vi.hoisted(() => ({
+const { getSettingsMock, routerState } = vi.hoisted(() => ({
   getSettingsMock: vi.fn(),
+  routerState: { query: {} },
 }));
 
 vi.mock("utils/config/config", () => ({
@@ -13,14 +14,43 @@ vi.mock("utils/config/config", () => ({
 
 vi.mock("next/router", () => ({
   useRouter: () => ({
-    query: {},
+    query: routerState.query,
   }),
 }));
 
-import { getProviders } from "next-auth/react";
+import { getProviders, signIn } from "next-auth/react";
 import SignInPage, { getServerSideProps } from "pages/auth/signin";
 
+const originalLocation = window.location;
+
+function renderPasswordSignIn() {
+  render(
+    <SignInPage
+      providers={{ credentials: { id: "credentials", name: "Credentials", type: "credentials" } }}
+      settings={{ theme: "dark", color: "slate", title: "Homepage" }}
+    />,
+  );
+}
+
+async function submitCredentials(username = "admin", password = "secret") {
+  fireEvent.change(screen.getByLabelText("Username"), { target: { value: username } });
+  fireEvent.change(screen.getByLabelText("Password"), { target: { value: password } });
+  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+}
+
 describe("pages/auth/signin", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    routerState.query = {};
+    delete window.location;
+    window.location = { assign: vi.fn() };
+  });
+
+  afterEach(() => {
+    window.location = originalLocation;
+    delete global.fetch;
+  });
+
   it("renders an error state when no providers are configured", async () => {
     render(
       <SignInPage
@@ -95,5 +125,47 @@ describe("pages/auth/signin", () => {
     });
     expect(res.props.settings).not.toHaveProperty("providers");
     expect(res.props.settings).not.toHaveProperty("layout");
+  });
+
+  it("signs in directly when 2FA is disabled", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ twoFactorEnabled: false }) });
+    signIn.mockResolvedValue({ ok: true, url: "/" });
+    renderPasswordSignIn();
+    await submitCredentials();
+
+    await waitFor(() =>
+      expect(signIn).toHaveBeenCalledWith(
+        "credentials",
+        expect.objectContaining({ redirect: false, username: "admin", password: "secret" }),
+      ),
+    );
+  });
+
+  it("shows the code step when 2FA is enabled", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ twoFactorEnabled: true }) });
+    renderPasswordSignIn();
+    await submitCredentials();
+
+    expect(await screen.findByLabelText("Authentication code")).toBeInTheDocument();
+    expect(signIn).not.toHaveBeenCalled();
+  });
+
+  it("shows an error on wrong credentials", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: "Invalid credentials" }) });
+    renderPasswordSignIn();
+    await submitCredentials("admin", "bad");
+    expect(await screen.findByText(/invalid username or password/i)).toBeInTheDocument();
+  });
+
+  it("submits the code and surfaces an invalid-code error", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ twoFactorEnabled: true }) });
+    signIn.mockResolvedValue({ ok: false, error: "CredentialsSignin" });
+    renderPasswordSignIn();
+    await submitCredentials();
+
+    const codeInput = await screen.findByLabelText("Authentication code");
+    fireEvent.change(codeInput, { target: { value: "000000" } });
+    fireEvent.click(screen.getByRole("button", { name: /verify/i }));
+    expect(await screen.findByText(/invalid authentication code/i)).toBeInTheDocument();
   });
 });

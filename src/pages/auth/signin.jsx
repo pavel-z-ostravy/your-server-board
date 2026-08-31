@@ -10,7 +10,12 @@ const PUBLIC_SIGN_IN_SETTINGS = ["theme", "color", "title", "background", "backg
 
 export default function SignIn({ providers, settings }) {
   const router = useRouter();
+  const [step, setStep] = useState("credentials");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [token, setToken] = useState("");
+  const [formError, setFormError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const theme = settings?.theme || "dark";
   const color = settings?.color || "slate";
   const title = settings?.title || "Homepage";
@@ -108,6 +113,62 @@ export default function SignIn({ providers, settings }) {
     ? Object.values(providers).find((provider) => provider.type === "credentials")
     : null;
   const hasPasswordProvider = Boolean(passwordProvider);
+  const credentialsId = passwordProvider?.id ?? "credentials";
+
+  const finishSignIn = async () => {
+    const result = await signIn(credentialsId, { redirect: false, username, password, token });
+    if (result?.ok) {
+      window.location.assign(callbackUrl);
+      return;
+    }
+    setSubmitting(false);
+    if (step === "totp") {
+      setFormError("Invalid authentication code.");
+    } else {
+      setFormError("Invalid username or password.");
+    }
+  };
+
+  const handleCredentialsSubmit = async (event) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setFormError("");
+    const resp = await fetch("/api/auth/2fa-check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (resp.status === 401) {
+      setFormError("Invalid username or password.");
+      setSubmitting(false);
+      return;
+    }
+    if (!resp.ok) {
+      setFormError("Something went wrong. Please try again.");
+      setSubmitting(false);
+      return;
+    }
+    const { twoFactorEnabled } = await resp.json();
+    if (twoFactorEnabled) {
+      setStep("totp");
+      setSubmitting(false);
+      return;
+    }
+    await finishSignIn();
+  };
+
+  const handleTotpSubmit = async (event) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setFormError("");
+    await finishSignIn();
+  };
+
+  const handleBack = () => {
+    setStep("credentials");
+    setToken("");
+    setFormError("");
+  };
 
   return (
     <>
@@ -145,20 +206,32 @@ export default function SignIn({ providers, settings }) {
               <div className="rounded-2xl border border-white/60 bg-white/70 p-6 shadow-lg shadow-black/5 dark:border-white/10 dark:bg-slate-900/70">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Sign in</h2>
                 <div className="mt-6 space-y-3">
-                  {hasPasswordProvider && (
-                    <form
-                      className="space-y-3"
-                      onSubmit={async (event) => {
-                        event.preventDefault();
-                        await signIn(passwordProvider?.id ?? "credentials", {
-                          redirect: true,
-                          callbackUrl,
-                          password,
-                        });
-                      }}
-                    >
-                      <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Password</label>
+                  {hasPasswordProvider && step === "credentials" && (
+                    <form className="space-y-3" onSubmit={handleCredentialsSubmit}>
+                      <label
+                        htmlFor="signin-username"
+                        className="block text-sm font-medium text-gray-700 dark:text-slate-300"
+                      >
+                        Username
+                      </label>
                       <input
+                        id="signin-username"
+                        type="text"
+                        name="username"
+                        value={username}
+                        onChange={(event) => setUsername(event.target.value)}
+                        autoComplete="username"
+                        className="w-full rounded-xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-gray-900 shadow-sm outline-none ring-0 transition focus:border-theme-500 focus:ring-2 focus:ring-theme-500/30 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
+                        required
+                      />
+                      <label
+                        htmlFor="signin-password"
+                        className="block text-sm font-medium text-gray-700 dark:text-slate-300"
+                      >
+                        Password
+                      </label>
+                      <input
+                        id="signin-password"
                         type="password"
                         name="password"
                         value={password}
@@ -169,9 +242,47 @@ export default function SignIn({ providers, settings }) {
                       />
                       <button
                         type="submit"
-                        className="group w-full rounded-xl bg-theme-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-theme-600/20 transition hover:-translate-y-0.5 hover:bg-theme-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme-500"
+                        disabled={submitting}
+                        className="group w-full rounded-xl bg-theme-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-theme-600/20 transition hover:-translate-y-0.5 hover:bg-theme-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme-500 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        <span className="flex items-center justify-center gap-2">Sign in &rarr;</span>
+                        <span className="flex items-center justify-center gap-2">Continue &rarr;</span>
+                      </button>
+                    </form>
+                  )}
+                  {hasPasswordProvider && step === "totp" && (
+                    <form className="space-y-3" onSubmit={handleTotpSubmit}>
+                      <label
+                        htmlFor="signin-totp"
+                        className="block text-sm font-medium text-gray-700 dark:text-slate-300"
+                      >
+                        Authentication code
+                      </label>
+                      <input
+                        id="signin-totp"
+                        type="text"
+                        name="token"
+                        value={token}
+                        onChange={(event) => setToken(event.target.value)}
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        pattern="\d{6}"
+                        className="w-full rounded-xl border border-slate-200 bg-white/90 px-4 py-3 text-sm tracking-[0.4em] text-gray-900 shadow-sm outline-none ring-0 transition focus:border-theme-500 focus:ring-2 focus:ring-theme-500/30 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
+                        required
+                      />
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className="group w-full rounded-xl bg-theme-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-theme-600/20 transition hover:-translate-y-0.5 hover:bg-theme-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <span className="flex items-center justify-center gap-2">Verify &rarr;</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleBack}
+                        className="w-full rounded-xl px-4 py-2 text-sm font-medium text-gray-600 transition hover:text-theme-600 dark:text-slate-400 dark:hover:text-theme-300"
+                      >
+                        &larr; Back
                       </button>
                     </form>
                   )}
@@ -187,9 +298,14 @@ export default function SignIn({ providers, settings }) {
                       </button>
                     ))}
                 </div>
-                {hasPasswordProvider && error && (
+                {hasPasswordProvider && formError && (
                   <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-200">
-                    Invalid password. Please try again.
+                    {formError}
+                  </p>
+                )}
+                {!hasPasswordProvider && error && (
+                  <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-200">
+                    Something went wrong. Please try again.
                   </p>
                 )}
               </div>

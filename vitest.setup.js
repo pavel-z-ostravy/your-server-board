@@ -12,6 +12,7 @@ afterEach(() => {
 vi.mock("next-auth/react", () => ({
   SessionProvider: ({ children }) => children ?? null,
   getProviders: vi.fn(async () => ({})),
+  signIn: vi.fn(),
 }));
 
 // implement a couple of common formatters mocked in next-i18next
