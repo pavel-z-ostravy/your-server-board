@@ -67,4 +67,9 @@ describe("components/layout/NavHeader", () => {
     expect(screen.getByRole("link", { name: /Widgets/ })).toHaveAttribute("href", "/widgets");
     expect(screen.getByRole("link", { name: /Backups/ })).toHaveAttribute("href", "/backups");
   });
+
+  it("includes a Security link", () => {
+    render(<NavHeader />);
+    expect(screen.getByRole("link", { name: /security/i })).toHaveAttribute("href", "/security");
+  });
 });
