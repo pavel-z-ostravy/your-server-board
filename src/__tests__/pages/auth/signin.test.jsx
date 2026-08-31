@@ -139,6 +139,7 @@ describe("pages/auth/signin", () => {
         expect.objectContaining({ redirect: false, username: "admin", password: "secret" }),
       ),
     );
+    await waitFor(() => expect(window.location.assign).toHaveBeenCalledWith("/"));
   });
 
   it("shows the code step when 2FA is enabled", async () => {
@@ -167,5 +168,55 @@ describe("pages/auth/signin", () => {
     fireEvent.change(codeInput, { target: { value: "000000" } });
     fireEvent.click(screen.getByRole("button", { name: /verify/i }));
     expect(await screen.findByText(/invalid authentication code/i)).toBeInTheDocument();
+  });
+
+  it("navigates to the callback URL after a successful code submission", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ twoFactorEnabled: true }) });
+    signIn.mockResolvedValue({ ok: true, url: "/" });
+    renderPasswordSignIn();
+    await submitCredentials();
+
+    const codeInput = await screen.findByLabelText("Authentication code");
+    fireEvent.change(codeInput, { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: /verify/i }));
+
+    await waitFor(() =>
+      expect(signIn).toHaveBeenCalledWith(
+        "credentials",
+        expect.objectContaining({ redirect: false, token: "123456" }),
+      ),
+    );
+    await waitFor(() => expect(window.location.assign).toHaveBeenCalledWith("/"));
+  });
+
+  it("returns to step 1 via Back and clears the token", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ twoFactorEnabled: true }) });
+    signIn.mockResolvedValue({ ok: false, error: "CredentialsSignin" });
+    renderPasswordSignIn();
+    await submitCredentials();
+
+    const codeInput = await screen.findByLabelText("Authentication code");
+    fireEvent.change(codeInput, { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+
+    expect(await screen.findByLabelText("Username")).toBeInTheDocument();
+
+    // second pass: 2FA now reports disabled, so finishSignIn runs with an empty token
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ twoFactorEnabled: false }) });
+    signIn.mockResolvedValue({ ok: true, url: "/" });
+    await submitCredentials();
+
+    await waitFor(() =>
+      expect(signIn).toHaveBeenCalledWith("credentials", expect.objectContaining({ token: "" })),
+    );
+  });
+
+  it("recovers from a network error on the pre-check fetch", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error("network down"));
+    renderPasswordSignIn();
+    await submitCredentials();
+
+    expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continue/i })).not.toBeDisabled();
   });
 });

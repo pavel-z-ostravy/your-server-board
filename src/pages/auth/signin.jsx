@@ -116,7 +116,14 @@ export default function SignIn({ providers, settings }) {
   const credentialsId = passwordProvider?.id ?? "credentials";
 
   const finishSignIn = async () => {
-    const result = await signIn(credentialsId, { redirect: false, username, password, token });
+    let result;
+    try {
+      result = await signIn(credentialsId, { redirect: false, username, password, token });
+    } catch {
+      setSubmitting(false);
+      setFormError("Something went wrong. Please try again.");
+      return;
+    }
     if (result?.ok) {
       window.location.assign(callbackUrl);
       return;
@@ -133,11 +140,18 @@ export default function SignIn({ providers, settings }) {
     event.preventDefault();
     setSubmitting(true);
     setFormError("");
-    const resp = await fetch("/api/auth/2fa-check", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
+    let resp;
+    try {
+      resp = await fetch("/api/auth/2fa-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+    } catch {
+      setFormError("Something went wrong. Please try again.");
+      setSubmitting(false);
+      return;
+    }
     if (resp.status === 401) {
       setFormError("Invalid username or password.");
       setSubmitting(false);
