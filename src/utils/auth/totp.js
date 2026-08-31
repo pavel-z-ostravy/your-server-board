@@ -4,6 +4,10 @@ import QRCode from "qrcode";
 import { getSettings } from "utils/config/config";
 import { readTotpState } from "utils/auth/totp-store";
 
+// otplib defaults to window 0 (exact step only). The spec calls for a ±1 step
+// tolerance so codes near a 30s boundary or under mild clock skew still verify.
+authenticator.options = { window: 1 };
+
 function issuer() {
   return getSettings().title || "Homepage";
 }

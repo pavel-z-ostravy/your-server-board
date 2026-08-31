@@ -28,6 +28,27 @@ describe("utils/auth/totp", () => {
     expect(verifyToken(authenticator.generate(SECRET))).toBe(true);
   });
 
+  it("accepts codes one step either side of now and rejects codes two steps away", () => {
+    // Center of a 30s step so ±30s stays within the same neighbouring step.
+    const base = 1_700_000_025_000;
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(base - 30_000);
+      const prevStepCode = authenticator.generate(SECRET);
+      vi.setSystemTime(base + 30_000);
+      const nextStepCode = authenticator.generate(SECRET);
+      vi.setSystemTime(base - 60_000);
+      const twoStepsAgoCode = authenticator.generate(SECRET);
+
+      vi.setSystemTime(base);
+      expect(verifyToken(prevStepCode, SECRET)).toBe(true);
+      expect(verifyToken(nextStepCode, SECRET)).toBe(true);
+      expect(verifyToken(twoStepsAgoCode, SECRET)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rejects a wrong / malformed / missing token", () => {
     readTotpState.mockReturnValue({ totp: { secret: SECRET } });
     expect(verifyToken("000000")).toBe(false);
