@@ -11,12 +11,17 @@ function issuer() {
 export function generateEnrollment(username) {
   const secret = authenticator.generateSecret();
   const issuerName = issuer();
-  // keyuri doesn't URL-encode parameters, so we need to encode them ourselves
-  const encodedIssuer = encodeURIComponent(issuerName);
-  const encodedUsername = encodeURIComponent(username);
-  const baseUri = authenticator.keyuri(username, issuerName, secret);
-  // Replace the unencoded issuer in the query string with the encoded version
-  const otpauthUrl = baseUri.replace(`issuer=${issuerName}`, `issuer=${encodedIssuer}`);
+  // otplib's keyuri() does not URL-encode the issuer or account label, so build
+  // the otpauth:// URI explicitly with every component properly encoded.
+  const label = `${encodeURIComponent(issuerName)}:${encodeURIComponent(username)}`;
+  const params = [
+    `secret=${secret}`,
+    `issuer=${encodeURIComponent(issuerName)}`,
+    "algorithm=SHA1",
+    "digits=6",
+    "period=30",
+  ].join("&");
+  const otpauthUrl = `otpauth://totp/${label}?${params}`;
   return { secret, otpauthUrl };
 }
 

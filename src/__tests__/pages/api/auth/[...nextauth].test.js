@@ -290,6 +290,7 @@ describe("pages/api/auth/[...nextauth]", () => {
     await expect(
       provider.options.authorize({ username: "admin", password: "secret", token: "000000" }),
     ).resolves.toBeNull();
+    expect(warnMock).toHaveBeenCalledWith("Failed password sign-in attempt");
 
     verifyTokenMock.mockReturnValue(true);
     await expect(

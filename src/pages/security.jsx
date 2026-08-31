@@ -202,7 +202,11 @@ export default function SecurityPage({ initialSettings, twoFactorEnabled }) {
               </>
             )}
 
-            {error && <p className={ERROR_CLASS}>{error}</p>}
+            {error && (
+              <p role="alert" className={ERROR_CLASS}>
+                {error}
+              </p>
+            )}
           </div>
         </div>
       </div>
