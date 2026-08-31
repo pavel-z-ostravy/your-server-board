@@ -128,6 +128,7 @@ describe("pages/api/mcp", () => {
   it("allows requests with a NextAuth session when Homepage auth is enabled", async () => {
     process.env.HOMEPAGE_MCP_ENABLED = "true";
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
     process.env.HOMEPAGE_AUTH_PASSWORD = "password";
     process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
@@ -145,6 +146,7 @@ describe("pages/api/mcp", () => {
   it("rejects requests without a token or session when Homepage auth is enabled", async () => {
     process.env.HOMEPAGE_MCP_ENABLED = "true";
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
     process.env.HOMEPAGE_AUTH_PASSWORD = "password";
     process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
@@ -161,6 +163,7 @@ describe("pages/api/mcp", () => {
   it("allows bearer token requests when Homepage auth is enabled", async () => {
     process.env.HOMEPAGE_MCP_ENABLED = "true";
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
     process.env.HOMEPAGE_AUTH_PASSWORD = "password";
     process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";

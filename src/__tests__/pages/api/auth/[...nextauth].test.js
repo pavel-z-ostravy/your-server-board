@@ -7,6 +7,12 @@ const { debugMock, errorMock, nextAuthMock, warnMock } = vi.hoisted(() => ({
   warnMock: vi.fn(),
 }));
 
+const { verifyPasswordMock, isTotpEnabledMock, verifyTokenMock } = vi.hoisted(() => ({
+  verifyPasswordMock: vi.fn(),
+  isTotpEnabledMock: vi.fn(() => false),
+  verifyTokenMock: vi.fn(() => false),
+}));
+
 vi.mock("next-auth", () => ({
   default: nextAuthMock,
 }));
@@ -14,6 +20,13 @@ vi.mock("next-auth", () => ({
 vi.mock("utils/logger", () => ({
   default: vi.fn(() => ({ debug: debugMock, error: errorMock, warn: warnMock })),
 }));
+
+vi.mock("utils/auth/credentials", () => ({
+  verifyPassword: verifyPasswordMock,
+  logFailedPasswordSignIn: () => warnMock("Failed password sign-in attempt"),
+}));
+vi.mock("utils/auth/totp-store", () => ({ isTotpEnabled: isTotpEnabledMock }));
+vi.mock("utils/auth/totp", () => ({ verifyToken: verifyTokenMock }));
 
 describe("pages/api/auth/[...nextauth]", () => {
   const originalEnv = process.env;
@@ -24,10 +37,14 @@ describe("pages/api/auth/[...nextauth]", () => {
     errorMock.mockClear();
     nextAuthMock.mockClear();
     warnMock.mockClear();
+    verifyPasswordMock.mockReset();
+    isTotpEnabledMock.mockReset().mockReturnValue(false);
+    verifyTokenMock.mockReset().mockReturnValue(false);
     process.env = { ...originalEnv };
     delete process.env.HOMEPAGE_EXTERNAL_URL;
     delete process.env.NEXTAUTH_SECRET;
     delete process.env.NEXTAUTH_URL;
+    delete process.env.HOMEPAGE_AUTH_USERNAME;
   });
 
   it("configures no providers when auth is disabled", async () => {
@@ -154,6 +171,7 @@ describe("pages/api/auth/[...nextauth]", () => {
 
   it.each(["short", "a".repeat(31)])("throws when the auth secret is too weak (%j)", async (secret) => {
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
     process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
     process.env.HOMEPAGE_AUTH_SECRET = secret;
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
@@ -163,6 +181,7 @@ describe("pages/api/auth/[...nextauth]", () => {
 
   it("accepts an auth secret at exactly the minimum length", async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
     process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
     process.env.HOMEPAGE_AUTH_SECRET = "a".repeat(32);
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
@@ -182,6 +201,7 @@ describe("pages/api/auth/[...nextauth]", () => {
 
   it("builds a password provider when auth is enabled without OIDC config", async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
     process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
     process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
@@ -194,16 +214,11 @@ describe("pages/api/auth/[...nextauth]", () => {
     expect(provider.type).toBe("credentials");
     expect(typeof provider.authorize).toBe("function");
     expect(mod.authOptions.useSecureCookies).toBe(true);
-    await expect(provider.options.authorize({ password: "secret" })).resolves.toEqual({
-      id: "homepage",
-      name: "Homepage",
-    });
-    await expect(provider.options.authorize({ password: "wrong" })).resolves.toBeNull();
-    await expect(provider.options.authorize({ password: 123 })).resolves.toBeNull();
   });
 
-  it("logs failed password sign-in attempts without recording client-supplied data", async () => {
+  it("declares username, password, and token credential fields", async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
     process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
     process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
@@ -211,37 +226,80 @@ describe("pages/api/auth/[...nextauth]", () => {
     const mod = await import("pages/api/auth/[...nextauth]");
     const [provider] = mod.authOptions.providers;
 
-    await provider.options.authorize({ password: "wrong" });
-    await provider.options.authorize({ password: 123 });
-
-    expect(warnMock).toHaveBeenCalledTimes(2);
-    expect(warnMock).toHaveBeenCalledWith("Failed password sign-in attempt");
-    // the attempted password must never reach the logs
-    expect(JSON.stringify(warnMock.mock.calls)).not.toContain("wrong");
-
-    warnMock.mockClear();
-    await provider.options.authorize({ password: "secret" });
-    expect(warnMock).not.toHaveBeenCalled();
+    expect(Object.keys(provider.options.credentials)).toEqual(["username", "password", "token"]);
   });
 
-  it("compares multibyte passwords without throwing on unequal byte lengths", async () => {
+  it("throws when password auth is enabled without a username", async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
-    process.env.HOMEPAGE_AUTH_PASSWORD = "é";
+    process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
     process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
+    // no HOMEPAGE_AUTH_USERNAME
+
+    await expect(import("pages/api/auth/[...nextauth]")).rejects.toThrow(
+      /Password auth is enabled but required settings are missing/i,
+    );
+  });
+
+  it("authorizes when the password is correct and 2FA is off", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
+    process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
+    process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
+    process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
+    verifyPasswordMock.mockReturnValue(true);
 
     const mod = await import("pages/api/auth/[...nextauth]");
     const [provider] = mod.authOptions.providers;
 
-    await expect(provider.options.authorize({ password: "a" })).resolves.toBeNull();
-    await expect(provider.options.authorize({ password: "é" })).resolves.toEqual({
+    await expect(provider.options.authorize({ username: "admin", password: "secret" })).resolves.toEqual({
       id: "homepage",
-      name: "Homepage",
+      name: "admin",
     });
+  });
+
+  it("rejects a bad password and logs a sanitized warning", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
+    process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
+    process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
+    process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
+    verifyPasswordMock.mockReturnValue(false);
+
+    const mod = await import("pages/api/auth/[...nextauth]");
+    const [provider] = mod.authOptions.providers;
+
+    await expect(provider.options.authorize({ username: "admin", password: "wrong" })).resolves.toBeNull();
+    expect(warnMock).toHaveBeenCalledWith("Failed password sign-in attempt");
+    expect(JSON.stringify(warnMock.mock.calls)).not.toContain("wrong");
+  });
+
+  it("requires a valid TOTP token when 2FA is enabled", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
+    process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
+    process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
+    process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
+    verifyPasswordMock.mockReturnValue(true);
+    isTotpEnabledMock.mockReturnValue(true);
+
+    const mod = await import("pages/api/auth/[...nextauth]");
+    const [provider] = mod.authOptions.providers;
+
+    verifyTokenMock.mockReturnValue(false);
+    await expect(
+      provider.options.authorize({ username: "admin", password: "secret", token: "000000" }),
+    ).resolves.toBeNull();
+
+    verifyTokenMock.mockReturnValue(true);
+    await expect(
+      provider.options.authorize({ username: "admin", password: "secret", token: "123456" }),
+    ).resolves.toEqual({ id: "homepage", name: "admin" });
   });
 
   it("supports trusted HTTP deployments without Secure cookies", async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
     process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
     process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
     process.env.HOMEPAGE_EXTERNAL_URL = "http://192.168.1.20:3000";
@@ -254,6 +312,7 @@ describe("pages/api/auth/[...nextauth]", () => {
 
   it("accepts an explicitly configured NEXTAUTH_URL", async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_USERNAME = "admin";
     process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
     process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
     process.env.NEXTAUTH_URL = "https://homepage.example";

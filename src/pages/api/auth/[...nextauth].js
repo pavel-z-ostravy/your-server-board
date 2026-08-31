@@ -1,8 +1,9 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
+import { logFailedPasswordSignIn, verifyPassword } from "utils/auth/credentials";
+import { verifyToken } from "utils/auth/totp";
+import { isTotpEnabled } from "utils/auth/totp-store";
 import { isAuthEnabled } from "utils/env";
 import createLogger from "utils/logger";
 
@@ -15,9 +16,7 @@ const clientSecret = process.env.HOMEPAGE_OIDC_CLIENT_SECRET;
 const homepageAuthSecret = process.env.HOMEPAGE_AUTH_SECRET;
 const homepageExternalUrl = process.env.HOMEPAGE_EXTERNAL_URL;
 const homepageAuthPassword = process.env.HOMEPAGE_AUTH_PASSWORD;
-const homepageAuthPasswordDigest = homepageAuthPassword
-  ? createHash("sha256").update(homepageAuthPassword, "utf8").digest()
-  : null;
+const homepageAuthUsername = process.env.HOMEPAGE_AUTH_USERNAME;
 
 // Map HOMEPAGE_* envs to what NextAuth expects
 if (!process.env.NEXTAUTH_SECRET && homepageAuthSecret) {
@@ -62,7 +61,7 @@ if (authEnabled) {
     }
   } else if (hasAnyOidcConfig) {
     throw new Error("OIDC auth is enabled but required settings are missing.");
-  } else if (!homepageAuthPassword || !process.env.NEXTAUTH_SECRET) {
+  } else if (!homepageAuthPassword || !homepageAuthUsername || !process.env.NEXTAUTH_SECRET) {
     throw new Error("Password auth is enabled but required settings are missing.");
   }
 
@@ -71,11 +70,6 @@ if (authEnabled) {
       `HOMEPAGE_AUTH_SECRET (or NEXTAUTH_SECRET) must be at least ${MIN_AUTH_SECRET_LENGTH} characters. Generate one with: openssl rand -base64 32`,
     );
   }
-}
-
-// Give fail2ban / CrowdSec etc something to match on
-function logFailedPasswordSignIn() {
-  createLogger("nextauth").warn("Failed password sign-in attempt");
 }
 
 let providers = [];
@@ -112,24 +106,21 @@ if (authEnabled) {
       CredentialsProvider({
         name: "Password",
         credentials: {
+          username: { label: "Username", type: "text" },
           password: { label: "Password", type: "password" },
+          token: { label: "Authentication code", type: "text" },
         },
         async authorize(credentials) {
-          const provided = credentials?.password;
-          if (!homepageAuthPasswordDigest || typeof provided !== "string") {
+          const { username, password, token } = credentials ?? {};
+          if (!verifyPassword(username, password)) {
             logFailedPasswordSignIn();
             return null;
           }
-          const providedDigest = createHash("sha256").update(provided, "utf8").digest();
-          const isMatch = timingSafeEqual(providedDigest, homepageAuthPasswordDigest);
-          if (!isMatch) {
+          if (isTotpEnabled() && !verifyToken(token)) {
             logFailedPasswordSignIn();
             return null;
           }
-          return {
-            id: "homepage",
-            name: "Homepage",
-          };
+          return { id: "homepage", name: username };
         },
       }),
     ];
