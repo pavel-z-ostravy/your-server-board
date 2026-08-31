@@ -125,6 +125,19 @@ visitors; this file is the fuller running log.
   at rest it visually merged with whatever content scrolled underneath it
   (e.g. the Proxmox card's "Host" label). Fixed with a persistent
   semi-opaque backdrop.
+- **Username + password + optional TOTP 2FA login** — the password login
+  gate now takes a username *and* a password. **BREAKING:** existing
+  deployments that only set `HOMEPAGE_AUTH_PASSWORD` must now also set
+  `HOMEPAGE_AUTH_USERNAME`, or password auth refuses to start. An optional
+  authenticator-app second factor is enrolled from a new **Security** page
+  (reachable from the nav menu): scan a QR code, confirm a 6-digit code,
+  done. Sign-in becomes two-step — username/password, then (if 2FA is on) a
+  code prompt — driven by a session-less `POST /api/auth/2fa-check`
+  pre-check. 2FA state lives in an app-managed `config/auth.json` (mode
+  `0600`, corrupt/missing → treated as disabled); recovery from a lost
+  authenticator is deleting or emptying that file. No recovery codes.
+  - Spec: `docs/superpowers/specs/2026-08-31-dashboard-2fa-login-design.md`
+  - Plan: `docs/superpowers/plans/2026-08-31-dashboard-2fa-login.md`
 - **Card visibility/contrast pass** — the card background/shadow shared by
   Disks, Proxmox, Backups, and Widgets was subtle enough to be hard to
   distinguish from the page background; bumped background opacity and
@@ -136,7 +149,6 @@ visitors; this file is the fuller running log.
 ## Not yet implemented — tracked as separate follow-up plans
 
 - Quick VM/CT actions (start/stop/reboot)
-- TOTP-based 2FA login
 - SMART/disk/backup-failure alerting and load history
 
 ## Known rough edges (deferred, non-blocking, see plan/spec files for detail)

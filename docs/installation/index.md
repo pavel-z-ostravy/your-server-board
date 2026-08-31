@@ -55,13 +55,31 @@ Required environment variables for authentication:
 
 Use an `https://` URL for public or TLS-terminated deployments so authentication cookies are marked `Secure`. Trusted HTTP-only LAN deployments may use an `http://` URL.
 
-For password-only login:
+For password login:
 
-- `HOMEPAGE_AUTH_PASSWORD` (a strong, unique password; required unless OIDC settings are provided)
+- `HOMEPAGE_AUTH_USERNAME` (the login username)
+- `HOMEPAGE_AUTH_PASSWORD` (a strong, unique password)
+
+Both are required for password login unless OIDC settings are provided.
 
 !!! warning
 
-    Homepage does not apply application-level rate limiting to password attempts. Deployments exposed outside a trusted network should configure their reverse proxy or ingress to rate limit POST requests to `/api/auth/callback/credentials`. Each failed attempt is logged at `warn` level as `<nextauth> Failed password sign-in attempt`, which can be used as a fail2ban or CrowdSec filter.
+    **Breaking change:** `HOMEPAGE_AUTH_USERNAME` is now required for password login. Existing deployments that only set `HOMEPAGE_AUTH_PASSWORD` must add `HOMEPAGE_AUTH_USERNAME` or password auth will fail to start.
+
+#### Two-factor authentication (TOTP)
+
+Once signed in with a username and password, open the **Security** page
+from the navigation menu to enable an authenticator-app second factor.
+Scan the QR code, confirm a code, and every subsequent sign-in will ask
+for the 6-digit code after the password.
+
+2FA state is stored in `config/auth.json` (created automatically). If you
+lose access to your authenticator, delete or empty that file to disable
+2FA; the next sign-in will only require the username and password.
+
+!!! warning
+
+    Homepage does not apply application-level rate limiting to password attempts. Deployments exposed outside a trusted network should configure their reverse proxy or ingress to rate limit POST requests to `/api/auth/callback/credentials` and `/api/auth/2fa-check` (the session-less pre-check that reports whether 2FA is required). Each failed attempt is logged at `warn` level as `<nextauth> Failed password sign-in attempt`, which can be used as a fail2ban or CrowdSec filter.
 
 For OIDC login (overrides password login):
 
