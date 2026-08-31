@@ -2,23 +2,37 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import createMockRes from "test-utils/create-mock-res";
 
-const { verifyPassword, isTotpEnabled, logFailedPasswordSignIn } = vi.hoisted(() => ({
+const { verifyPassword, isTotpEnabled, logFailedPasswordSignIn, passwordAuthActive } = vi.hoisted(() => ({
   verifyPassword: vi.fn(),
   isTotpEnabled: vi.fn(),
   logFailedPasswordSignIn: vi.fn(),
+  passwordAuthActive: vi.fn(),
 }));
 vi.mock("utils/auth/credentials", () => ({ verifyPassword, logFailedPasswordSignIn }));
 vi.mock("utils/auth/totp-store", () => ({ isTotpEnabled }));
+vi.mock("utils/auth/mode", () => ({ passwordAuthActive }));
 
 import handler from "pages/api/auth/2fa-check";
 
 describe("pages/api/auth/2fa-check", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    passwordAuthActive.mockReturnValue(true);
+  });
 
   it("405s non-POST methods", async () => {
     const res = createMockRes();
     await handler({ method: "GET" }, res);
     expect(res.statusCode).toBe(405);
+    expect(verifyPassword).not.toHaveBeenCalled();
+  });
+
+  it("404s when password auth is not the active mode (auth disabled or OIDC)", async () => {
+    passwordAuthActive.mockReturnValue(false);
+    verifyPassword.mockReturnValue(true);
+    const res = createMockRes();
+    await handler({ method: "POST", body: { username: "admin", password: "ok" } }, res);
+    expect(res.statusCode).toBe(404);
     expect(verifyPassword).not.toHaveBeenCalled();
   });
 

@@ -2,9 +2,9 @@ import { useState } from "react";
 
 import PageBackground from "components/layout/PageBackground";
 
+import { passwordAuthActive } from "utils/auth/mode";
 import { isTotpEnabled } from "utils/auth/totp-store";
 import { getSettings } from "utils/config/config";
-import { isAuthEnabled } from "utils/env";
 
 const CARD_CLASS =
   "rounded-2xl border border-white/60 bg-white/70 p-6 shadow-lg shadow-black/5 dark:border-white/10 dark:bg-slate-900/70";
@@ -34,7 +34,7 @@ function postJson(url, body) {
   });
 }
 
-export default function SecurityPage({ initialSettings, twoFactorEnabled }) {
+export default function SecurityPage({ initialSettings, twoFactorEnabled, passwordAuthEnabled = true }) {
   const [enabled, setEnabled] = useState(Boolean(twoFactorEnabled));
   const [phase, setPhase] = useState("idle");
   const [enrollment, setEnrollment] = useState(null);
@@ -136,7 +136,14 @@ export default function SecurityPage({ initialSettings, twoFactorEnabled }) {
           <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Two-factor authentication</h2>
 
           <div className="mt-4 space-y-4">
-            {!enabled && phase === "idle" && (
+            {!passwordAuthEnabled && (
+              <p className="text-sm text-gray-600 dark:text-slate-300">
+                Two-factor authentication applies to username + password login. This deployment uses OIDC (or has
+                authentication disabled), so there is nothing to configure here.
+              </p>
+            )}
+
+            {passwordAuthEnabled && !enabled && phase === "idle" && (
               <>
                 <p className="text-sm text-gray-600 dark:text-slate-300">
                   Add a time-based one-time code from an authenticator app as a second factor.
@@ -169,7 +176,7 @@ export default function SecurityPage({ initialSettings, twoFactorEnabled }) {
               </>
             )}
 
-            {enabled && phase === "idle" && (
+            {passwordAuthEnabled && enabled && phase === "idle" && (
               <>
                 <p className="text-sm font-medium text-green-700 dark:text-green-300">2FA is on.</p>
                 <button
@@ -214,8 +221,9 @@ export default function SecurityPage({ initialSettings, twoFactorEnabled }) {
   );
 }
 
-export async function getServerSideProps(context) {
+export async function getServerSideProps() {
   const { providers, ...settings } = getSettings();
-  const twoFactorEnabled = isAuthEnabled() ? isTotpEnabled() : false;
-  return { props: { initialSettings: settings, twoFactorEnabled } };
+  const passwordAuthEnabled = passwordAuthActive();
+  const twoFactorEnabled = passwordAuthEnabled ? isTotpEnabled() : false;
+  return { props: { initialSettings: settings, twoFactorEnabled, passwordAuthEnabled } };
 }
