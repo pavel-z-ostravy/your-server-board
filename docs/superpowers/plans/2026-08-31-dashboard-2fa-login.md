@@ -19,7 +19,7 @@
 - `config/auth.json` is written with mode `0o600`. A missing/empty/corrupt file means "2FA disabled" and MUST NOT crash or throw out of `readTotpState()`.
 - The auth secret floor is unchanged: `NEXTAUTH_SECRET`/`HOMEPAGE_AUTH_SECRET` ≥ 32 chars.
 - Path-prefix rule: unauthenticated auth helpers live under `/api/auth/*` (middleware-exempt); session-only helpers live under `/api/security/*` (middleware-protected). Do not move routes between these prefixes.
-- Tests: Vitest. API-route handler tests use `test-utils/create-mock-res` (`createMockRes()` → `res.statusCode`, `res.body`, `res.headers`). React tests start with `// @vitest-environment jsdom`. Module-under-test env manipulation uses `vi.resetModules()` + `process.env = { ...originalEnv }` in `beforeEach`, mirroring `src/__tests__/pages/api/auth/[...nextauth].test.js`.
+- Tests: Vitest. API-route handler tests use `test-utils/create-mock-res` (`createMockRes()` → `res.statusCode`, `res.body`, `res.headers`). React tests start with `// @vitest-environment jsdom` and drive interactions with `fireEvent` from `@testing-library/react` (the project convention — do NOT add `@testing-library/user-event`). Module-under-test env manipulation uses `vi.resetModules()` + `process.env = { ...originalEnv }` in `beforeEach`, mirroring `src/__tests__/pages/api/auth/[...nextauth].test.js`.
 - Follow existing style: sign-in / security UI uses plain English strings (not `t()`), matching the current `signin.jsx`. Tailwind classes match the existing sign-in form (`rounded-xl border … px-4 py-3 text-sm …`, button `bg-theme-600 …`).
 - Commit after every task with a `feat:` / `test:` / `docs:` prefixed message.
 
@@ -1074,11 +1074,12 @@ Behaviour:
 
 - [ ] **Step 1: Update `signin.test.jsx`**
 
-Add `global.fetch` mock + `next-auth/react` `signIn` mock. Extend the existing `next/router` mock to allow overriding `query`. Add:
+Add `global.fetch` mock + `next-auth/react` `signIn` mock. Import `fireEvent` and `act` from `@testing-library/react`. Extend the existing `next/router` mock to allow overriding `query`. Stub `window.location.assign` (`vi.spyOn(window.location, "assign")` may fail in jsdom — instead `delete window.location; window.location = { assign: vi.fn() };` in `beforeEach`, restoring after). Add:
 
 ```js
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { signIn } from "next-auth/react";
-// vi.mock("next-auth/react", ...) — extend the existing mock to include signIn: vi.fn()
+// extend the existing next-auth/react mock: getProviders: vi.fn(), signIn: vi.fn()
 
 function renderPasswordSignIn() {
   render(
@@ -1089,26 +1090,30 @@ function renderPasswordSignIn() {
   );
 }
 
+async function submitCredentials(username = "admin", password = "secret") {
+  fireEvent.change(screen.getByLabelText("Username"), { target: { value: username } });
+  fireEvent.change(screen.getByLabelText("Password"), { target: { value: password } });
+  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+}
+
 it("signs in directly when 2FA is disabled", async () => {
   global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ twoFactorEnabled: false }) });
   signIn.mockResolvedValue({ ok: true, url: "/" });
   renderPasswordSignIn();
+  await submitCredentials();
 
-  await userEvent.type(screen.getByLabelText("Username"), "admin");
-  await userEvent.type(screen.getByLabelText("Password"), "secret");
-  await userEvent.click(screen.getByRole("button", { name: /continue/i }));
-
-  await waitFor(() => expect(signIn).toHaveBeenCalledWith("credentials", expect.objectContaining({
-    redirect: false, username: "admin", password: "secret",
-  })));
+  await waitFor(() =>
+    expect(signIn).toHaveBeenCalledWith(
+      "credentials",
+      expect.objectContaining({ redirect: false, username: "admin", password: "secret" }),
+    ),
+  );
 });
 
 it("shows the code step when 2FA is enabled", async () => {
   global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ twoFactorEnabled: true }) });
   renderPasswordSignIn();
-  await userEvent.type(screen.getByLabelText("Username"), "admin");
-  await userEvent.type(screen.getByLabelText("Password"), "secret");
-  await userEvent.click(screen.getByRole("button", { name: /continue/i }));
+  await submitCredentials();
 
   expect(await screen.findByLabelText("Authentication code")).toBeInTheDocument();
   expect(signIn).not.toHaveBeenCalled();
@@ -1117,9 +1122,7 @@ it("shows the code step when 2FA is enabled", async () => {
 it("shows an error on wrong credentials", async () => {
   global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: "Invalid credentials" }) });
   renderPasswordSignIn();
-  await userEvent.type(screen.getByLabelText("Username"), "admin");
-  await userEvent.type(screen.getByLabelText("Password"), "bad");
-  await userEvent.click(screen.getByRole("button", { name: /continue/i }));
+  await submitCredentials("admin", "bad");
   expect(await screen.findByText(/invalid username or password/i)).toBeInTheDocument();
 });
 
@@ -1127,16 +1130,16 @@ it("submits the code and surfaces an invalid-code error", async () => {
   global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ twoFactorEnabled: true }) });
   signIn.mockResolvedValue({ ok: false, error: "CredentialsSignin" });
   renderPasswordSignIn();
-  await userEvent.type(screen.getByLabelText("Username"), "admin");
-  await userEvent.type(screen.getByLabelText("Password"), "secret");
-  await userEvent.click(screen.getByRole("button", { name: /continue/i }));
-  await userEvent.type(await screen.findByLabelText("Authentication code"), "000000");
-  await userEvent.click(screen.getByRole("button", { name: /verify/i }));
+  await submitCredentials();
+
+  const codeInput = await screen.findByLabelText("Authentication code");
+  fireEvent.change(codeInput, { target: { value: "000000" } });
+  fireEvent.click(screen.getByRole("button", { name: /verify/i }));
   expect(await screen.findByText(/invalid authentication code/i)).toBeInTheDocument();
 });
 ```
 
-Add `import userEvent from "@testing-library/user-event";` (already a dev dep? if not, `pnpm add -D @testing-library/user-event` in this step). Keep the existing three tests; the "renders provider buttons when providers are available" test uses an OIDC provider so it still asserts a login button — leave it. Adjust it only if it referenced the old single "Password" label.
+Keep the existing three tests. The "renders provider buttons when providers are available" test uses an OIDC provider so it still asserts a login button — leave it. Adjust only if it referenced the old single "Password" label.
 
 - [ ] **Step 2: Run — expect failure**
 
@@ -1195,8 +1198,7 @@ Page:
 
 ```js
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("components/layout/PageBackground", () => ({ default: ({ children }) => <div>{children}</div> }));
@@ -1221,11 +1223,11 @@ describe("pages/security", () => {
 
     render(<SecurityPage initialSettings={{}} twoFactorEnabled={false} />);
 
-    await userEvent.click(screen.getByRole("button", { name: /enable 2fa/i }));
+    fireEvent.click(screen.getByRole("button", { name: /enable 2fa/i }));
     expect(await screen.findByAltText("2FA QR code")).toHaveAttribute("src", "data:image/png;base64,AAA");
 
-    await userEvent.type(screen.getByLabelText(/authentication code/i), "123456");
-    await userEvent.click(screen.getByRole("button", { name: /confirm/i }));
+    fireEvent.change(screen.getByLabelText(/authentication code/i), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: /confirm/i }));
 
     await waitFor(() => expect(screen.getByText(/2fa is on/i)).toBeInTheDocument());
     expect(global.fetch).toHaveBeenLastCalledWith(
@@ -1245,9 +1247,9 @@ describe("pages/security", () => {
       .mockResolvedValueOnce({ ok: false, status: 400, json: async () => ({ error: "Invalid code" }) });
 
     render(<SecurityPage initialSettings={{}} twoFactorEnabled={false} />);
-    await userEvent.click(screen.getByRole("button", { name: /enable 2fa/i }));
-    await userEvent.type(await screen.findByLabelText(/authentication code/i), "000000");
-    await userEvent.click(screen.getByRole("button", { name: /confirm/i }));
+    fireEvent.click(screen.getByRole("button", { name: /enable 2fa/i }));
+    fireEvent.change(await screen.findByLabelText(/authentication code/i), { target: { value: "000000" } });
+    fireEvent.click(screen.getByRole("button", { name: /confirm/i }));
     expect(await screen.findByText(/invalid code, try again/i)).toBeInTheDocument();
   });
 
