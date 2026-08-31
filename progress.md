@@ -178,6 +178,10 @@ visitors; this file is the fuller running log.
 - `pveGet`-style helpers are now duplicated across four files
   (`agentExec.js`, `backups.js`, `host/index.js`, `vms/index.js`) — worth
   consolidating into a shared module in a future cleanup pass.
+- TOTP codes have no replay protection — a valid 6-digit code can be
+  redeemed more than once within its 30s step. Acceptable for a single-user
+  self-hosted dashboard; would matter if the acceptance window is ever
+  widened or the deployment becomes multi-user.
 - The `CARD_CLASS`/`STAT_CLASS` style strings are duplicated across five
   files (`disks/group.jsx`, `proxmox-vms/group.jsx`, `backups/vm-list.jsx`,
   `backups/config-backup.jsx`, `pages/widgets.jsx`) instead of a shared

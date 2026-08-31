@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { CONF_DIR } from "utils/config/config";
@@ -23,7 +23,11 @@ export function readTotpState() {
 }
 
 export function writeTotpState(state) {
-  writeFileSync(authPath(), JSON.stringify(state, null, 2), { mode: 0o600 });
+  const path = authPath();
+  writeFileSync(path, JSON.stringify(state, null, 2), { mode: 0o600 });
+  // `mode` only takes effect when writeFileSync creates the file; tighten an
+  // already-existing auth.json that may have been created with looser perms.
+  chmodSync(path, 0o600);
 }
 
 export function clearTotpState() {

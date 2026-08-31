@@ -44,4 +44,15 @@ describe("pages/api/security/totp/disable", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ enabled: false });
   });
+
+  it("500s when clearing state throws", async () => {
+    verifyToken.mockReturnValue(true);
+    clearTotpState.mockImplementationOnce(() => {
+      throw new Error("EACCES");
+    });
+    const res = createMockRes();
+    await handler({ method: "POST", body: { token: "123456" } }, res);
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: "Could not save 2FA settings" });
+  });
 });

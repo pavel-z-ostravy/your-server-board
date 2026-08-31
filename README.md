@@ -45,13 +45,18 @@ for exactly what in this repo is original vs. derivative.
   before every write, disclaimer + risk acknowledgement required). The
   install feature explicitly has **no new authentication** yet — see
   `progress.md` for what that means and what's planned to close it.
+- **Username + password login with optional TOTP 2FA deployed and live.**
+  The existing password gate now also requires `HOMEPAGE_AUTH_USERNAME`
+  (breaking change for password-only deployments), and a second factor
+  (authenticator-app TOTP) can be enrolled from the in-app `/security`
+  page. See [`docs/installation/index.md`](docs/installation/index.md)
+  for setup and recovery.
 - **Not yet implemented — tracked as separate follow-up plans**
   (see `docs/superpowers/plans/` and [`progress.md`](progress.md) for the
   full list):
   - Security hardening (auth) for the widget-install write path
   - Backup lifecycle management for Proxmox VMs/CTs (list/run/download/delete, retention)
   - Quick VM/CT actions (start/stop/reboot)
-  - TOTP-based 2FA login
   - SMART/disk/backup-failure alerting and load history
 
 ## Getting Started (your own server)
@@ -92,12 +97,13 @@ setup, and `docker-compose.yml` + `.env.example` for the raw Docker Compose
 invocation (`docker compose up -d --build` once `.env` is filled in).
 
 **Security note:** by default the dashboard has no login at all — anyone who
-can reach the port can use it. Homepage's own optional password gate
-(`HOMEPAGE_AUTH_ENABLED`/`HOMEPAGE_AUTH_PASSWORD`) works today; TOTP 2FA on
-top of it is planned (see Status above) but not built yet. Don't expose this
-past your LAN without at least the password gate, and ideally an
-authenticating reverse proxy or tunnel (Cloudflare Access, Authelia, etc.)
-in front of it too.
+can reach the port can use it. The optional username + password gate
+(`HOMEPAGE_AUTH_ENABLED` + `HOMEPAGE_AUTH_USERNAME` + `HOMEPAGE_AUTH_PASSWORD`)
+works today, and TOTP 2FA can be enrolled on top of it from the `/security`
+page — see [`docs/installation/index.md`](docs/installation/index.md) for
+details. Don't expose this past your LAN without at least the password gate,
+and ideally an authenticating reverse proxy or tunnel (Cloudflare Access,
+Authelia, etc.) in front of it too.
 
 ## What this fork adds on top of Homepage
 
@@ -112,7 +118,7 @@ in front of it too.
 | Widget one-click install (writes to services.yaml/widgets.yaml)        | ❌ none                | ✅ live, **no auth yet** — see `progress.md`           |
 | Backup lifecycle (list/run/download/delete/retention)                  | ❌ none                | planned                                                |
 | VM/CT power actions                                                    | ❌ none                | planned                                                |
-| Login                                                                  | optional password only | password today, TOTP 2FA planned                       |
+| Login                                                                  | optional password only | ✅ username + password, optional TOTP 2FA (`/security`) |
 | Alerting                                                               | ❌ none                | planned (SMART/disk/backup-failure via email)          |
 
 For everything in the "unchanged" row — the config format, the 100+

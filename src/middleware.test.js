@@ -215,6 +215,30 @@ describe("middleware", () => {
     expect(res.headers.get("Cache-Control")).toBeNull();
   });
 
+  it("responds 401 JSON (not a redirect) for an unauthenticated /api/security/totp/enroll", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    process.env.HOMEPAGE_AUTH_SECRET = "secret";
+
+    getToken.mockResolvedValueOnce(null);
+
+    const middleware = await loadMiddleware();
+    const res = await middleware(createReq("localhost:3000", "http://localhost:3000/api/security/totp/enroll"));
+
+    expect(NextResponse.redirect).not.toHaveBeenCalled();
+    expect(NextResponse.json).toHaveBeenCalledWith({ error: "Unauthorized" }, { status: 401 });
+    expect(res.type).toBe("json");
+    expect(res.init.status).toBe(401);
+  });
+
+  it("does not gate /api/auth/2fa-check (excluded from the matcher)", async () => {
+    const { config } = await import("./middleware");
+    const pattern = config.matcher.find((m) => m.includes("api/auth"));
+    const regex = new RegExp(`^${pattern}$`);
+    expect(regex.test("/api/auth/2fa-check")).toBe(false);
+    // a normal API route is still matched
+    expect(regex.test("/api/widgets-catalog/install")).toBe(true);
+  });
+
   it("delegates MCP authorization to the API handler", async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
     process.env.HOMEPAGE_AUTH_SECRET = "secret";

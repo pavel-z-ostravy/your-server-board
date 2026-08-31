@@ -60,11 +60,13 @@ AGENTS.md
 CLAUDE.md
 
 # your-server-board: server-specific secrets, never commit
-# (config/proxmox.yaml and config/ssh/ are already covered by the broader
-# /config entry above — listed again here intentionally, belt-and-braces,
-# so they stay protected even if /config is ever narrowed or removed.)
+# (config/proxmox.yaml, config/ssh/ and config/auth.json are already covered by
+# the broader /config entry above — listed again here intentionally,
+# belt-and-braces, so they stay protected even if /config is ever narrowed or
+# removed. config/auth.json holds the TOTP 2FA secret.)
 config/proxmox.yaml
 config/ssh/
+config/auth.json
 .env
 .env.bak
 
