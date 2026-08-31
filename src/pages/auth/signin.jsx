@@ -20,8 +20,12 @@ export default function SignIn({ providers, settings }) {
   const color = settings?.color || "slate";
   const title = settings?.title || "Homepage";
   const callbackUrl = useMemo(() => {
+    // Only same-origin relative paths. `redirect: false` + a manual
+    // window.location.assign removed next-auth's built-in same-origin check, so
+    // an attacker-controlled `?callbackUrl=https://evil` / `//evil` must not
+    // land an authenticated user off-site.
     const value = router.query?.callbackUrl;
-    return typeof value === "string" ? value : "/";
+    return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") ? value : "/";
   }, [router.query?.callbackUrl]);
   const error = router.query?.error;
 
@@ -140,29 +144,29 @@ export default function SignIn({ providers, settings }) {
     event.preventDefault();
     setSubmitting(true);
     setFormError("");
-    let resp;
+    let twoFactorEnabled;
     try {
-      resp = await fetch("/api/auth/2fa-check", {
+      const resp = await fetch("/api/auth/2fa-check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
+      if (resp.status === 401) {
+        setFormError("Invalid username or password.");
+        setSubmitting(false);
+        return;
+      }
+      if (!resp.ok) {
+        setFormError("Something went wrong. Please try again.");
+        setSubmitting(false);
+        return;
+      }
+      ({ twoFactorEnabled } = await resp.json());
     } catch {
       setFormError("Something went wrong. Please try again.");
       setSubmitting(false);
       return;
     }
-    if (resp.status === 401) {
-      setFormError("Invalid username or password.");
-      setSubmitting(false);
-      return;
-    }
-    if (!resp.ok) {
-      setFormError("Something went wrong. Please try again.");
-      setSubmitting(false);
-      return;
-    }
-    const { twoFactorEnabled } = await resp.json();
     if (twoFactorEnabled) {
       setStep("totp");
       setSubmitting(false);

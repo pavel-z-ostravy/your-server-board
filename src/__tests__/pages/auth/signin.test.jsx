@@ -211,6 +211,47 @@ describe("pages/auth/signin", () => {
     );
   });
 
+  it.each(["https://evil.example", "//evil.example"])(
+    "ignores an off-origin callbackUrl (%s) and navigates to /",
+    async (evil) => {
+      routerState.query = { callbackUrl: evil };
+      global.fetch = vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200, json: async () => ({ twoFactorEnabled: false }) });
+      signIn.mockResolvedValue({ ok: true, url: "/" });
+      renderPasswordSignIn();
+      await submitCredentials();
+
+      await waitFor(() => expect(window.location.assign).toHaveBeenCalledWith("/"));
+      expect(window.location.assign).not.toHaveBeenCalledWith(evil);
+    },
+  );
+
+  it("keeps a safe relative callbackUrl", async () => {
+    routerState.query = { callbackUrl: "/widgets" };
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ twoFactorEnabled: false }) });
+    signIn.mockResolvedValue({ ok: true, url: "/" });
+    renderPasswordSignIn();
+    await submitCredentials();
+
+    await waitFor(() => expect(window.location.assign).toHaveBeenCalledWith("/widgets"));
+  });
+
+  it("recovers from a non-JSON 200 on the pre-check without sticking the form", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new Error("Unexpected token < in JSON");
+      },
+    });
+    renderPasswordSignIn();
+    await submitCredentials();
+
+    expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continue/i })).not.toBeDisabled();
+  });
+
   it("recovers from a network error on the pre-check fetch", async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("network down"));
     renderPasswordSignIn();
