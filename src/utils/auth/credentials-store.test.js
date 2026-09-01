@@ -63,4 +63,11 @@ describe("utils/auth/credentials-store", () => {
     process.env.HOMEPAGE_AUTH_PASSWORD = "envpass";
     expect(cs.currentUsername()).toBe("envuser");
   });
+
+  it("managedByEnv: empty-string env vars behave as unset", async () => {
+    const cs = await load();
+    process.env.HOMEPAGE_AUTH_USERNAME = "";
+    process.env.HOMEPAGE_AUTH_PASSWORD = "";
+    expect(cs.managedByEnv()).toBe(false);
+  });
 });
