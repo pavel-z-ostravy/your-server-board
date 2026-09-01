@@ -11,6 +11,7 @@ const { NextResponse, getToken } = vi.hoisted(() => ({
 
 vi.mock("next/server", () => ({ NextResponse }));
 vi.mock("next-auth/jwt", () => ({ getToken }));
+vi.mock("utils/auth/secret", () => ({ ensureAuthSecret: () => "x".repeat(44) }));
 
 async function loadMiddleware() {
   vi.resetModules();
@@ -41,6 +42,7 @@ describe("middleware", () => {
   });
 
   it("allows requests for default localhost hosts when auth is disabled", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
     process.env.PORT = "3000";
 
     const middleware = await loadMiddleware();
@@ -68,6 +70,7 @@ describe("middleware", () => {
   });
 
   it("allows requests when HOMEPAGE_ALLOWED_HOSTS is '*'", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
     process.env.HOMEPAGE_ALLOWED_HOSTS = "*";
 
     const middleware = await loadMiddleware();
@@ -78,6 +81,7 @@ describe("middleware", () => {
   });
 
   it("allows requests when host is included in HOMEPAGE_ALLOWED_HOSTS", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
     process.env.PORT = "3000";
     process.env.HOMEPAGE_ALLOWED_HOSTS = "example.com:3000,other:3000";
 
@@ -100,8 +104,38 @@ describe("middleware", () => {
     expect(res.type).toBe("next");
   });
 
-  it.each(["false", "0", "no", "off", ""])("treats HOMEPAGE_AUTH_ENABLED=%j as disabled", async (value) => {
-    process.env.HOMEPAGE_AUTH_ENABLED = value;
+  it('treats HOMEPAGE_AUTH_ENABLED="false" as disabled', async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
+
+    const middleware = await loadMiddleware();
+    const res = await middleware(createReq("localhost:3000", "http://localhost:3000/some"));
+
+    expect(getToken).not.toHaveBeenCalled();
+    expect(res.type).toBe("next");
+  });
+
+  it("gates requests when HOMEPAGE_AUTH_ENABLED is unset (on by default)", async () => {
+    delete process.env.HOMEPAGE_AUTH_ENABLED;
+    getToken.mockResolvedValueOnce(null);
+
+    const middleware = await loadMiddleware();
+    const pageRes = await middleware(createReq("localhost:3000", "http://localhost:3000/some"));
+
+    expect(getToken).toHaveBeenCalledWith({
+      req: expect.objectContaining({ url: "http://localhost:3000/some" }),
+      secret: "x".repeat(44),
+    });
+    expect(pageRes.type).toBe("redirect");
+    expect(String(pageRes.url)).toContain("/auth/signin");
+
+    getToken.mockResolvedValueOnce(null);
+    const apiRes = await middleware(createReq("localhost:3000", "http://localhost:3000/api/widgets-catalog/install"));
+    expect(apiRes.type).toBe("json");
+    expect(apiRes.init.status).toBe(401);
+  });
+
+  it('passes through when HOMEPAGE_AUTH_ENABLED is "false" and no token is present', async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
 
     const middleware = await loadMiddleware();
     const res = await middleware(createReq("localhost:3000", "http://localhost:3000/some"));
@@ -121,7 +155,7 @@ describe("middleware", () => {
 
     expect(getToken).toHaveBeenCalledWith({
       req: expect.objectContaining({ url: "http://localhost:3000/some" }),
-      secret: "secret",
+      secret: "x".repeat(44),
     });
     expect(NextResponse.redirect).toHaveBeenCalled();
     expect(res.type).toBe("redirect");
@@ -209,6 +243,7 @@ describe("middleware", () => {
   });
 
   it("leaves cache headers alone when auth is disabled", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
     const middleware = await loadMiddleware();
     const res = await middleware(createReq("localhost:3000", "http://localhost:3000/"));
 
@@ -230,11 +265,11 @@ describe("middleware", () => {
     expect(res.init.status).toBe(401);
   });
 
-  it("does not gate /api/auth/2fa-check (excluded from the matcher)", async () => {
+  it("does not gate /api/auth/* routes (excluded from the matcher)", async () => {
     const { config } = await import("./middleware");
     const pattern = config.matcher.find((m) => m.includes("api/auth"));
     const regex = new RegExp(`^${pattern}$`);
-    expect(regex.test("/api/auth/2fa-check")).toBe(false);
+    expect(regex.test("/api/auth/callback/credentials")).toBe(false);
     // a normal API route is still matched
     expect(regex.test("/api/widgets-catalog/install")).toBe(true);
   });

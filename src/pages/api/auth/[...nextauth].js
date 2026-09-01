@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
 import { logFailedPasswordSignIn, verifyPassword } from "utils/auth/credentials";
+import { ensureAuthSecret } from "utils/auth/secret";
 import { verifyToken } from "utils/auth/totp";
 import { isTotpEnabled } from "utils/auth/totp-store";
 import { isAuthEnabled } from "utils/env";
@@ -9,19 +10,22 @@ import createLogger from "utils/logger";
 
 const MIN_AUTH_SECRET_LENGTH = 32;
 
+const FAIL_THRESHOLD = 5;
+let consecutiveFailures = 0;
+let blockedUntil = 0;
+
 const authEnabled = isAuthEnabled();
 const issuer = process.env.HOMEPAGE_OIDC_ISSUER;
 const clientId = process.env.HOMEPAGE_OIDC_CLIENT_ID;
 const clientSecret = process.env.HOMEPAGE_OIDC_CLIENT_SECRET;
-const homepageAuthSecret = process.env.HOMEPAGE_AUTH_SECRET;
 const homepageExternalUrl = process.env.HOMEPAGE_EXTERNAL_URL;
 const homepageAuthPassword = process.env.HOMEPAGE_AUTH_PASSWORD;
 const homepageAuthUsername = process.env.HOMEPAGE_AUTH_USERNAME;
 
-// Map HOMEPAGE_* envs to what NextAuth expects
-if (!process.env.NEXTAUTH_SECRET && homepageAuthSecret) {
-  process.env.NEXTAUTH_SECRET = homepageAuthSecret;
-}
+// Map HOMEPAGE_* envs to what NextAuth expects. The signing secret is generated and
+// persisted to config/auth.json when neither NEXTAUTH_SECRET nor HOMEPAGE_AUTH_SECRET is set.
+const NEXTAUTH_SECRET = authEnabled ? ensureAuthSecret() : undefined;
+if (authEnabled && !process.env.NEXTAUTH_SECRET) process.env.NEXTAUTH_SECRET = NEXTAUTH_SECRET;
 if (!process.env.NEXTAUTH_URL && homepageExternalUrl) {
   process.env.NEXTAUTH_URL = homepageExternalUrl;
 }
@@ -33,41 +37,49 @@ const hasAnyOidcConfig = Boolean(issuer || clientId || clientSecret);
 let parsedAuthUrl;
 
 if (authEnabled) {
-  if (!process.env.NEXTAUTH_URL) {
-    throw new Error("Homepage auth is enabled but HOMEPAGE_EXTERNAL_URL (or NEXTAUTH_URL) is missing.");
+  if (process.env.NEXTAUTH_URL) {
+    try {
+      parsedAuthUrl = new URL(process.env.NEXTAUTH_URL);
+    } catch {
+      throw new Error("HOMEPAGE_EXTERNAL_URL (or NEXTAUTH_URL) must be an absolute HTTP(S) URL.");
+    }
+
+    if (
+      !["http:", "https:"].includes(parsedAuthUrl.protocol) ||
+      parsedAuthUrl.username ||
+      parsedAuthUrl.password ||
+      parsedAuthUrl.search ||
+      parsedAuthUrl.hash
+    ) {
+      throw new Error(
+        "HOMEPAGE_EXTERNAL_URL (or NEXTAUTH_URL) must be an absolute HTTP(S) URL without credentials, query, or fragment.",
+      );
+    }
   }
 
-  try {
-    parsedAuthUrl = new URL(process.env.NEXTAUTH_URL);
-  } catch {
-    throw new Error("HOMEPAGE_EXTERNAL_URL (or NEXTAUTH_URL) must be an absolute HTTP(S) URL.");
+  if (hasOidcConfig && !process.env.NEXTAUTH_URL) {
+    throw new Error("OIDC auth requires HOMEPAGE_EXTERNAL_URL.");
   }
 
-  if (
-    !["http:", "https:"].includes(parsedAuthUrl.protocol) ||
-    parsedAuthUrl.username ||
-    parsedAuthUrl.password ||
-    parsedAuthUrl.search ||
-    parsedAuthUrl.hash
-  ) {
+  if (!hasOidcConfig && hasAnyOidcConfig) {
+    throw new Error("OIDC auth is enabled but required settings are missing.");
+  }
+
+  // Safety net: ensureAuthSecret() always returns a value, so this should never fire.
+  if (!NEXTAUTH_SECRET) {
+    throw new Error("Homepage auth is enabled but no signing secret could be determined.");
+  }
+
+  if (NEXTAUTH_SECRET.length < MIN_AUTH_SECRET_LENGTH) {
     throw new Error(
-      "HOMEPAGE_EXTERNAL_URL (or NEXTAUTH_URL) must be an absolute HTTP(S) URL without credentials, query, or fragment.",
+      `HOMEPAGE_AUTH_SECRET (or NEXTAUTH_SECRET) must be at least ${MIN_AUTH_SECRET_LENGTH} characters. Generate one with: openssl rand -base64 32`,
     );
   }
 
-  if (hasOidcConfig) {
-    if (!process.env.NEXTAUTH_SECRET) {
-      throw new Error("OIDC auth is enabled but required settings are missing.");
-    }
-  } else if (hasAnyOidcConfig) {
-    throw new Error("OIDC auth is enabled but required settings are missing.");
-  } else if (!homepageAuthPassword || !homepageAuthUsername || !process.env.NEXTAUTH_SECRET) {
-    throw new Error("Password auth is enabled but required settings are missing.");
-  }
-
-  if (process.env.NEXTAUTH_SECRET.length < MIN_AUTH_SECRET_LENGTH) {
-    throw new Error(
-      `HOMEPAGE_AUTH_SECRET (or NEXTAUTH_SECRET) must be at least ${MIN_AUTH_SECRET_LENGTH} characters. Generate one with: openssl rand -base64 32`,
+  if (Boolean(homepageAuthUsername) !== Boolean(homepageAuthPassword)) {
+    createLogger("nextauth").warn(
+      "HOMEPAGE_AUTH_USERNAME / HOMEPAGE_AUTH_PASSWORD: one is set without the other — " +
+        "ignoring both; using stored / default credentials",
     );
   }
 }
@@ -111,8 +123,15 @@ if (authEnabled) {
           token: { label: "Authentication code", type: "text" },
         },
         async authorize(credentials) {
+          if (Date.now() < blockedUntil) return null;
           const { username, password, token } = credentials ?? {};
-          if (!verifyPassword(username, password)) {
+
+          if (!(await verifyPassword(username, password))) {
+            consecutiveFailures += 1;
+            if (consecutiveFailures >= FAIL_THRESHOLD) {
+              const over = consecutiveFailures - FAIL_THRESHOLD;
+              blockedUntil = Date.now() + Math.min(1000 * 2 ** over, 30_000);
+            }
             logFailedPasswordSignIn();
             return null;
           }
@@ -120,6 +139,8 @@ if (authEnabled) {
             logFailedPasswordSignIn();
             return null;
           }
+          consecutiveFailures = 0;
+          blockedUntil = 0;
           return { id: "homepage", name: username };
         },
       }),
@@ -132,7 +153,7 @@ export const authOptions = {
   session: {
     strategy: "jwt",
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: NEXTAUTH_SECRET,
   useSecureCookies: parsedAuthUrl?.protocol === "https:",
   pages: {
     signIn: "/auth/signin",

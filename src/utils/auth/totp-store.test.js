@@ -1,62 +1,77 @@
-import { chmodSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { warnMock, confDir } = vi.hoisted(() => ({ warnMock: vi.fn(), confDir: { value: "" } }));
-vi.mock("utils/logger", () => ({ default: vi.fn(() => ({ warn: warnMock })) }));
-vi.mock("utils/config/config", () => ({
-  get CONF_DIR() {
-    return confDir.value;
-  },
-}));
+let dir;
 
-import { clearTotpState, isTotpEnabled, readTotpState, writeTotpState } from "utils/auth/totp-store";
+beforeEach(() => {
+  vi.resetModules();
+  dir = mkdtempSync(join(tmpdir(), "ysb-auth-"));
+  process.env.HOMEPAGE_CONFIG_DIR = dir;
+});
+
+afterEach(() => {
+  delete process.env.HOMEPAGE_CONFIG_DIR;
+  vi.restoreAllMocks();
+});
+
+async function loadStore() {
+  return import("utils/auth/totp-store");
+}
 
 describe("utils/auth/totp-store", () => {
-  beforeEach(() => {
-    warnMock.mockClear();
-    confDir.value = mkdtempSync(join(tmpdir(), "ysb-auth-"));
-  });
-
-  it("returns {} when the file does not exist, without warning", () => {
+  it("returns {} when the file does not exist, without warning", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { readTotpState } = await loadStore();
     expect(readTotpState()).toEqual({});
-    expect(warnMock).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
   });
 
-  it("round-trips a written state", () => {
+  it("round-trips a written state", async () => {
+    const { readTotpState, writeTotpState, isTotpEnabled } = await loadStore();
     writeTotpState({ totp: { secret: "ABC", enabledAt: "2026-08-31T00:00:00.000Z" } });
     expect(readTotpState()).toEqual({ totp: { secret: "ABC", enabledAt: "2026-08-31T00:00:00.000Z" } });
     expect(isTotpEnabled()).toBe(true);
   });
 
-  it("writes the file with 0600 permissions", () => {
+  it("writes the file with 0600 permissions", async () => {
+    const { writeTotpState } = await loadStore();
     writeTotpState({ totp: { secret: "ABC", enabledAt: "x" } });
-    const mode = statSync(join(confDir.value, "auth.json")).mode & 0o777;
-    expect(mode).toBe(0o600);
+    expect(statSync(join(dir, "auth.json")).mode & 0o777).toBe(0o600);
   });
 
-  it("tightens permissions on an already-existing file", () => {
-    const path = join(confDir.value, "auth.json");
+  it("tightens permissions on an already-existing file", async () => {
+    const path = join(dir, "auth.json");
     writeFileSync(path, "{}");
     chmodSync(path, 0o644);
     expect(statSync(path).mode & 0o777).toBe(0o644);
+    const { writeTotpState } = await loadStore();
     writeTotpState({ totp: { secret: "ABC", enabledAt: "x" } });
     expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 
-  it("treats a corrupt file as disabled and warns", () => {
-    writeFileSync(join(confDir.value, "auth.json"), "not json{");
+  it("treats a corrupt file as disabled and warns once", async () => {
+    writeFileSync(join(dir, "auth.json"), "not json{");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { readTotpState, isTotpEnabled } = await loadStore();
+    const { writeAuthFile } = await import("utils/auth/auth-file");
     expect(readTotpState()).toEqual({});
     expect(isTotpEnabled()).toBe(false);
-    expect(warnMock).toHaveBeenCalled();
+    // writeAuthFile re-parses the still-corrupt file fresh — the `warned` flag
+    // must suppress the second warning.
+    writeAuthFile({ x: 1 });
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it("clearTotpState leaves an empty object", () => {
+  it("clearTotpState drops only totp and keeps secret/user", async () => {
+    const { writeTotpState, clearTotpState } = await loadStore();
+    const { writeAuthFile, readAuthFile } = await import("utils/auth/auth-file");
+    writeAuthFile({ secret: "s1", user: { username: "admin" } });
     writeTotpState({ totp: { secret: "ABC", enabledAt: "x" } });
     clearTotpState();
-    expect(readTotpState()).toEqual({});
-    expect(JSON.parse(readFileSync(join(confDir.value, "auth.json"), "utf8"))).toEqual({});
+    expect(readAuthFile()).toStrictEqual({ secret: "s1", user: { username: "admin" } });
+    expect("totp" in readAuthFile()).toBe(false);
   });
 });

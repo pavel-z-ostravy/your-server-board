@@ -1,10 +1,14 @@
 import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 
+import { ensureAuthSecret } from "utils/auth/secret";
 import { isAuthEnabled } from "utils/env";
 
 const authEnabled = isAuthEnabled();
-const authSecret = process.env.NEXTAUTH_SECRET || process.env.HOMEPAGE_AUTH_SECRET;
+if (!process.env.NEXTAUTH_URL && process.env.HOMEPAGE_EXTERNAL_URL) {
+  process.env.NEXTAUTH_URL = process.env.HOMEPAGE_EXTERNAL_URL;
+}
+const authSecret = authEnabled ? ensureAuthSecret() : undefined;
 
 // Prerendered pages carry `s-maxage`, and the dashboard HTML embeds the service and
 // bookmark inventory. Without this, a CDN or caching reverse proxy in front of Homepage
@@ -57,6 +61,9 @@ export async function middleware(req) {
 }
 
 export const config = {
+  // Task 0 ruling: middleware.js compiles to the Edge runtime by default in Next 16, which
+  // cannot use node:fs — force Node so ensureAuthSecret() can read config/auth.json.
+  runtime: "nodejs",
   // Protect all app and API routes; allow Next.js internals, public assets, auth pages, and NextAuth endpoints.
   matcher: [
     "/",

@@ -4,11 +4,13 @@ import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import { BiShieldQuarter } from "react-icons/bi";
 
+import { passwordAuthActive } from "utils/auth/mode";
+import { isTotpEnabled } from "utils/auth/totp-store";
 import { getSettings } from "utils/config/config";
 
 const PUBLIC_SIGN_IN_SETTINGS = ["theme", "color", "title", "background", "backgroundOpacity"];
 
-export default function SignIn({ providers, settings }) {
+export default function SignIn({ providers, settings, twoFactorEnabled = false }) {
   const router = useRouter();
   const [step, setStep] = useState("credentials");
   const [username, setUsername] = useState("");
@@ -119,10 +121,10 @@ export default function SignIn({ providers, settings }) {
   const hasPasswordProvider = Boolean(passwordProvider);
   const credentialsId = passwordProvider?.id ?? "credentials";
 
-  const finishSignIn = async () => {
+  const submitSignIn = async (extra) => {
     let result;
     try {
-      result = await signIn(credentialsId, { redirect: false, username, password, token });
+      result = await signIn(credentialsId, { redirect: false, username, password, ...extra });
     } catch {
       setSubmitting(false);
       setFormError("Something went wrong. Please try again.");
@@ -133,53 +135,27 @@ export default function SignIn({ providers, settings }) {
       return;
     }
     setSubmitting(false);
-    if (step === "totp") {
-      setFormError("Invalid authentication code.");
-    } else {
-      setFormError("Invalid username or password.");
-    }
+    setFormError(twoFactorEnabled ? "Invalid username, password, or code." : "Invalid username or password.");
   };
 
   const handleCredentialsSubmit = async (event) => {
     event.preventDefault();
-    setSubmitting(true);
     setFormError("");
-    let twoFactorEnabled;
-    try {
-      const resp = await fetch("/api/auth/2fa-check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      if (resp.status === 401) {
-        setFormError("Invalid username or password.");
-        setSubmitting(false);
-        return;
-      }
-      if (!resp.ok) {
-        setFormError("Something went wrong. Please try again.");
-        setSubmitting(false);
-        return;
-      }
-      ({ twoFactorEnabled } = await resp.json());
-    } catch {
-      setFormError("Something went wrong. Please try again.");
-      setSubmitting(false);
-      return;
-    }
     if (twoFactorEnabled) {
+      // No network here: "is 2FA on" is a server-rendered fact, so step 1 just
+      // reveals the code field. authorize() is the only credential chokepoint.
       setStep("totp");
-      setSubmitting(false);
       return;
     }
-    await finishSignIn();
+    setSubmitting(true);
+    await submitSignIn();
   };
 
   const handleTotpSubmit = async (event) => {
     event.preventDefault();
     setSubmitting(true);
     setFormError("");
-    await finishSignIn();
+    await submitSignIn({ token });
   };
 
   const handleBack = () => {
@@ -263,7 +239,9 @@ export default function SignIn({ providers, settings }) {
                         disabled={submitting}
                         className="group w-full rounded-xl bg-theme-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-theme-600/20 transition hover:-translate-y-0.5 hover:bg-theme-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme-500 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        <span className="flex items-center justify-center gap-2">Continue &rarr;</span>
+                        <span className="flex items-center justify-center gap-2">
+                          {twoFactorEnabled ? <>Continue &rarr;</> : <>Sign in &rarr;</>}
+                        </span>
                       </button>
                     </form>
                   )}
@@ -347,7 +325,8 @@ export async function getServerSideProps(context) {
       homepageSettings[key],
     ]),
   );
+  const twoFactorEnabled = passwordAuthActive() ? isTotpEnabled() : false;
   return {
-    props: { providers, settings },
+    props: { providers, settings, twoFactorEnabled },
   };
 }

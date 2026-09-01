@@ -1,4 +1,5 @@
 /* eslint-disable react/jsx-props-no-spreading */
+import CredentialsWarning from "components/layout/CredentialsWarning";
 import NavHeader from "components/layout/NavHeader";
 import { SessionProvider } from "next-auth/react";
 import { appWithTranslation } from "next-i18next/pages";
@@ -92,6 +93,7 @@ function MyApp({ Component, pageProps }) {
             <SettingsProvider>
               <TabProvider>
                 <NavHeader />
+                <CredentialsWarning />
                 <Component {...pageProps} />
               </TabProvider>
             </SettingsProvider>

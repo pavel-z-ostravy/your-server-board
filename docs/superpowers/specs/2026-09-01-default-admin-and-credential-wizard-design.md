@@ -1,7 +1,7 @@
 # Default admin + in-app credential & 2FA wizard — design
 
-**Date:** 2026-09-01 (rev. 7)
-**Status:** Draft for review
+**Date:** 2026-09-01 (rev. 8)
+**Status:** Draft for review — Task 0 spike done; see "Next 16: middleware runtime"
 **Builds on:** `docs/superpowers/specs/2026-08-31-dashboard-2fa-login-design.md` (username + password + TOTP 2FA, shipped on `dev`)
 
 ## Summary
@@ -30,21 +30,36 @@ This change:
 - **OIDC mode is unchanged** and, when active, suppresses the bootstrap account,
   the banner, and the wizard.
 
-### Next 16: middleware runs on the Node.js runtime
+### Next 16: middleware runtime
 
-Verified against the installed docs
-(`node_modules/next/dist/docs/.../proxy.md`): *"v16.0.0 — Middleware is
-deprecated and renamed to Proxy. Proxy defaults to the Node.js runtime"* and
-*"The `runtime` config option is not available in Proxy files"*. The current
-`src/middleware.js` (kept as the deprecated alias for `proxy.js`, functionally
-identical) therefore runs on **Node.js** in this project's Next 16.3.0 — it can
-`readFileSync`.
+**Task 0 spike result (empirical, on this Next 16.3.0 build):** the docs'
+_"Proxy defaults to the Node.js runtime"_ applies to the **new `proxy.js`**
+convention. The **deprecated `src/middleware.js` alias still compiles to the
+Edge runtime** — `node:fs` breaks the webpack build and `fs` throws
+`"the edge runtime does not support Node.js 'fs' module"` at runtime;
+`middleware-manifest.json` confirms Edge.
 
-That collapses the whole "how does the secret reach the Edge sandbox" problem
-from earlier drafts. **`config/auth.json` is the single source of truth for the
-signing secret; middleware, the NextAuth route, and `instrumentation.js` all read
-it directly** via one shared helper. No `spawn` wrapper, no `--print-secret`, no
-`.env.local`, no entrypoint changes, no `.mjs` gymnastics.
+**Ruling:** add one line to `src/middleware.js`:
+
+```js
+export const config = { runtime: "nodejs" };
+```
+
+The spike confirmed this builds and runs `fs` fine on `middleware.js` (the
+"`runtime` config is rejected" caveat is only for the new `proxy.js` files). A
+full rename to `proxy.js` is the eventual migration (already a scoped
+follow-up) — not this change.
+
+With Node-runtime middleware, **`config/auth.json` is the single source of truth
+for the signing secret; middleware, the NextAuth route, and `instrumentation.js`
+all read it directly** via one shared helper. No `spawn` wrapper, no
+`--print-secret`, no `.env.local`, no entrypoint changes, no `.mjs` gymnastics.
+
+**Also from the spike:** a `throw` in `instrumentation.js` `register()` does
+**not** exit the process — it fails closed (`unhandledRejection` logged, every
+route including `/api/healthcheck` returns HTTP 500, server stays up). Still a
+loud, unmissable failure with the message in `docker compose logs`; the design
+keeps the throw for the read-only-`config/` case on that basis.
 
 ### Default credentials `admin` / `admin` — the exposure this accepts
 
@@ -80,6 +95,7 @@ Both go in the changelog, `README.md`, and `docs/installation/index.md`.
 ## Goals / non-goals
 
 **Goals**
+
 - Zero-config, secure-by-default: a fresh deployment has a login gate the
   operator is pushed to secure.
 - Credentials changeable without env / redeploy; sessions survive restarts.
@@ -88,6 +104,7 @@ Both go in the changelog, `README.md`, and `docs/installation/index.md`.
 - Verified end-to-end with a real run before merge.
 
 **Non-goals**
+
 - Multiple users / roles.
 - Password reset via email; 2FA recovery codes (unchanged: delete `config/auth.json`).
 - Distributed / per-IP rate limiting (the in-app throttle is global + in-memory;
@@ -95,7 +112,16 @@ Both go in the changelog, `README.md`, and `docs/installation/index.md`.
 - Renaming `middleware.js` → `proxy.js` (Next 16 deprecation; separate task).
 - Argon2 (needs a native dep; scrypt is built in and sufficient).
 
-## Plan task 0 — spike (~2 h, before any other task)
+## Plan task 0 — spike — DONE (2026-09-01)
+
+Ran. Findings folded into "Next 16: middleware runtime" above:
+`middleware.js` is Edge by default → **add `export const config = { runtime:
+"nodejs" }`** (spike-verified: builds + `fs` works). `instrumentation.js`
+`register()` runs + is bundled into standalone; a `throw` there fails the app
+closed (all routes 500 + logged) rather than exiting. The original spike text
+and its fallback are retained below for the record.
+
+<details><summary>original spike brief</summary>
 
 One load-bearing unknown: **confirm `src/middleware.js` on this Next 16.3.0 build
 runs on the Node.js runtime and can `readFileSync`.** The docs say yes; verify by
@@ -110,13 +136,17 @@ for middleware only.
 Also confirm `instrumentation.js` `register()` runs (and can throw to fail
 startup) for this pages-router standalone build.
 
+</details>
+
 ## Current state (post-2026-08-31 merge, verified against `dev`)
 
 - `next@16.3.0`, `output: "standalone"`, no `instrumentation` file.
-- **Middleware runtime: Node.js** (Next 16 default for middleware/proxy; the
-  `runtime` config option is rejected). `src/middleware.js` currently imports
-  only `next-auth/jwt`, `next/server`, `utils/env` — all Node-and-Edge safe; it
-  emits the "middleware is deprecated, use proxy" warning at dev start.
+- **Middleware runtime: Edge** (the deprecated `middleware.js` alias stays Edge
+  in Next 16 — only the new `proxy.js` defaults to Node). `src/middleware.js`
+  currently imports only `next-auth/jwt`, `next/server`, `utils/env` — all
+  Edge-safe; it emits the "middleware is deprecated, use proxy" warning at dev
+  start. **This change adds `export const config = { runtime: "nodejs" }` to
+  flip it** (Task 0 ruling).
 - `Dockerfile`: two stages `builder` / `runner` (`node:22-slim` → `node:22-alpine`).
   `runner` copies `/app/.next/standalone/` and `/app/.next/static/` with
   `--link --chown=1000:1000`. `ENTRYPOINT ["docker-entrypoint.sh"]`,
@@ -141,7 +171,7 @@ startup) for this pages-router standalone build.
   without `NEXTAUTH_URL`, without a ≥32-char secret, and (password mode) without
   username+password+secret. `NEXTAUTH_SECRET`/`NEXTAUTH_URL` are mapped from
   `HOMEPAGE_AUTH_SECRET`/`HOMEPAGE_EXTERNAL_URL` at the top. `authorize({username,
-  password,token})` → `verifyPassword` then (if `isTotpEnabled()`) `verifyToken`.
+password,token})` → `verifyPassword` then (if `isTotpEnabled()`) `verifyToken`.
   `useSecureCookies: parsedAuthUrl?.protocol === "https:"`. `session.strategy = "jwt"`.
 - `src/pages/api/auth/2fa-check.js` — `404` when `!passwordAuthActive()`, else a
   password pre-check; `signin.jsx` step 1 `fetch`es it. **All deleted here.**
@@ -160,7 +190,7 @@ startup) for this pages-router standalone build.
   (pages) / `401 {error:"Unauthorized"}` (`/api/`). Host-header check runs first,
   unconditionally. Matcher exempts `_next/*`, static, `api/auth`, `auth/`.
 - `src/pages/_app.jsx` — `<SessionProvider>` → `<SWRConfig value={{fetcher: (r,i)
-  => fetch(r,i).then(x => x.json())}}>` → Color/Theme/Settings/Tab providers →
+=> fetch(r,i).then(x => x.json())}}>` → Color/Theme/Settings/Tab providers →
   `<NavHeader />` + `<Component />`.
 - `src/components/layout/NavHeader.jsx` — `NAV_ITEMS` includes
   `{ href:"/security", label:"Security", icon:BiLockAlt }`.
@@ -176,14 +206,14 @@ startup) for this pages-router standalone build.
 {
   "secret": "<base64url, 43 chars — present only when auto-generated; env HOMEPAGE_AUTH_SECRET wins and is not copied here>",
   "user": { "username": "admin", "passwordHash": "scrypt$16384$8$1$<saltB64>$<hashB64>", "updatedAt": "2026-09-01T…Z" },
-  "totp":  { "secret": "<base32>", "enabledAt": "2026-09-01T…Z" }
+  "totp": { "secret": "<base32>", "enabledAt": "2026-09-01T…Z" }
 }
 ```
 
 - Any of `secret` / `user` / `totp` may be absent.
 - **A `user` with no `passwordHash` means the default `admin` / `admin`** — the
   bootstrap writes `{ "username": "admin" }`; the wizard's `writeUser` adds the
-  hash. No separate `mustChange` flag: "has a `passwordHash`" *is* the "has been
+  hash. No separate `mustChange` flag: "has a `passwordHash`" _is_ the "has been
   changed" signal.
 - **`src/utils/auth/auth-file.js`** — the single file layer, `node:fs` /
   `node:path` only, **no imports from `src/`** (so it stays cheap to pull into
@@ -200,7 +230,7 @@ startup) for this pages-router standalone build.
     `next = { ...current, ...patch }`, then `delete next[k]` for every key with
     `patch[k] === undefined` (a writer removes a section without touching the
     rest), writes `{ mode: 0o600 }`, `chmodSync(path, 0o600)`, updates the cache
-    to `next`. Slow work (`await hashPassword(...)`) happens in callers *before*
+    to `next`. Slow work (`await hashPassword(...)`) happens in callers _before_
     the call.
 - `totp-store.js` becomes thin wrappers over `auth-file`:
   - `readTotpState()` → `readAuthFile()`; `isTotpEnabled()` unchanged.
@@ -217,7 +247,7 @@ startup) for this pages-router standalone build.
 ≈ 16 MiB < Node's 32 MiB `maxmem` default), 64-byte output:
 
 - `async hashPassword(pw)` → `salt = randomBytes(16)`; `key = await scrypt(pw,
-  salt, 64, { N, r, p })`; return `scrypt$16384$8$1$<salt b64>$<key b64>`.
+salt, 64, { N, r, p })`; return `scrypt$16384$8$1$<salt b64>$<key b64>`.
 - `async verifyHash(pw, stored)` → parse format; recompute; `timingSafeEqual`.
   Unknown / truncated / empty `stored` → `false`. Never throws.
 
@@ -226,17 +256,24 @@ startup) for this pages-router standalone build.
 `node:crypto` + `auth-file` only.
 
 - `ensureAuthSecret()` (sync) → `process.env.NEXTAUTH_SECRET ||
-  process.env.HOMEPAGE_AUTH_SECRET || readAuthFile().secret`; if none, generate
+process.env.HOMEPAGE_AUTH_SECRET || readAuthFile().secret`; if none, generate
   `randomBytes(32).toString("base64url")` (43 url-safe chars, no `+/=`),
   `writeAuthFile({ secret })`, return it. If the write throws (read-only
-  `config/`), return the in-memory value + `console.warn` "secret not persisted;
-  set HOMEPAGE_AUTH_SECRET or make config/ writable — sessions won't survive a
-  restart".
+  `config/`), return the in-memory value + `console.warn` that names the real
+  symptom: with no persisted secret and no `HOMEPAGE_AUTH_SECRET`, the middleware
+  bundle and the auth-route bundle each generate their own secret and every
+  sign-in fails (not merely "sessions won't survive a restart").
+- `src/instrumentation.js` guards this: when `isAuthEnabled()` and the secret
+  came from neither env nor a successful write (`readAuthFile().secret !==` the
+  returned value), `register()` throws — the same fail-closed treatment the
+  `reason:"readonly"` user-record path gets, producing a clean 500 instead of a
+  silent redirect loop. The throw is at the instrumentation level, never inside
+  `ensureAuthSecret()` itself (that would break the middleware bundle's load).
 - Called **only when `isAuthEnabled()`** — by `src/middleware.js`,
   `src/pages/api/auth/[...nextauth].js`, and `src/instrumentation.js`, each at
   module load / `register()`. Node module init is sequential within a process →
   whichever loads first generates + persists, the rest read it back. A
-  multi-*process* first-boot race is a microsecond window, closed by setting
+  multi-_process_ first-boot race is a microsecond window, closed by setting
   `HOMEPAGE_AUTH_SECRET` (documented for multi-replica). When
   `HOMEPAGE_AUTH_ENABLED=false` it is never called and no `secret` is written.
 
@@ -248,19 +285,25 @@ startup) for this pages-router standalone build.
 - `readUser()` = `readAuthFile().user ?? null`.
 - `usingDefaultCredentials()` = `!managedByEnv() && !!readUser() && !readUser().passwordHash`.
 - `currentUsername()` = `managedByEnv() ? process.env.HOMEPAGE_AUTH_USERNAME :
-  (readUser()?.username ?? "admin")` — aligned with `verifyPassword`'s branch
+(readUser()?.username ?? "admin")` — aligned with `verifyPassword`'s branch
   selection.
 - `async writeUser({ username, password })` → `const passwordHash = await
-  hashPassword(password)` **then** `writeAuthFile({ user: { username,
-  passwordHash, updatedAt: new Date().toISOString() } })`.
+hashPassword(password)` **then** `writeAuthFile({ user: { username,
+passwordHash, updatedAt: new Date().toISOString() } })`.
 - `async ensureInitialUser()` (used by `instrumentation.js`):
   - `!isAuthEnabled()` → `{ created: false, reason: "disabled" }` (no user, no log box).
   - `managedByEnv()` → `{ reason: "env" }`.
   - `hasOidcConfig()` → `{ reason: "oidc" }`.
   - `readAuthFile().user` → `{ reason: "exists" }`.
+  - `authFileCorrupt()` (file present but did not parse, or parsed to a
+    non-object) → `{ reason: "corrupt" }`; `instrumentation.js` throws on it so an
+    accidental truncation is a loud stop rather than a silent reset to
+    `admin`/`admin` with 2FA dropped.
   - else `writeAuthFile({ user: { username: "admin" } })` → `{ created: true }`.
     If the write throws → `{ created: false, reason: "readonly" }`.
-  (`isAuthEnabled` / `hasOidcConfig` imported from `env.js` / `mode.js`.)
+    `writeAuthFile` writes `auth.json.tmp` then `renameSync`s it into place so a
+    crash mid-write cannot leave a half-written file.
+    (`isAuthEnabled` / `hasOidcConfig` imported from `env.js` / `mode.js`.)
 
 ### Credential resolution — `verifyPassword` (now async)
 
@@ -268,11 +311,11 @@ startup) for this pages-router standalone build.
 **no fall-through**:
 
 1. **Env override** — `managedByEnv()` → hash-first constant-time compare of
-   username *and* password against the env values (today's `sha256` path).
+   username _and_ password against the env values (today's `sha256` path).
 2. **Stored user** — else `readAuthFile().user` present:
    - `user.passwordHash` present → compute **both** without short-circuiting:
      `usernameOk = constantTimeEquals(username, user.username)` and `passwordOk = await
-     verifyHash(password, user.passwordHash)`; `return usernameOk && passwordOk`.
+verifyHash(password, user.passwordHash)`; `return usernameOk && passwordOk`.
    - no `passwordHash` (default) → hash-first constant-time compare of `username`
      vs `user.username` **and** `password` vs `"admin"`.
 3. Neither → `false`.
@@ -290,32 +333,36 @@ export async function register() {
   const { ensureAuthSecret } = await import("./utils/auth/secret");
   const { ensureInitialUser } = await import("./utils/auth/credentials-store");
   if (isAuthEnabled()) ensureAuthSecret();
-  const init = await ensureInitialUser();   // internally no-ops when auth is off
+  const init = await ensureInitialUser(); // internally no-ops when auth is off
   if (init.created) {
     process.stderr.write(
       "\n┌─ Login enabled with default credentials ─────\n" +
-      "│  username: admin\n" +
-      "│  password: admin\n" +
-      "│  Change them now at /security — do not expose\n" +
-      "│  this dashboard publicly until you have.\n" +
-      "└─────────────────────────────────────────────\n\n",
+        "│  username: admin\n" +
+        "│  password: admin\n" +
+        "│  Change them now at /security — do not expose\n" +
+        "│  this dashboard publicly until you have.\n" +
+        "└─────────────────────────────────────────────\n\n",
     );
   }
   if (init.reason === "readonly") {
     throw new Error(
       "config/ is not writable and no HOMEPAGE_AUTH_USERNAME / HOMEPAGE_AUTH_PASSWORD " +
-      "is set — cannot create a login. Make config/ writable or set the env vars.",
+        "is set — cannot create a login. Make config/ writable or set the env vars.",
     );
   }
 }
 ```
 
 - `instrumentation` is **stable since Next 15** — no `experimental` flag.
-  `register()` runs once, before the server accepts requests. Traced into
+  `register()` runs once, before the server accepts requests. Confirmed by the
+  Task 0 spike: it runs on the nodejs runtime at startup and is bundled into
   `output: "standalone"`. Located at `src/instrumentation.js` because this
-  project uses `src/`. **The spike (plan task 0) confirms a `throw` in
-  `register()` actually aborts startup on this build** — the docs say it "must
-  complete before the server is ready" but do not spell out the throw path.
+  project uses `src/`.
+- **A `throw` in `register()` does not exit the process** (spike finding) — it
+  fails closed: `unhandledRejection` logged, every route (incl.
+  `/api/healthcheck`) returns HTTP 500, the server stays up. That is still an
+  unmissable failure — the message is in `docker compose logs` and nothing
+  works — so the design keeps the `throw` for the read-only-`config/` case.
 - Dynamic `import()` (not top-level) so the Edge invocation of `register()`
   never even loads the `node:fs` modules.
 - It runs as the **app user** inside the container (post-`su-exec`), in an
@@ -327,20 +374,23 @@ export async function register() {
 - `isAuthEnabled()` → `process.env.HOMEPAGE_AUTH_ENABLED !== "false"`. Only the
   exact string `"false"` disables.
 - `mode.js` **extracts and exports `hasOidcConfig()`** (`Boolean(issuer &&
-  clientId && clientSecret)`, reading env at call time) — used by both
+clientId && clientSecret)`, reading env at call time) — used by both
   `passwordAuthActive()` and `credentials-store.ensureInitialUser()`.
 - `passwordAuthActive()` → `isAuthEnabled() && !hasOidcConfig()` (drop the
   `HOMEPAGE_AUTH_PASSWORD` clause — a password source always exists now).
 
 ### `src/middleware.js`
 
+- **Add `export const config = { runtime: "nodejs" };`** (Task 0 ruling — the
+  file is Edge by default and must be Node to `readFileSync`).
 - `const authEnabled = isAuthEnabled();` — unchanged in form, now default-true.
 - `const authSecret = authEnabled ? ensureAuthSecret() : undefined;` (import
   from `utils/auth/secret`) — replaces the `process.env.NEXTAUTH_SECRET || …`
-  line. Node runtime, `fs` fine.
+  line. Now on the Node runtime, so `fs` (transitively via `ensureAuthSecret`)
+  is fine.
 - **Map `HOMEPAGE_EXTERNAL_URL` → `NEXTAUTH_URL` at module load too**
   (`if (!process.env.NEXTAUTH_URL && process.env.HOMEPAGE_EXTERNAL_URL)
-  process.env.NEXTAUTH_URL = process.env.HOMEPAGE_EXTERNAL_URL;`). `getToken`
+process.env.NEXTAUTH_URL = process.env.HOMEPAGE_EXTERNAL_URL;`). `getToken`
   reads `NEXTAUTH_URL` at request time to decide the `__Secure-` cookie prefix;
   without this, a first request handled by middleware before `[...nextauth].js`
   has loaded would look for the wrong cookie name on an https deployment.
@@ -349,9 +399,9 @@ export async function register() {
 ### `src/pages/api/auth/[...nextauth].js`
 
 - Near the top: `const NEXTAUTH_SECRET = authEnabled ? ensureAuthSecret() :
-  undefined;`. Use the **local const** for `authOptions.secret`. Also
+undefined;`. Use the **local const** for `authOptions.secret`. Also
   `if (authEnabled && !process.env.NEXTAUTH_SECRET) process.env.NEXTAUTH_SECRET
-  = NEXTAUTH_SECRET;` — belt-and-braces for the few next-auth v4 internals
+= NEXTAUTH_SECRET;` — belt-and-braces for the few next-auth v4 internals
   (CSRF, `/api/auth/_log`) that read the env var directly. Drop the old
   `HOMEPAGE_AUTH_SECRET → NEXTAUTH_SECRET` mapping (the helper covers env + file).
 - `NEXTAUTH_URL` mapping from `HOMEPAGE_EXTERNAL_URL` unchanged.
@@ -367,8 +417,8 @@ export async function register() {
     from the file). A generated secret is 43 base64url chars.
   - **Partial env** (`HOMEPAGE_AUTH_USERNAME` xor `HOMEPAGE_AUTH_PASSWORD`) →
     `createLogger("nextauth").warn("HOMEPAGE_AUTH_USERNAME / HOMEPAGE_AUTH_PASSWORD:
-    one is set without the other — ignoring both; using stored / default
-    credentials")`, then proceed (`managedByEnv()` is already `false`, so it
+one is set without the other — ignoring both; using stored / default
+credentials")`, then proceed (`managedByEnv()` is already `false`, so it
     falls through cleanly). No throw — a half-set env should not brick the login.
 - `useSecureCookies: parsedAuthUrl?.protocol === "https:"` — **unchanged**
   (already shipped). `false` when no URL → plain-http LAN cookies work; `true`
@@ -426,7 +476,7 @@ export async function register() {
     `signIn("credentials", { redirect:false, username, password })`.
   - `twoFactorEnabled === true` → step 1 (username + password), "Continue"
     reveals step 2 (6-digit field), submit → `signIn("credentials", {
-    redirect:false, username, password, token })`.
+redirect:false, username, password, token })`.
   - The old pre-check `fetch` and its step-1 "Invalid username or password" go
     away. Errors come from `signIn`'s `{ ok, error }`: a failed `signIn` shows
     "Invalid username or password" (2FA off) or "Invalid username, password, or
@@ -489,14 +539,14 @@ New **Account** card above the existing 2FA card, **with its own state**
   `New password`, `Confirm new password`. Client checks `password === confirm`
   before POST. Submit → `POST /api/security/credentials`. `400`/`409`/`500` →
   inline `wizardError`. `200` → update the displayed username; `import { mutate }
-  from "swr"` then `mutate("/api/security/credentials-status")` (the banner
+from "swr"` then `mutate("/api/security/credentials-status")` (the banner
   shares that key → it re-fetches and disappears); then → `twofa` (or straight
   to `summary` if `twoFactorEnabled` is already true).
 - **twofa:** "Add two-factor authentication?" + **"Set up 2FA"** / **"Not now"**.
   "Not now" → `summary`. "Set up 2FA" → `POST /api/security/totp/enroll`, show QR
-  + secret + a 6-digit field (same `CODE_INPUT_PROPS`), **"Confirm"** → `POST
-  /api/security/totp/confirm { secret, token }` → `400` "Invalid code, try
-  again." / `200` → `summary`.
+  - secret + a 6-digit field (same `CODE_INPUT_PROPS`), **"Confirm"** → `POST
+/api/security/totp/confirm { secret, token }` → `400` "Invalid code, try
+    again." / `200` → `summary`.
 - **State coupling:** lift the 2FA card's `enabled` boolean to the page component
   (init from the `twoFactorEnabled` prop). Wizard confirm and the standalone
   card's enable/disable call the same `setEnabled`. No `router.replace` / SSR
@@ -512,16 +562,16 @@ covered by a changelog note + test updates.
 `docker-compose.yml` `environment:` gains, all optional:
 
 ```yaml
-      - HOMEPAGE_AUTH_ENABLED=${YSB_AUTH_ENABLED:-}
-      - HOMEPAGE_EXTERNAL_URL=${YSB_EXTERNAL_URL:-}
-      - HOMEPAGE_AUTH_SECRET=${YSB_AUTH_SECRET:-}
-      - HOMEPAGE_AUTH_USERNAME=${YSB_AUTH_USERNAME:-}
-      - HOMEPAGE_AUTH_PASSWORD=${YSB_AUTH_PASSWORD:-}
-      - HOMEPAGE_OIDC_ISSUER=${YSB_OIDC_ISSUER:-}
-      - HOMEPAGE_OIDC_CLIENT_ID=${YSB_OIDC_CLIENT_ID:-}
-      - HOMEPAGE_OIDC_CLIENT_SECRET=${YSB_OIDC_CLIENT_SECRET:-}
-      - HOMEPAGE_OIDC_NAME=${YSB_OIDC_NAME:-}
-      - HOMEPAGE_OIDC_SCOPE=${YSB_OIDC_SCOPE:-}
+- HOMEPAGE_AUTH_ENABLED=${YSB_AUTH_ENABLED:-}
+- HOMEPAGE_EXTERNAL_URL=${YSB_EXTERNAL_URL:-}
+- HOMEPAGE_AUTH_SECRET=${YSB_AUTH_SECRET:-}
+- HOMEPAGE_AUTH_USERNAME=${YSB_AUTH_USERNAME:-}
+- HOMEPAGE_AUTH_PASSWORD=${YSB_AUTH_PASSWORD:-}
+- HOMEPAGE_OIDC_ISSUER=${YSB_OIDC_ISSUER:-}
+- HOMEPAGE_OIDC_CLIENT_ID=${YSB_OIDC_CLIENT_ID:-}
+- HOMEPAGE_OIDC_CLIENT_SECRET=${YSB_OIDC_CLIENT_SECRET:-}
+- HOMEPAGE_OIDC_NAME=${YSB_OIDC_NAME:-}
+- HOMEPAGE_OIDC_SCOPE=${YSB_OIDC_SCOPE:-}
 ```
 
 `${VAR:-}` sets the container var to an **empty string** when unset. Every
@@ -573,25 +623,25 @@ Change credentials:
 
 ## Error handling
 
-| Situation | Behaviour |
-|-----------|-----------|
-| Fresh start, `config/` writable | `instrumentation` generates + persists secret + user; middleware & routes read the file |
-| `config/` read-only, no env creds/secret | `instrumentation.register()` throws → server does not start (there would be no way to log in) |
-| `config/` read-only, full `HOMEPAGE_AUTH_USERNAME`/`PASSWORD`/`SECRET` | `ensureInitialUser` → `reason:"env"`, `ensureAuthSecret` → env value → starts normally |
-| Multi-replica, **shared** `config/` volume | First to init persists `secret`; the rest read it → consistent |
-| Multi-replica, **unshared** volumes | Each may generate its own → sessions bounce. Documented: set `HOMEPAGE_AUTH_SECRET` |
-| `config/auth.json` corrupt | `readAuthFile()` → `{}` + warn; next `writeAuthFile` overwrites |
-| `config/auth.json` cache staleness (other replica changed a password) | ≤ 5 s window where the old password still verifies. Acceptable for homelab; documented |
-| `HOMEPAGE_AUTH_ENABLED=false` | No gate, no banner, no bootstrap user, `/security` → "authentication disabled" state, MCP session check off |
-| OIDC configured, no `HOMEPAGE_EXTERNAL_URL` | Startup throw (OIDC-scoped) |
-| Provided `HOMEPAGE_EXTERNAL_URL` malformed | Startup throw (unchanged) |
-| `HOMEPAGE_AUTH_USERNAME` + `HOMEPAGE_AUTH_PASSWORD` set | `verifyPassword` env-only; bootstrap skips the user; `/api/security/credentials` → `409`; wizard hidden; no banner |
-| Wrong current password in wizard | `400` + `logFailedPasswordSignIn()`; nothing written |
-| New password `< 8` / bad username chars | `400` with a specific message; nothing written |
-| `writeUser` OK, then step-2 enroll fails | Credentials already changed (banner gone); user retries from the standalone 2FA card |
-| Online password brute-force on `/api/auth/callback/credentials` | After 5 consecutive password failures `authorize()` rejects immediately for an exponential window (1 s → 30 s cap); resets on success. Not IP-based. Reverse-proxy rate-limiting + fail2ban still recommended for internet-exposed deployments |
-| Legit user mistypes 6+ times | Same throttle — waits seconds; generic "invalid" error |
-| Wrong 2FA code (valid password) | `authorize()` returns null; the brute-force counter is **not** advanced |
+| Situation                                                              | Behaviour                                                                                                                                                                                                                                      |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fresh start, `config/` writable                                        | `instrumentation` generates + persists secret + user; middleware & routes read the file                                                                                                                                                        |
+| `config/` read-only, no env creds/secret                               | `instrumentation.register()` throws → app fails closed (every route 500s, `unhandledRejection` in the logs — there would be no way to log in anyway)                                                                                           |
+| `config/` read-only, full `HOMEPAGE_AUTH_USERNAME`/`PASSWORD`/`SECRET` | `ensureInitialUser` → `reason:"env"`, `ensureAuthSecret` → env value → starts normally                                                                                                                                                         |
+| Multi-replica, **shared** `config/` volume                             | First to init persists `secret`; the rest read it → consistent                                                                                                                                                                                 |
+| Multi-replica, **unshared** volumes                                    | Each may generate its own → sessions bounce. Documented: set `HOMEPAGE_AUTH_SECRET`                                                                                                                                                            |
+| `config/auth.json` corrupt                                             | `readAuthFile()` → `{}` + warn; next `writeAuthFile` overwrites                                                                                                                                                                                |
+| `config/auth.json` cache staleness (other replica changed a password)  | ≤ 5 s window where the old password still verifies. Acceptable for homelab; documented                                                                                                                                                         |
+| `HOMEPAGE_AUTH_ENABLED=false`                                          | No gate, no banner, no bootstrap user, `/security` → "authentication disabled" state, MCP session check off                                                                                                                                    |
+| OIDC configured, no `HOMEPAGE_EXTERNAL_URL`                            | Startup throw (OIDC-scoped)                                                                                                                                                                                                                    |
+| Provided `HOMEPAGE_EXTERNAL_URL` malformed                             | Startup throw (unchanged)                                                                                                                                                                                                                      |
+| `HOMEPAGE_AUTH_USERNAME` + `HOMEPAGE_AUTH_PASSWORD` set                | `verifyPassword` env-only; bootstrap skips the user; `/api/security/credentials` → `409`; wizard hidden; no banner                                                                                                                             |
+| Wrong current password in wizard                                       | `400` + `logFailedPasswordSignIn()`; nothing written                                                                                                                                                                                           |
+| New password `< 8` / bad username chars                                | `400` with a specific message; nothing written                                                                                                                                                                                                 |
+| `writeUser` OK, then step-2 enroll fails                               | Credentials already changed (banner gone); user retries from the standalone 2FA card                                                                                                                                                           |
+| Online password brute-force on `/api/auth/callback/credentials`        | After 5 consecutive password failures `authorize()` rejects immediately for an exponential window (1 s → 30 s cap); resets on success. Not IP-based. Reverse-proxy rate-limiting + fail2ban still recommended for internet-exposed deployments |
+| Legit user mistypes 6+ times                                           | Same throttle — waits seconds; generic "invalid" error                                                                                                                                                                                         |
+| Wrong 2FA code (valid password)                                        | `authorize()` returns null; the brute-force counter is **not** advanced                                                                                                                                                                        |
 
 ## Testing (Vitest)
 
@@ -625,7 +675,7 @@ New / reworked:
 - `src/utils/auth/mode.test.js` (update) — `passwordAuthActive` =
   `isAuthEnabled() && !hasOidcConfig`, independent of `HOMEPAGE_AUTH_PASSWORD`.
 - `src/instrumentation.test.js` (new) — `register()`: no-op when `NEXT_RUNTIME !==
-  "nodejs"`; calls `ensureAuthSecret` + `ensureInitialUser` (mocked); prints the
+"nodejs"`; calls `ensureAuthSecret` + `ensureInitialUser` (mocked); prints the
   box only when `created`; throws on `reason:"readonly"`; does not call
   `ensureAuthSecret` when `HOMEPAGE_AUTH_ENABLED="false"`.
 - `src/__tests__/pages/api/auth/[...nextauth].test.js` (rework) — mock
@@ -650,7 +700,7 @@ New / reworked:
   check still first.
 - **Repo-wide audit:** grep every test that sets/omits `HOMEPAGE_AUTH_ENABLED`
   (`[...nextauth]`, `middleware`, `security/*`, `mcp/index`, `mode`). Any
-  asserting an auth-*off* behaviour without `="false"` is now wrong.
+  asserting an auth-_off_ behaviour without `="false"` is now wrong.
 - **Delete** `src/__tests__/pages/api/auth/2fa-check.test.js`.
 - `src/__tests__/pages/api/security/credentials.test.js` (new) — `405`; `401` no
   session; `409` env-managed; `400` wrong current password (+ log, nothing
@@ -663,9 +713,9 @@ New / reworked:
   shown with the `/security` link when authenticated + default; `role="alert"`.
 - `src/__tests__/pages/security.test.jsx` (rework) — Account summary shows the
   username; `managedByEnv` → explanatory text, no button; wizard step 1 validation
-  + success → `mutate` called + advances (→ `twofa` when 2FA off, → `summary`
-  when on); step 2 "Not now" → summary; step 2 "Set up 2FA" → enroll/confirm happy
-  path; the standalone 2FA-card tests still pass and its state is untouched.
+  - success → `mutate` called + advances (→ `twofa` when 2FA off, → `summary`
+    when on); step 2 "Not now" → summary; step 2 "Set up 2FA" → enroll/confirm happy
+    path; the standalone 2FA-card tests still pass and its state is untouched.
 - `src/__tests__/pages/auth/signin.test.jsx` (**rework**) — no `2fa-check` fetch
   mock. `getServerSideProps` returns `twoFactorEnabled` from a mocked
   `isTotpEnabled` (`false` when `passwordAuthActive()` is false). `false` →
@@ -679,11 +729,13 @@ New / reworked:
 
 ## Verification (before merge — mandatory)
 
-1. **Spike first** (plan task 0): confirm `middleware.js` on 16.3.0 can
-   `readFileSync` at module scope over a real `pnpm build && pnpm start` + a
-   protected-route request.
-2. Fresh `config/` (no `auth.json`), no auth env vars. `pnpm build && pnpm start`
-   over plain `http://localhost:3000`.
+Use `node .next/standalone/server.js` (or `pnpm dev`) — `pnpm start` warns it
+doesn't support `output: standalone`.
+
+1. **Spike done** (plan task 0) — `middleware.js` needs `runtime: "nodejs"`;
+   `instrumentation.js` throw fails closed, doesn't exit.
+2. Fresh `config/` (no `auth.json`), no auth env vars. `pnpm build` then
+   `node .next/standalone/server.js` over plain `http://localhost:3000`.
 3. Console prints the default-credentials box once; `config/auth.json` has
    `secret` + `user:{username:"admin"}` (no `passwordHash`), mode `600`.
 4. `/` → redirect to `/auth/signin`; log in `admin` / `admin` → land on the
@@ -703,8 +755,10 @@ New / reworked:
     no hash evaluation; wait past the window → a correct password logs in and
     resets. `curl` hammering `/api/auth/callback/credentials` cannot beat the
     growing window.
-11. `config/` made read-only + no env secret → `instrumentation` aborts startup
-    with the clear message (not a redirect loop).
+11. `config/` made read-only + no env secret → every route returns 500 with the
+    "config/ is not writable" message in the logs (fail-closed, not a redirect loop).
+12. Also verify the reworked `pnpm test` **and** `pnpm build` both succeed with
+    `middleware.js`'s `runtime: "nodejs"` and `src/instrumentation.js` present.
 
 ## Documentation
 
@@ -717,10 +771,10 @@ New / reworked:
   OIDC and for `Secure` cookies over HTTPS; document the in-app throttle **and**
   still recommend reverse-proxy rate-limiting + fail2ban/CrowdSec on
   `<nextauth> Failed password sign-in attempt` for `POST
-  /api/auth/callback/credentials`; recovery = delete `config/auth.json`.
+/api/auth/callback/credentials`; recovery = delete `config/auth.json`.
   Breaking-change admonition (#1, #2).
 - `README.md` — auth bullet(s) + security note for default-on + `admin`/`admin`
-  + "change before exposing publicly".
+  - "change before exposing publicly".
 - `progress.md` — shipped entry; both breaking changes.
 - `.env.example` — the new `YSB_*` knobs.
 - Changelog note.

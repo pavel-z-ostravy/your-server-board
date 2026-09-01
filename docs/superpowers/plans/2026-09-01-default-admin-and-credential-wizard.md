@@ -12,7 +12,8 @@
 
 ## Global Constraints
 
-- **Middleware runtime is Node.js** (Next 16 default; the `runtime` config option is rejected). Task 0 verifies `readFileSync` works there before anything else.
+- **Task 0 ruling (spike done):** the deprecated `src/middleware.js` compiles to the **Edge** runtime in Next 16.3 — `node:fs` breaks the build. Fix: **add `export const config = { runtime: "nodejs" };` to `src/middleware.js`** (Task 7). Spike-verified that this builds and runs `fs` fine. A `throw` in `instrumentation.js` `register()` does **not** exit the process — it fails closed (every route 500s + `unhandledRejection` logged). `pnpm start` doesn't support `output: standalone`; use `node .next/standalone/server.js` or `pnpm dev` for the manual runs.
+- **`pnpm build` must succeed** — run it (not just `pnpm test`) at the end of Task 7 (the `runtime` config + `ensureAuthSecret` import in middleware), Task 9 (`instrumentation.js`), and Task 15.
 - `isAuthEnabled()` becomes `process.env.HOMEPAGE_AUTH_ENABLED !== "false"` — only the exact string `"false"` disables. Every consumer uses truthiness on env vars (`Boolean(x)` / `!x`), never `x !== undefined` (docker-compose passes `""` for unset).
 - Password hashing: `node:crypto` `scrypt`, params `N=16384, r=8, p=1`, 64-byte output, format string exactly `scrypt$16384$8$1$<saltB64>$<keyB64>`. Async (`scrypt` promisified) — never `scryptSync`.
 - Constant-time compares go through the existing hash-first `constantTimeEquals` helper (sha256 then `timingSafeEqual`) — never a raw `===`, never `timingSafeEqual` on raw strings.
@@ -26,6 +27,7 @@
 ## File structure
 
 **New**
+
 - `src/utils/auth/auth-file.js` — `readAuthFile()` (5 s cache), `writeAuthFile(patch)` (atomic merge/delete), `authFilePath()`.
 - `src/utils/auth/password-hash.js` — `hashPassword(pw)`, `verifyHash(pw, stored)`.
 - `src/utils/auth/secret.js` — `ensureAuthSecret()`.
@@ -36,17 +38,21 @@
 - Tests co-located / under `src/__tests__/…` mirroring existing layout.
 
 **Modified**
+
 - `src/utils/env.js`, `src/utils/auth/mode.js`, `src/utils/auth/credentials.js`, `src/utils/auth/totp-store.js`
 - `src/pages/api/auth/[...nextauth].js`, `src/middleware.js`, `src/pages/auth/signin.jsx`, `src/pages/security.jsx`, `src/pages/_app.jsx`
 - `docker-compose.yml`, `.env.example`, `docs/installation/index.md`, `README.md`, `progress.md`
 - Test files: `[...nextauth].test.js`, `middleware.test.js`, `mcp/index.test.js`, `mode.test.js`, `security.test.jsx`, `signin.test.jsx`, `totp-store.test.js`
 
 **Deleted**
+
 - `src/pages/api/auth/2fa-check.js`, `src/__tests__/pages/api/auth/2fa-check.test.js`
 
 ---
 
-## Task 0: Spike — confirm middleware Node runtime + instrumentation
+## Task 0: Spike — confirm middleware Node runtime + instrumentation — ✅ DONE (2026-09-01)
+
+**Result:** PARTIAL. `middleware.js` is Edge by default (`node:fs` breaks the build) → **fix: add `export const config = { runtime: "nodejs" };`** (spike-verified to build + run `fs`). `instrumentation.register()` runs on nodejs + is bundled into standalone, but a `throw` there does not exit the process (fail-closed: routes 500 + `unhandledRejection` logged). See `task-0-report.md`. The steps below are retained for the record; the plan's Global Constraints and Task 7 already carry the ruling.
 
 **Files:** throwaway edits to `src/middleware.js`, a throwaway `src/instrumentation.js`. Nothing committed.
 
@@ -113,6 +119,7 @@ rm src/instrumentation.js
 ```
 
 Write the result into the SDD ledger / plan-execution notes:
+
 - **PASS** (middleware `fs` works, instrumentation runs + throws + is bundled) → proceed with the plan as written.
 - **PARTIAL/FAIL** → apply the spec's fallback (§"Plan task 0 — spike": require `HOMEPAGE_AUTH_SECRET` in the env for non-Docker, Docker entrypoint exports it from the file) and adjust Tasks 3, 7, 9 accordingly before continuing.
 
@@ -121,12 +128,14 @@ Write the result into the SDD ledger / plan-execution notes:
 ## Task 1: `auth-file.js` + refactor `totp-store.js`
 
 **Files:**
+
 - Create: `src/utils/auth/auth-file.js`
 - Test: `src/utils/auth/auth-file.test.js`
 - Modify: `src/utils/auth/totp-store.js`
 - Modify: `src/utils/auth/totp-store.test.js`
 
 **Interfaces produced:**
+
 - `readAuthFile(): object` — parsed `config/auth.json`, or `{}` on missing/corrupt (corrupt logs one `console.warn`). Module-level cache; re-reads from disk only when the cached copy is > 5 s old.
 - `writeAuthFile(patch: object): void` — sync. Reads the file fresh from disk (bypassing the cache), `next = { ...current, ...patch }`, `delete next[k]` for every `k` with `patch[k] === undefined`, `writeFileSync(path, JSON.stringify(next, null, 2), { mode: 0o600 })`, `chmodSync(path, 0o600)`, sets the cache to `next`.
 - `authFilePath(): string`.
@@ -543,9 +552,7 @@ import { isAuthEnabled } from "utils/env";
 // mirror of the OIDC check in src/pages/api/auth/[...nextauth].js
 export function hasOidcConfig() {
   return Boolean(
-    process.env.HOMEPAGE_OIDC_ISSUER &&
-      process.env.HOMEPAGE_OIDC_CLIENT_ID &&
-      process.env.HOMEPAGE_OIDC_CLIENT_SECRET,
+    process.env.HOMEPAGE_OIDC_ISSUER && process.env.HOMEPAGE_OIDC_CLIENT_ID && process.env.HOMEPAGE_OIDC_CLIENT_SECRET,
   );
 }
 
@@ -568,6 +575,7 @@ git commit -m "refactor(auth): export hasOidcConfig; passwordAuthActive drops th
 **Files:** Create `src/utils/auth/credentials-store.js` + `src/utils/auth/credentials-store.test.js`.
 
 **Interfaces produced:**
+
 - `managedByEnv(): boolean`
 - `readUser(): { username, passwordHash? } | null`
 - `usingDefaultCredentials(): boolean` = `!managedByEnv() && !!readUser() && !readUser().passwordHash`
@@ -588,17 +596,26 @@ beforeEach(() => {
   vi.resetModules();
   dir = mkdtempSync(join(tmpdir(), "ysb-credstore-"));
   process.env.HOMEPAGE_CONFIG_DIR = dir;
-  for (const k of ["HOMEPAGE_AUTH_ENABLED", "HOMEPAGE_AUTH_USERNAME", "HOMEPAGE_AUTH_PASSWORD",
-    "HOMEPAGE_OIDC_ISSUER", "HOMEPAGE_OIDC_CLIENT_ID", "HOMEPAGE_OIDC_CLIENT_SECRET"]) delete process.env[k];
+  for (const k of [
+    "HOMEPAGE_AUTH_ENABLED",
+    "HOMEPAGE_AUTH_USERNAME",
+    "HOMEPAGE_AUTH_PASSWORD",
+    "HOMEPAGE_OIDC_ISSUER",
+    "HOMEPAGE_OIDC_CLIENT_ID",
+    "HOMEPAGE_OIDC_CLIENT_SECRET",
+  ])
+    delete process.env[k];
 });
-afterEach(() => { delete process.env.HOMEPAGE_CONFIG_DIR; });
+afterEach(() => {
+  delete process.env.HOMEPAGE_CONFIG_DIR;
+});
 
 const load = () => import("utils/auth/credentials-store");
 
 describe("utils/auth/credentials-store", () => {
   it("ensureInitialUser: skips when auth disabled", async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "false";
-    expect((await (await load()).ensureInitialUser())).toEqual({ created: false, reason: "disabled" });
+    expect(await (await load()).ensureInitialUser()).toEqual({ created: false, reason: "disabled" });
   });
 
   it("ensureInitialUser: skips when env-managed / OIDC / already exists", async () => {
@@ -606,8 +623,11 @@ describe("utils/auth/credentials-store", () => {
     process.env.HOMEPAGE_AUTH_PASSWORD = "p";
     expect((await (await load()).ensureInitialUser()).reason).toBe("env");
     vi.resetModules();
-    delete process.env.HOMEPAGE_AUTH_USERNAME; delete process.env.HOMEPAGE_AUTH_PASSWORD;
-    process.env.HOMEPAGE_OIDC_ISSUER = "x"; process.env.HOMEPAGE_OIDC_CLIENT_ID = "x"; process.env.HOMEPAGE_OIDC_CLIENT_SECRET = "x";
+    delete process.env.HOMEPAGE_AUTH_USERNAME;
+    delete process.env.HOMEPAGE_AUTH_PASSWORD;
+    process.env.HOMEPAGE_OIDC_ISSUER = "x";
+    process.env.HOMEPAGE_OIDC_CLIENT_ID = "x";
+    process.env.HOMEPAGE_OIDC_CLIENT_SECRET = "x";
     expect((await (await load()).ensureInitialUser()).reason).toBe("oidc");
   });
 
@@ -725,7 +745,9 @@ beforeEach(() => {
   process.env.HOMEPAGE_CONFIG_DIR = dir;
   for (const k of ["HOMEPAGE_AUTH_USERNAME", "HOMEPAGE_AUTH_PASSWORD"]) delete process.env[k];
 });
-afterEach(() => { delete process.env.HOMEPAGE_CONFIG_DIR; });
+afterEach(() => {
+  delete process.env.HOMEPAGE_CONFIG_DIR;
+});
 
 const load = () => import("utils/auth/credentials");
 
@@ -844,7 +866,12 @@ afterEach(restore);
 
 describe("isAuthEnabled", () => {
   it.each([
-    [undefined, true], ["", true], ["true", true], ["1", true], ["yes", true], ["false", false],
+    [undefined, true],
+    ["", true],
+    ["true", true],
+    ["1", true],
+    ["yes", true],
+    ["false", false],
   ])("%s -> %s", (val, expected) => {
     if (val === undefined) restore();
     else process.env.HOMEPAGE_AUTH_ENABLED = val;
@@ -903,6 +930,10 @@ if (authEnabled && Boolean(homepageAuthUsername) !== Boolean(homepageAuthPasswor
 import { ensureAuthSecret } from "utils/auth/secret";
 import { isAuthEnabled } from "utils/env";
 
+// Task 0 ruling: middleware.js is Edge by default in Next 16 and must be Node
+// to read config/auth.json. (A full rename to proxy.js is a separate follow-up.)
+export const config = { runtime: "nodejs" };
+
 const authEnabled = isAuthEnabled();
 if (!process.env.NEXTAUTH_URL && process.env.HOMEPAGE_EXTERNAL_URL) {
   process.env.NEXTAUTH_URL = process.env.HOMEPAGE_EXTERNAL_URL;
@@ -910,7 +941,7 @@ if (!process.env.NEXTAUTH_URL && process.env.HOMEPAGE_EXTERNAL_URL) {
 const authSecret = authEnabled ? ensureAuthSecret() : undefined;
 ```
 
-Everything below (`getToken`, redirect, `401`, matcher, host check) unchanged.
+**Note:** the existing `middleware.js` already has `export const config = { matcher: [...] }`. Merge — `export const config = { runtime: "nodejs", matcher: [...] }`. Everything below (`getToken`, redirect, `401`, host check) unchanged.
 
 - [ ] **Step 6: Rework `src/__tests__/pages/api/auth/[...nextauth].test.js`**
 
@@ -942,9 +973,9 @@ Set `process.env.HOMEPAGE_AUTH_ENABLED = "false"` in the cases that assumed "no 
 grep -rn "HOMEPAGE_AUTH_ENABLED" src --include="*.test.js" --include="*.test.jsx"
 ```
 
-Any test asserting auth-*off* behaviour that does not set `="false"` is now wrong — fix it.
+Any test asserting auth-_off_ behaviour that does not set `="false"` is now wrong — fix it. **Skip `src/__tests__/pages/api/auth/2fa-check.test.js`** — Task 10 deletes it.
 
-- [ ] **Step 10: `pnpm test` — green. Commit**
+- [ ] **Step 10: `pnpm test` — green, then `pnpm build` — succeeds** (this is where the `runtime: "nodejs"` config + `ensureAuthSecret` fs-import in middleware first hit a real webpack build). **Commit**
 
 ```bash
 git add src/utils/env.js src/utils/env.test.js "src/pages/api/auth/[...nextauth].js" src/middleware.js src/__tests__ src/pages/api/mcp/index.test.js
@@ -1066,7 +1097,9 @@ beforeEach(() => {
   ensureInitialUser.mockResolvedValue({ created: false, reason: "exists" });
   process.env.NEXT_RUNTIME = "nodejs";
 });
-afterEach(() => { delete process.env.NEXT_RUNTIME; });
+afterEach(() => {
+  delete process.env.NEXT_RUNTIME;
+});
 
 const register = async () => (await import("./instrumentation")).register(); // test sits next to the module
 
@@ -1169,8 +1202,12 @@ it("2FA off: single step, signIn on submit, error on failure", async () => {
   fireEvent.change(screen.getByLabelText("Username"), { target: { value: "admin" } });
   fireEvent.change(screen.getByLabelText("Password"), { target: { value: "admin" } });
   fireEvent.click(screen.getByRole("button", { name: /sign in|continue/i }));
-  await waitFor(() => expect(signIn).toHaveBeenCalledWith("credentials",
-    expect.objectContaining({ redirect: false, username: "admin", password: "admin" })));
+  await waitFor(() =>
+    expect(signIn).toHaveBeenCalledWith(
+      "credentials",
+      expect.objectContaining({ redirect: false, username: "admin", password: "admin" }),
+    ),
+  );
   expect(await screen.findByText(/invalid username or password/i)).toBeInTheDocument();
 });
 
@@ -1182,8 +1219,7 @@ it("2FA on: step 1 -> Continue -> code field -> signIn with token", async () => 
   fireEvent.click(screen.getByRole("button", { name: /continue/i }));
   fireEvent.change(await screen.findByLabelText(/authentication code/i), { target: { value: "123456" } });
   fireEvent.click(screen.getByRole("button", { name: /verify|sign in/i }));
-  await waitFor(() => expect(signIn).toHaveBeenCalledWith("credentials",
-    expect.objectContaining({ token: "123456" })));
+  await waitFor(() => expect(signIn).toHaveBeenCalledWith("credentials", expect.objectContaining({ token: "123456" })));
 });
 ```
 
@@ -1247,8 +1283,12 @@ import createMockRes from "test-utils/create-mock-res";
 
 const { getServerSession, verifyPassword, logFailedPasswordSignIn, currentUsername, managedByEnv, writeUser } =
   vi.hoisted(() => ({
-    getServerSession: vi.fn(), verifyPassword: vi.fn(), logFailedPasswordSignIn: vi.fn(),
-    currentUsername: vi.fn(() => "admin"), managedByEnv: vi.fn(() => false), writeUser: vi.fn(),
+    getServerSession: vi.fn(),
+    verifyPassword: vi.fn(),
+    logFailedPasswordSignIn: vi.fn(),
+    currentUsername: vi.fn(() => "admin"),
+    managedByEnv: vi.fn(() => false),
+    writeUser: vi.fn(),
   }));
 vi.mock("next-auth/next", () => ({ getServerSession }));
 vi.mock("pages/api/auth/[...nextauth]", () => ({ authOptions: {} }));
@@ -1303,7 +1343,10 @@ describe("POST /api/security/credentials", () => {
   it("200 trims the username and writes", async () => {
     verifyPassword.mockResolvedValue(true);
     const res = createMockRes();
-    await handler({ method: "POST", body: { currentPassword: "ok", username: "  pavel  ", password: "longenough" } }, res);
+    await handler(
+      { method: "POST", body: { currentPassword: "ok", username: "  pavel  ", password: "longenough" } },
+      res,
+    );
     expect(writeUser).toHaveBeenCalledWith({ username: "pavel", password: "longenough" });
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ username: "pavel" });
@@ -1350,9 +1393,7 @@ export default async function handler(req, res) {
   }
   const trimmed = typeof username === "string" ? username.trim() : "";
   if (!USERNAME_RE.test(trimmed)) {
-    return res
-      .status(400)
-      .json({ error: "Username may only contain letters, digits, dots, underscores and dashes." });
+    return res.status(400).json({ error: "Username may only contain letters, digits, dots, underscores and dashes." });
   }
 
   try {
@@ -1451,10 +1492,7 @@ export default function CredentialsWarning() {
   if (!data?.usingDefaultCredentials) return null;
 
   return (
-    <div
-      role="alert"
-      className="w-full bg-red-600 px-4 py-2 pl-14 text-sm text-white sm:pl-16"
-    >
+    <div role="alert" className="w-full bg-red-600 px-4 py-2 pl-14 text-sm text-white sm:pl-16">
       You&apos;re signed in with the default admin / admin credentials — anyone who can reach this page can log in.{" "}
       <Link href="/security" className="font-medium underline">
         Change them now
@@ -1472,9 +1510,9 @@ export default function CredentialsWarning() {
                 <Component {...pageProps} />
 ```
 
-+ `import CredentialsWarning from "components/layout/CredentialsWarning";`.
+- `import CredentialsWarning from "components/layout/CredentialsWarning";`.
 
-- [ ] **Step 5: Run — pass. Step 6: `pnpm test`; commit**
+* [ ] **Step 5: Run — pass. Step 6: `pnpm test`; commit**
 
 ```bash
 git add src/components/layout/CredentialsWarning.jsx src/components/layout/CredentialsWarning.test.jsx src/pages/_app.jsx
@@ -1572,25 +1610,25 @@ git commit -m "docs: default-on auth, admin/admin bootstrap, credential wizard, 
 
 **Spec coverage**
 
-| Spec section | Task(s) |
-|---|---|
-| Next 16 middleware = Node runtime | 0 (spike) |
-| `config/auth.json` one file + `auth-file.js` + `clearTotpState` bug | 1 |
-| `password-hash.js` (async scrypt, format) | 2 |
-| `secret.js` `ensureAuthSecret` | 3 |
-| `mode.js` `hasOidcConfig` export, `passwordAuthActive` | 4 |
-| `credentials-store.js` (predicates, `writeUser`, `ensureInitialUser`, no `mustChange`) | 5 |
-| `verifyPassword` async, 3 sources, no fall-through | 6 |
-| `isAuthEnabled` default-on + `[...nextauth]`/`middleware` rewire (`ensureAuthSecret` gated, local `NEXTAUTH_SECRET` const, `NEXTAUTH_URL` map in middleware, partial-env warn, drop throws) + test audit | 7 |
-| `authorize` throttle (no log while blocked, 2FA-fail doesn't advance) | 8 |
-| `instrumentation.js` (`isAuthEnabled` guard, box, `readonly` throw) | 9 |
-| Delete `2fa-check`; `signin.jsx` `getServerSideProps` flag + no-fetch form | 10 |
-| `/api/security/credentials` + `/credentials-status` | 11 |
-| `CredentialsWarning` + `_app.jsx` (conditional SWR key, `role="alert"`) | 12 |
-| `security.jsx` Account card + wizard (own state, lift `enabled`, `mutate`) | 13 |
-| `docker-compose.yml` / `.env.example` + `${VAR:-}` truthiness | 14 |
-| Docs (`installation`, `README`, `progress`), full sweep, 11-point manual verification | 15 |
-| MCP behaviour shift (breaking #2) | 7 (test), 15 (docs) |
+| Spec section                                                                                                                                                                                             | Task(s)             |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| Next 16 middleware = Node runtime                                                                                                                                                                        | 0 (spike)           |
+| `config/auth.json` one file + `auth-file.js` + `clearTotpState` bug                                                                                                                                      | 1                   |
+| `password-hash.js` (async scrypt, format)                                                                                                                                                                | 2                   |
+| `secret.js` `ensureAuthSecret`                                                                                                                                                                           | 3                   |
+| `mode.js` `hasOidcConfig` export, `passwordAuthActive`                                                                                                                                                   | 4                   |
+| `credentials-store.js` (predicates, `writeUser`, `ensureInitialUser`, no `mustChange`)                                                                                                                   | 5                   |
+| `verifyPassword` async, 3 sources, no fall-through                                                                                                                                                       | 6                   |
+| `isAuthEnabled` default-on + `[...nextauth]`/`middleware` rewire (`ensureAuthSecret` gated, local `NEXTAUTH_SECRET` const, `NEXTAUTH_URL` map in middleware, partial-env warn, drop throws) + test audit | 7                   |
+| `authorize` throttle (no log while blocked, 2FA-fail doesn't advance)                                                                                                                                    | 8                   |
+| `instrumentation.js` (`isAuthEnabled` guard, box, `readonly` throw)                                                                                                                                      | 9                   |
+| Delete `2fa-check`; `signin.jsx` `getServerSideProps` flag + no-fetch form                                                                                                                               | 10                  |
+| `/api/security/credentials` + `/credentials-status`                                                                                                                                                      | 11                  |
+| `CredentialsWarning` + `_app.jsx` (conditional SWR key, `role="alert"`)                                                                                                                                  | 12                  |
+| `security.jsx` Account card + wizard (own state, lift `enabled`, `mutate`)                                                                                                                               | 13                  |
+| `docker-compose.yml` / `.env.example` + `${VAR:-}` truthiness                                                                                                                                            | 14                  |
+| Docs (`installation`, `README`, `progress`), full sweep, 11-point manual verification                                                                                                                    | 15                  |
+| MCP behaviour shift (breaking #2)                                                                                                                                                                        | 7 (test), 15 (docs) |
 
 **Placeholder scan:** no "TBD"/"add error handling"/"write tests for the above" — every code step has real code; every test step has real assertions; the exhaustive per-file test case lists live in the committed spec, which travels with this plan.
 

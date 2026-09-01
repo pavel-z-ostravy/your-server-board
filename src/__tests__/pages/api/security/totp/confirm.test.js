@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import createMockRes from "test-utils/create-mock-res";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { getServerSession, verifyToken, writeTotpState, isTotpEnabled } = vi.hoisted(() => ({
   getServerSession: vi.fn(),

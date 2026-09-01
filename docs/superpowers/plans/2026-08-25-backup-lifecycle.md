@@ -27,12 +27,15 @@
 ### Task 1: PVE backup API client
 
 **Files:**
+
 - Create: `src/utils/proxmox/backups.js`
 - Test: `src/utils/proxmox/backups.test.js`
 
 **Interfaces:**
+
 - Consumes: `httpProxy(url, { method, headers, body })` from `utils/proxy/http` — resolves `[status, headers, data]`, `data` a `Buffer` on success (matches `src/pages/api/proxmox/vms/index.js`'s existing usage). `createLogger` from `utils/logger`.
 - Produces (consumed by Tasks 4–6):
+
   - `listBackupStorages(pveConfig, node)` → `Promise<Array<{ storage: string, prunePolicy: string|null }>>`
   - `listBackupsForVm(pveConfig, node, vmid)` → `Promise<Array<{ volid: string, size: number|null, ctime: number|null, notes: string|null, storage: string, prunePolicy: string|null }>>`
   - `startBackup(pveConfig, node, vmid, storage)` → `Promise<{ upid: string }>`
@@ -381,10 +384,7 @@ export async function startBackup(pveConfig, node, vmid, storage) {
 }
 
 export async function pollBackupTask(pveConfig, node, upid) {
-  const status = await pveGet(
-    pveConfig,
-    `nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`,
-  );
+  const status = await pveGet(pveConfig, `nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`);
   return { status: status.status, exitstatus: status.exitstatus ?? null };
 }
 
@@ -416,10 +416,12 @@ git commit -m "feat(backups): add Proxmox backup list/run/poll/delete API client
 ### Task 2: SSH backup streaming client
 
 **Files:**
+
 - Create: `src/utils/ssh/backupClient.js`
 - Test: `src/utils/ssh/backupClient.test.js`
 
 **Interfaces:**
+
 - Consumes: `Client` from `ssh2` (same as `smartClient.js`), `readFileSync` from `node:fs`.
 - Produces (consumed by Task 6): `streamBackupFile(sshConfig, volid)` → `Promise<{ stream: Readable, conn: Client }>` — `stream` is the live, unbuffered ssh2 exec stream (already flowing stdout); `conn` is the SSH connection, which the caller must `.end()` once done consuming/erroring. Rejects if `volid` doesn't match the expected vzdump filename shape, if the SSH connection errors, or if `exec` itself fails. `sshConfig` shape: `{ host, username, privateKeyPath, port? }` (from `getSmartConfig()`, existing).
 
@@ -626,10 +628,12 @@ git commit -m "feat(backups): add unbuffered SSH backup file streaming client"
 ### Task 3: Forced-command extension for backup download
 
 **Files:**
+
 - Modify: `deploy/proxmox-smart-helper.sh`
 - Modify: `deploy/SSH_SETUP.md`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks (this is the remote-side counterpart to Task 2's `streamBackupFile`, which sends the exact command string `cat-backup <volid>` this script must recognize).
 - Produces: the `cat-backup <volid>` forced-command case Task 2's `streamBackupFile` already assumes.
 
@@ -719,6 +723,7 @@ Add this case, in the same style as the existing `pct exec ... -- ps ...` entry 
 Add a new numbered note near the top (in the existing "Upgrading from an earlier version" section) so operators upgrading from before this plan know to re-copy the script:
 
 Find this text:
+
 ```
 Already set this up before and just pulled a new version of the app? Re-run
 step 2 below (re-copy `deploy/proxmox-smart-helper.sh` to the Proxmox host)
@@ -730,6 +735,7 @@ until you re-copy the script.
 ```
 
 Replace with:
+
 ```
 Already set this up before and just pulled a new version of the app? Re-run
 step 2 below (re-copy `deploy/proxmox-smart-helper.sh` to the Proxmox host)
@@ -745,6 +751,7 @@ same key's new `cat-backup` command.
 Also update the first line of the script's own description comment (line 1 of `deploy/proxmox-smart-helper.sh`'s allowlist summary — `lsblk`, `smartctl -j -a <device>`, `df`, `lvs`, `pvs`, a fixed host-level `ps`, or `pct exec <vmid> -- ...`) to append the new command to that list, so the file's own header stays accurate:
 
 Find (in `deploy/SSH_SETUP.md`):
+
 ```
 This key can only run `lsblk`, `smartctl -j -a <device>`, `df`, `lvs`,
 `pvs`, a fixed host-level `ps` (process listing for the Proxmox host
@@ -755,6 +762,7 @@ server-side by a forced command, not just by client-side discipline.
 ```
 
 Replace with:
+
 ```
 This key can only run `lsblk`, `smartctl -j -a <device>`, `df`, `lvs`,
 `pvs`, a fixed host-level `ps` (process listing for the Proxmox host
@@ -781,6 +789,7 @@ git commit -m "feat(backups): add cat-backup forced command for streaming downlo
 ### Task 4: API routes — storages, list, run, status
 
 **Files:**
+
 - Create: `src/pages/api/proxmox/backups/storages.js`
 - Create: `src/pages/api/proxmox/backups/list.js`
 - Create: `src/pages/api/proxmox/backups/run.js`
@@ -791,8 +800,10 @@ git commit -m "feat(backups): add cat-backup forced command for streaming downlo
 - Test: `src/__tests__/pages/api/proxmox/backups/status.test.js`
 
 **Interfaces:**
+
 - Consumes: `getPveConfig` from `utils/config/proxmox` (existing), `listBackupStorages`/`listBackupsForVm`/`startBackup`/`pollBackupTask` from `utils/proxmox/backups` (Task 1), `createMockRes` from `test-utils/create-mock-res` (existing, used by `vms/index.test.js`).
 - Produces (consumed by Tasks 9 and 10):
+
   - `GET /api/proxmox/backups/storages?node=` → `200 { storages: [...] }`
   - `GET /api/proxmox/backups/list?node=&vmid=` → `200 { backups: [...] }`
   - `POST /api/proxmox/backups/run` body `{ node, vmid, storage }` → `200 { upid }`
@@ -910,7 +921,9 @@ it("returns 400 for an invalid vmid", async () => {
 });
 
 it("returns the backup list on success", async () => {
-  listBackupsForVm.mockResolvedValue([{ volid: "local:backup/x", size: 1, ctime: 1, notes: null, storage: "local", prunePolicy: null }]);
+  listBackupsForVm.mockResolvedValue([
+    { volid: "local:backup/x", size: 1, ctime: 1, notes: null, storage: "local", prunePolicy: null },
+  ]);
   const res = createMockRes();
 
   await handler({ method: "GET", query: { node: "proxmox", vmid: "100" } }, res);
@@ -1014,9 +1027,16 @@ it("returns the task status on success", async () => {
   pollBackupTask.mockResolvedValue({ status: "stopped", exitstatus: "OK" });
   const res = createMockRes();
 
-  await handler({ method: "GET", query: { node: "proxmox", upid: "UPID:proxmox:00001234:00005678:6501234A:vzdump:100::" } }, res);
+  await handler(
+    { method: "GET", query: { node: "proxmox", upid: "UPID:proxmox:00001234:00005678:6501234A:vzdump:100::" } },
+    res,
+  );
 
-  expect(pollBackupTask).toHaveBeenCalledWith(pveConfig, "proxmox", "UPID:proxmox:00001234:00005678:6501234A:vzdump:100::");
+  expect(pollBackupTask).toHaveBeenCalledWith(
+    pveConfig,
+    "proxmox",
+    "UPID:proxmox:00001234:00005678:6501234A:vzdump:100::",
+  );
   expect(res.status).toHaveBeenCalledWith(200);
   expect(res.json).toHaveBeenCalledWith({ status: "stopped", exitstatus: "OK" });
 });
@@ -1200,10 +1220,12 @@ git commit -m "feat(backups): add storages/list/run/status API routes"
 ### Task 5: API route — delete
 
 **Files:**
+
 - Create: `src/pages/api/proxmox/backups/delete.js`
 - Test: `src/__tests__/pages/api/proxmox/backups/delete.test.js`
 
 **Interfaces:**
+
 - Consumes: `getPveConfig` (existing), `deleteBackup` from `utils/proxmox/backups` (Task 1).
 - Produces (consumed by Task 9): `DELETE /api/proxmox/backups/delete?node=&volid=` → `200 { success: true }`.
 
@@ -1330,10 +1352,12 @@ git commit -m "feat(backups): add delete API route"
 ### Task 6: API route — download (streaming)
 
 **Files:**
+
 - Create: `src/pages/api/proxmox/backups/download.js`
 - Test: `src/__tests__/pages/api/proxmox/backups/download.test.js`
 
 **Interfaces:**
+
 - Consumes: `getSmartConfig` from `utils/config/proxmox` (existing), `streamBackupFile` from `utils/ssh/backupClient` (Task 2).
 - Produces (consumed by Task 9): `GET /api/proxmox/backups/download?volid=` — pipes the backup file's bytes to the response with `Content-Disposition: attachment` and `Content-Type: application/octet-stream`.
 
@@ -1510,10 +1534,12 @@ git commit -m "feat(backups): add streaming download API route"
 ### Task 7: Frontend — delete confirm dialog
 
 **Files:**
+
 - Create: `src/components/backups/delete-confirm-dialog.jsx`
 - Test: `src/components/backups/delete-confirm-dialog.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `Dialog`, `DialogBackdrop`, `DialogPanel`, `DialogTitle` from `@headlessui/react` (existing dependency, same components `InstallWizardDialog.jsx` uses).
 - Produces (consumed by Task 9): `<DeleteConfirmDialog open vmName onConfirm onClose />` where `onConfirm` is `() => Promise<{ ok: true } | { ok: false, error: string }>`.
 
@@ -1682,10 +1708,12 @@ git commit -m "feat(backups): add type-to-confirm delete dialog"
 ### Task 8: Frontend — run backup dialog
 
 **Files:**
+
 - Create: `src/components/backups/run-backup-dialog.jsx`
 - Test: `src/components/backups/run-backup-dialog.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `Dialog`/`DialogBackdrop`/`DialogPanel`/`DialogTitle` from `@headlessui/react`; `GET /api/proxmox/backups/storages?node=` (Task 4); `POST /api/proxmox/backups/run` (Task 4); `GET /api/proxmox/backups/status?node=&upid=` (Task 4).
 - Produces (consumed by Task 9): `<RunBackupDialog open node vmid onClose onDone />` — `onDone` is called once the polled task finishes with `exitstatus === "OK"`.
 
@@ -1724,7 +1752,10 @@ describe("components/backups/run-backup-dialog", () => {
 
   it("starts a backup, polls status, and calls onDone when it completes successfully", async () => {
     global.fetch
-      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ storages: [{ storage: "local", prunePolicy: null }] }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ storages: [{ storage: "local", prunePolicy: null }] }),
+      })
       .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ upid: "UPID:proxmox:...:" }) })
       .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ status: "running", exitstatus: null }) })
       .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ status: "stopped", exitstatus: "OK" }) });
@@ -1743,7 +1774,10 @@ describe("components/backups/run-backup-dialog", () => {
 
   it("shows an inline error when starting the backup fails", async () => {
     global.fetch
-      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ storages: [{ storage: "local", prunePolicy: null }] }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ storages: [{ storage: "local", prunePolicy: null }] }),
+      })
       .mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ error: "Backup already running" }) });
 
     render(<RunBackupDialog open node="proxmox" vmid="100" onClose={vi.fn()} onDone={vi.fn()} />);
@@ -1908,10 +1942,12 @@ git commit -m "feat(backups): add run-backup dialog with task-status polling"
 ### Task 9: Frontend — backup list
 
 **Files:**
+
 - Create: `src/components/backups/backup-list.jsx`
 - Test: `src/components/backups/backup-list.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `useSWR`/`mutate` from `swr` (existing dependency); `GET /api/proxmox/backups/list?node=&vmid=` (Task 4); `DELETE /api/proxmox/backups/delete?node=&volid=` (Task 5); `GET /api/proxmox/backups/download?volid=` (Task 6, plain link, not fetched via JS); `DeleteConfirmDialog` (Task 7); `RunBackupDialog` (Task 8).
 - Produces (consumed by Task 10): `<BackupList node vmid vmName />`.
 
@@ -2161,10 +2197,12 @@ git commit -m "feat(backups): add backup list with download/delete/run-now"
 ### Task 10: Frontend — VM/CT list
 
 **Files:**
+
 - Create: `src/components/backups/vm-list.jsx`
 - Test: `src/components/backups/vm-list.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `useSWR` from `swr`; `GET /api/proxmox/vms` (existing route, returns `[{ vmid, node, type, name, status, ... }]` per `src/pages/api/proxmox/vms/index.js`); `BackupList` (Task 9).
 - Produces (consumed by Task 11): `<VmList />` — no props, fetches its own guest list.
 
@@ -2213,7 +2251,8 @@ describe("components/backups/vm-list", () => {
   it("collapses a VM/CT's backups when clicked again", async () => {
     global.fetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve([{ vmid: 100, node: "proxmox", type: "qemu", name: "example-vm", status: "running" }]),
+      json: () =>
+        Promise.resolve([{ vmid: 100, node: "proxmox", type: "qemu", name: "example-vm", status: "running" }]),
     });
 
     render(<VmList />);
@@ -2307,11 +2346,13 @@ git commit -m "feat(backups): add expandable VM/CT list"
 ### Task 11: Frontend — `/backups` page and nav link
 
 **Files:**
+
 - Create: `src/pages/backups.js`
 - Modify: `src/components/layout/NavHeader.jsx`
 - Test: `src/components/layout/NavHeader.test.jsx` (extend existing, if present — otherwise create one covering both entries)
 
 **Interfaces:**
+
 - Consumes: `VmList` (Task 10).
 - Produces: the `/backups` route itself; no further consumers within this plan.
 
@@ -2392,6 +2433,7 @@ git commit -m "feat(backups): add /backups page and nav link"
 ### Task 12: Document required Proxmox privileges
 
 **Files:**
+
 - Modify: `README.md`
 
 **Interfaces:** None — documentation only.

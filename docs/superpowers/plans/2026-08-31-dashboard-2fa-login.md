@@ -28,6 +28,7 @@
 ## File Structure
 
 **New files**
+
 - `src/utils/auth/credentials.js` — `verifyPassword(username, password)`, `logFailedPasswordSignIn()`.
 - `src/utils/auth/credentials.test.js`
 - `src/utils/auth/totp-store.js` — `readTotpState()`, `writeTotpState(state)`, `clearTotpState()`, `isTotpEnabled()`.
@@ -46,6 +47,7 @@
 - `src/__tests__/pages/security.test.jsx`
 
 **Modified files**
+
 - `src/pages/api/auth/[...nextauth].js` — credentials fields, `authorize()`, startup validation (delegates password check to `credentials.js`).
 - `src/__tests__/pages/api/auth/[...nextauth].test.js` — update for username + token.
 - `src/pages/auth/signin.jsx` — two-step form.
@@ -61,12 +63,15 @@
 ## Task 1: `verifyPassword` credential helper
 
 **Files:**
+
 - Create: `src/utils/auth/credentials.js`
 - Test: `src/utils/auth/credentials.test.js`
 
 **Interfaces:**
+
 - Consumes: nothing (reads `process.env` at call time).
 - Produces:
+
   - `verifyPassword(username: unknown, password: unknown): boolean` — reads `process.env.HOMEPAGE_AUTH_USERNAME` and `process.env.HOMEPAGE_AUTH_PASSWORD` on each call; constant-time compare of both; returns `false` (never throws) if either env var is missing/empty or either arg is not a string.
   - `logFailedPasswordSignIn(): void` — `createLogger("nextauth").warn("Failed password sign-in attempt")`.
 
@@ -181,12 +186,15 @@ git commit -m "feat(auth): add shared verifyPassword credential helper"
 ## Task 2: TOTP state store
 
 **Files:**
+
 - Create: `src/utils/auth/totp-store.js`
 - Test: `src/utils/auth/totp-store.test.js`
 
 **Interfaces:**
+
 - Consumes: `CONF_DIR` from `utils/config/config`.
 - Produces:
+
   - `readTotpState(): { totp?: { secret: string, enabledAt: string } }` — parses `${CONF_DIR}/auth.json`; returns `{}` on missing/empty/unparseable file (and `createLogger("auth").warn(...)` on a parse/read error, not on a plain missing file).
   - `writeTotpState(state: object): void` — `writeFileSync(path, JSON.stringify(state, null, 2), { mode: 0o600 })`; throws on failure.
   - `clearTotpState(): void` — `writeTotpState({})`.
@@ -312,13 +320,16 @@ git commit -m "feat(auth): add app-managed TOTP state store (config/auth.json)"
 ## Task 3: TOTP verification + enrollment helpers
 
 **Files:**
+
 - Modify: `package.json` (via `pnpm add otplib qrcode`)
 - Create: `src/utils/auth/totp.js`
 - Test: `src/utils/auth/totp.test.js`
 
 **Interfaces:**
+
 - Consumes: `readTotpState` from `utils/auth/totp-store`; `getSettings` from `utils/config/config`.
 - Produces:
+
   - `generateEnrollment(username: string): { secret: string, otpauthUrl: string }` — `authenticator.generateSecret()` + `authenticator.keyuri(username, issuer, secret)`, `issuer = getSettings().title || "Homepage"`.
   - `qrDataUrl(otpauthUrl: string): Promise<string>` — `QRCode.toDataURL(otpauthUrl)`.
   - `verifyToken(token: unknown, secret?: string): boolean` — trims token; returns `false` for a non-string / wrong-length token or when no secret is available (arg omitted AND no stored secret); else `authenticator.check(token, secret ?? readTotpState().totp.secret)`.
@@ -452,16 +463,19 @@ git commit -m "feat(auth): add TOTP verify + enrollment helpers (otplib, qrcode)
 ## Task 4: Rewire `authorize()` and startup validation
 
 **Files:**
+
 - Modify: `src/pages/api/auth/[...nextauth].js`
 - Modify: `src/__tests__/pages/api/auth/[...nextauth].test.js`
 
 **Interfaces:**
+
 - Consumes: `verifyPassword`, `logFailedPasswordSignIn` from `utils/auth/credentials`; `isTotpEnabled` from `utils/auth/totp-store`; `verifyToken` from `utils/auth/totp`.
 - Produces: `authOptions` (unchanged export). `CredentialsProvider` now declares `credentials: { username, password, token }`; `authorize({ username, password, token })` returns `{ id: "homepage", name: <username> }` or `null`.
 
 Details:
+
 - Remove the local `homepageAuthPassword` digest + `logFailedPasswordSignIn` + inline compare; delegate to `utils/auth/credentials`.
-- Keep reading `homepageAuthPassword` only for the *startup* "is password auth configured" check (`!homepageAuthPassword` branch). Add `const homepageAuthUsername = process.env.HOMEPAGE_AUTH_USERNAME;` and require it in the same branch: change the password-mode guard to
+- Keep reading `homepageAuthPassword` only for the _startup_ "is password auth configured" check (`!homepageAuthPassword` branch). Add `const homepageAuthUsername = process.env.HOMEPAGE_AUTH_USERNAME;` and require it in the same branch: change the password-mode guard to
   `else if (!homepageAuthPassword || !homepageAuthUsername || !process.env.NEXTAUTH_SECRET)` and keep the existing error message text `"Password auth is enabled but required settings are missing."`.
 - New `authorize`:
 
@@ -558,9 +572,9 @@ it("requires a valid TOTP token when 2FA is enabled", async () => {
   ).resolves.toBeNull();
 
   verifyTokenMock.mockReturnValue(true);
-  await expect(
-    provider.options.authorize({ username: "admin", password: "secret", token: "123456" }),
-  ).resolves.toEqual({ id: "homepage", name: "admin" });
+  await expect(provider.options.authorize({ username: "admin", password: "secret", token: "123456" })).resolves.toEqual(
+    { id: "homepage", name: "admin" },
+  );
 });
 ```
 
@@ -635,10 +649,12 @@ git commit -m "feat(auth): username + optional TOTP in the credentials authorize
 ## Task 5: `POST /api/auth/2fa-check`
 
 **Files:**
+
 - Create: `src/pages/api/auth/2fa-check.js`
 - Test: `src/__tests__/pages/api/auth/2fa-check.test.js`
 
 **Interfaces:**
+
 - Consumes: `verifyPassword`, `logFailedPasswordSignIn` from `utils/auth/credentials`; `isTotpEnabled` from `utils/auth/totp-store`.
 - Produces: default `handler(req, res)`. `POST { username, password }` → `200 { twoFactorEnabled: boolean }` on correct credentials; `401 { error: "Invalid credentials" }` otherwise (never includes `twoFactorEnabled`); `405 { error: "Method not allowed" }` for non-POST; `400 { error: "Invalid request" }` for a non-object body.
 
@@ -753,6 +769,7 @@ git commit -m "feat(auth): add session-less /api/auth/2fa-check pre-check endpoi
 ## Task 6: `/api/security/totp/{enroll,confirm,disable}`
 
 **Files:**
+
 - Create: `src/pages/api/security/totp/enroll.js`
 - Create: `src/pages/api/security/totp/confirm.js`
 - Create: `src/pages/api/security/totp/disable.js`
@@ -761,6 +778,7 @@ git commit -m "feat(auth): add session-less /api/auth/2fa-check pre-check endpoi
 - Test: `src/__tests__/pages/api/security/totp/disable.test.js`
 
 **Interfaces:**
+
 - Consumes: `getServerSession` from `next-auth/next`; `authOptions` from `pages/api/auth/[...nextauth]`; `generateEnrollment`, `qrDataUrl`, `verifyToken` from `utils/auth/totp`; `isTotpEnabled`, `writeTotpState`, `clearTotpState` from `utils/auth/totp-store`; `createLogger` from `utils/logger`.
 - Produces three default handlers.
   - `enroll`: `POST` → `409 { error: "2FA is already enabled" }` if `isTotpEnabled()`; else `200 { secret, otpauthUrl, qrDataUrl }` for `generateEnrollment(session.user.name)`. Nothing persisted.
@@ -1034,14 +1052,17 @@ git commit -m "feat(security): add TOTP enroll/confirm/disable endpoints"
 ## Task 7: Two-step sign-in page
 
 **Files:**
+
 - Modify: `src/pages/auth/signin.jsx`
 - Modify: `src/__tests__/pages/auth/signin.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `POST /api/auth/2fa-check` → `{ twoFactorEnabled }` / `401`; `signIn` from `next-auth/react`.
 - Produces: unchanged default export + `getServerSideProps` (no signature change). New internal state; no new props.
 
 Behaviour:
+
 - Add state: `step` (`"credentials"`), `username`, `token`, `formError` (string), `submitting` (bool). Keep `password`.
 - The password provider branch (`hasPasswordProvider`) renders one of two sub-forms based on `step`.
 - **Step `credentials`:** `Username` + `Password` inputs, submit button labelled `Continue →`.
@@ -1052,16 +1073,31 @@ Behaviour:
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
-    if (resp.status === 401) { setFormError("Invalid username or password."); setSubmitting(false); return; }
-    if (!resp.ok) { setFormError("Something went wrong. Please try again."); setSubmitting(false); return; }
+    if (resp.status === 401) {
+      setFormError("Invalid username or password.");
+      setSubmitting(false);
+      return;
+    }
+    if (!resp.ok) {
+      setFormError("Something went wrong. Please try again.");
+      setSubmitting(false);
+      return;
+    }
     const { twoFactorEnabled } = await resp.json();
-    if (twoFactorEnabled) { setStep("totp"); setSubmitting(false); return; }
+    if (twoFactorEnabled) {
+      setStep("totp");
+      setSubmitting(false);
+      return;
+    }
     await finishSignIn();
     ```
   - `finishSignIn` (shared):
     ```js
     const result = await signIn("credentials", { redirect: false, username, password, token });
-    if (result?.ok) { window.location.assign(callbackUrl); return; }
+    if (result?.ok) {
+      window.location.assign(callbackUrl);
+      return;
+    }
     setSubmitting(false);
     if (step === "totp") setFormError("Invalid authentication code.");
     else setFormError("Invalid username or password.");
@@ -1120,7 +1156,9 @@ it("shows the code step when 2FA is enabled", async () => {
 });
 
 it("shows an error on wrong credentials", async () => {
-  global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: "Invalid credentials" }) });
+  global.fetch = vi
+    .fn()
+    .mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: "Invalid credentials" }) });
   renderPasswordSignIn();
   await submitCredentials("admin", "bad");
   expect(await screen.findByText(/invalid username or password/i)).toBeInTheDocument();
@@ -1167,10 +1205,12 @@ git commit -m "feat(auth): two-step username/password then TOTP sign-in"
 ## Task 8: Security settings page
 
 **Files:**
+
 - Create: `src/pages/security.jsx`
 - Test: `src/__tests__/pages/security.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `getServerSession`, `authOptions`, `isTotpEnabled`, `getSettings`, `PageBackground`; the `/api/security/totp/*` endpoints.
 - Produces: default `SecurityPage({ initialSettings, twoFactorEnabled })` + `getServerSideProps`.
 
@@ -1185,6 +1225,7 @@ export async function getServerSideProps(context) {
 ```
 
 Page:
+
 - `PageBackground` wrapper + `<div className="flex flex-col m-4 sm:m-8 mt-16 mb-2">` + `<h1 className="text-theme-800 dark:text-theme-300 text-xl font-medium mb-4">Security</h1>` (match `backups.js`).
 - A card (`rounded-2xl border … p-6`, reuse sign-in card classes) titled **Two-factor authentication**.
 - Local state `enabled` (init from prop), `phase` (`"idle" | "enrolling" | "disabling"`), `enrollment` (`{ secret, otpauthUrl, qrDataUrl }` | null), `code`, `error`, `busy`.
@@ -1287,10 +1328,12 @@ git commit -m "feat(security): add Security page for TOTP 2FA enrollment"
 ## Task 9: Security nav entry
 
 **Files:**
+
 - Modify: `src/components/layout/NavHeader.jsx`
 - Modify: `src/components/layout/NavHeader.test.jsx`
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: `NAV_ITEMS` gains `{ href: "/security", label: "Security", icon: BiLockAlt }`.
 
@@ -1343,6 +1386,7 @@ git commit -m "feat(nav): add Security page link"
 ## Task 10: Full test + lint sweep and docs
 
 **Files:**
+
 - Modify: `docs/installation/index.md`
 - Modify: `progress.md`
 
@@ -1358,7 +1402,8 @@ Expected: PASS. Fix import-order / unused-import issues (the `node:crypto` impor
 
 - [ ] **Step 3: Update `docs/installation/index.md`**
 
-In the *Security & Authentication* section:
+In the _Security & Authentication_ section:
+
 - Under "Required environment variables for authentication", note password login now also needs `HOMEPAGE_AUTH_USERNAME`.
 - Change "For password-only login:" list to:
   - `HOMEPAGE_AUTH_USERNAME` (the login username)
@@ -1382,7 +1427,7 @@ lose access to your authenticator, delete or empty that file to disable
 
 - [ ] **Step 4: Update `progress.md`**
 
-- Remove `- TOTP-based 2FA login` from *Not yet implemented — tracked as separate follow-up plans*.
+- Remove `- TOTP-based 2FA login` from _Not yet implemented — tracked as separate follow-up plans_.
 - Add a bullet to the shipped/changelog narrative section describing: username now required for password auth (breaking — existing `HOMEPAGE_AUTH_PASSWORD`-only deployments must set `HOMEPAGE_AUTH_USERNAME`); optional TOTP 2FA enrolled from the new Security page; two-step sign-in; state in `config/auth.json`.
 
 - [ ] **Step 5: Commit**
@@ -1398,25 +1443,25 @@ git commit -m "docs: document HOMEPAGE_AUTH_USERNAME requirement and TOTP 2FA"
 
 **Spec coverage**
 
-| Spec item | Task |
-|-----------|------|
-| `HOMEPAGE_AUTH_USERNAME` required in password mode | 4, 10 |
-| `HOMEPAGE_AUTH_PASSWORD` unchanged hashing | 1 |
-| `config/auth.json` app-managed, `0600`, corrupt→disabled | 2 |
-| `verifyPassword` shared, constant-time, multibyte-safe | 1 |
-| `logFailedPasswordSignIn` shared, same string, in both `authorize` and `2fa-check` | 1, 4, 5 |
-| `totp.js` generateEnrollment / qrDataUrl / verifyToken | 3 |
-| `otplib` + `qrcode` deps | 3 |
-| `authorize()` = password + conditional TOTP, returns `name: username` | 4 |
-| `POST /api/auth/2fa-check` shape, 401 hides 2FA state, method guard | 5 |
-| `/api/security/totp/enroll` 409 + no persist | 6 |
-| `/api/security/totp/confirm` verify-then-persist, 500 on write failure | 6 |
-| `/api/security/totp/disable` requires current code | 6 |
-| Path-prefix rule (`/api/auth/*` exempt, `/api/security/*` guarded) | 5, 6 (middleware matcher already covers both — no matcher change needed) |
-| Two-step sign-in, `redirect:false`, back button, error rendering | 7 |
-| Security page + nav entry | 8, 9 |
-| Docs + progress.md + breaking-change note | 10 |
-| No recovery codes (out of scope) | — (delete-file recovery documented in 10) |
+| Spec item                                                                          | Task                                                                     |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `HOMEPAGE_AUTH_USERNAME` required in password mode                                 | 4, 10                                                                    |
+| `HOMEPAGE_AUTH_PASSWORD` unchanged hashing                                         | 1                                                                        |
+| `config/auth.json` app-managed, `0600`, corrupt→disabled                           | 2                                                                        |
+| `verifyPassword` shared, constant-time, multibyte-safe                             | 1                                                                        |
+| `logFailedPasswordSignIn` shared, same string, in both `authorize` and `2fa-check` | 1, 4, 5                                                                  |
+| `totp.js` generateEnrollment / qrDataUrl / verifyToken                             | 3                                                                        |
+| `otplib` + `qrcode` deps                                                           | 3                                                                        |
+| `authorize()` = password + conditional TOTP, returns `name: username`              | 4                                                                        |
+| `POST /api/auth/2fa-check` shape, 401 hides 2FA state, method guard                | 5                                                                        |
+| `/api/security/totp/enroll` 409 + no persist                                       | 6                                                                        |
+| `/api/security/totp/confirm` verify-then-persist, 500 on write failure             | 6                                                                        |
+| `/api/security/totp/disable` requires current code                                 | 6                                                                        |
+| Path-prefix rule (`/api/auth/*` exempt, `/api/security/*` guarded)                 | 5, 6 (middleware matcher already covers both — no matcher change needed) |
+| Two-step sign-in, `redirect:false`, back button, error rendering                   | 7                                                                        |
+| Security page + nav entry                                                          | 8, 9                                                                     |
+| Docs + progress.md + breaking-change note                                          | 10                                                                       |
+| No recovery codes (out of scope)                                                   | — (delete-file recovery documented in 10)                                |
 
 **Middleware note:** `src/middleware.js`'s matcher negative-lookahead is `(?!_next/static|_next/image|favicon.ico|robots.txt|manifest.json|sitemap.xml|icons/|api/auth|auth/)`. `/api/auth/2fa-check` matches `api/auth` → already exempt. `/api/security/*` is not listed → already protected. **No middleware change required.** Task 10 Step 1 should still add a middleware test only if quick; otherwise the existing middleware tests plus the `/api/security/*` 401 behaviour are covered structurally. (If adding: extend `src/middleware.test.js` with a case asserting `/api/security/totp/enroll` with no token → 401 and `/api/auth/2fa-check` → `next`.)
 

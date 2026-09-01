@@ -1,9 +1,9 @@
 import { getServerSession } from "next-auth/next";
 
 import { authOptions } from "pages/api/auth/[...nextauth]";
-import createLogger from "utils/logger";
 import { verifyToken } from "utils/auth/totp";
 import { clearTotpState, isTotpEnabled } from "utils/auth/totp-store";
+import createLogger from "utils/logger";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });

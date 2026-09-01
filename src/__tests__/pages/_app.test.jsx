@@ -8,6 +8,16 @@ vi.mock("next/head", () => ({
   default: ({ children }) => <>{children}</>,
 }));
 
+vi.mock("next-auth/react", () => ({
+  SessionProvider: ({ children }) => <>{children}</>,
+  useSession: vi.fn(() => ({ status: "unauthenticated" })),
+}));
+
+vi.mock("swr", () => ({
+  default: vi.fn(() => ({ data: undefined })),
+  SWRConfig: ({ children }) => <>{children}</>,
+}));
+
 vi.mock("utils/contexts/color", () => ({
   ColorProvider: ({ children }) => <>{children}</>,
 }));

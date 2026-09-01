@@ -8,6 +8,8 @@ const cacheKey = "homepageEnvironmentVariables";
 const homepageVarPrefix = "HOMEPAGE_VAR_";
 const homepageFilePrefix = "HOMEPAGE_FILE_";
 
+// Mirrored (inlined, without src/ imports) by configDir() in utils/auth/auth-file.js —
+// keep the two in sync deliberately.
 export const CONF_DIR = process.env.HOMEPAGE_CONFIG_DIR
   ? process.env.HOMEPAGE_CONFIG_DIR
   : join(process.cwd(), "config");
