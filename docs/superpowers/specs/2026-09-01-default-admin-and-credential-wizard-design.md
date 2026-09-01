@@ -1,189 +1,499 @@
-# Default admin/admin + in-app credential & 2FA wizard — design
+# Default admin + in-app credential & 2FA wizard — design
 
-**Date:** 2026-09-01
+**Date:** 2026-09-01 (rev. 2)
 **Status:** Draft for review
-**Builds on:** `docs/superpowers/specs/2026-08-31-dashboard-2fa-login-design.md` (username + password + TOTP 2FA, already shipped on `dev`)
+**Builds on:** `docs/superpowers/specs/2026-08-31-dashboard-2fa-login-design.md` (username + password + TOTP 2FA, shipped on `dev`)
 
 ## Summary
 
-The dashboard currently: auth is opt-in (`HOMEPAGE_AUTH_ENABLED=true`), credentials come **only** from `HOMEPAGE_AUTH_USERNAME` / `HOMEPAGE_AUTH_PASSWORD` env vars (startup throws without them), TOTP 2FA is enrolled on `/security`.
+Today: auth is opt-in (`HOMEPAGE_AUTH_ENABLED=true`); credentials come **only** from
+`HOMEPAGE_AUTH_USERNAME` / `HOMEPAGE_AUTH_PASSWORD` (startup throws without them);
+TOTP is enrolled on `/security`.
 
 This change:
 
-- **Login is on by default.** `isAuthEnabled()` returns true unless `HOMEPAGE_AUTH_ENABLED=false`.
-- **Built-in default credentials `admin` / `admin`** when nothing else is configured — no startup crash, no env required.
-- **Credentials become editable in-app** and persist to `config/auth.json` (scrypt-hashed password). Env vars, when set, remain an override that locks the in-app editor.
-- **A persistent warning banner** shows on every page while the effective credentials are still the built-in default.
-- **A two-step wizard on `/security`**: step 1 changes username + password (verifying the current password); step 2 optionally sets up 2FA in the same sitting.
-- **`NEXTAUTH_SECRET` is auto-generated and persisted** to `config/auth.json` when not supplied, so the always-on gate works with zero configuration.
-- **OIDC mode is unchanged** and, when active, suppresses all of the above (default creds, banner, wizard).
+- **Login is on by default.** `isAuthEnabled()` is true unless `HOMEPAGE_AUTH_ENABLED=false`.
+- **A first-run bootstrap** generates the NextAuth signing secret **and** an
+  initial `admin` account with a **random password**, persists both to
+  `config/auth.json`, and prints the password to the server log once. No env
+  vars, no startup crash. (Literal `admin`/`admin` is **not** used — see
+  "Why a random initial password".)
+- **Credentials are editable in-app** and persist to `config/auth.json`
+  (scrypt-hashed). `HOMEPAGE_AUTH_USERNAME` + `HOMEPAGE_AUTH_PASSWORD`, when
+  both set, remain an override that locks the in-app editor.
+- **A persistent warning banner** shows on every page until the initial
+  password is changed.
+- **A two-step wizard on `/security`**: step 1 changes username + password
+  (verifying the current password); step 2 optionally sets up 2FA in the same
+  sitting.
+- **OIDC mode is unchanged** and, when active, suppresses the bootstrap
+  account, the banner, and the wizard.
 
-### Breaking change
+### The signing secret — how it actually reaches every runtime
 
-Any existing deployment that did **not** set `HOMEPAGE_AUTH_ENABLED` will, after this upgrade, present a login screen accepting `admin` / `admin`. Operators who want no login must set `HOMEPAGE_AUTH_ENABLED=false`. Called out in the changelog, `README.md`, and `docs/installation/index.md`.
+`middleware.js` runs on the **Edge runtime** (no `fs`) and must verify the JWT
+with the **same** secret `[...nextauth].js` signed it with. Neither runtime
+`process.env` mutation nor `.env.local` reliably reaches an Edge-runtime
+middleware. The only mechanism the design relies on: **the secret is a real OS
+environment variable, set on the process (or its parent) before `next`/`node`
+starts.** Every launch path funnels through one wrapper — `scripts/prepare-auth.mjs`
+— which resolves-or-creates the secret + the initial admin account, then either
+exports the secret or spawns the real command with it in `env`:
+
+| Launch path | Mechanism |
+|-------------|-----------|
+| `pnpm dev` | `"dev": "node scripts/prepare-auth.mjs -- next dev"` — the wrapper sets `process.env.HOMEPAGE_AUTH_SECRET`, then `spawn("next", ["dev"], { env: process.env, stdio: "inherit" })`. The child (and its middleware) inherit the real env var. |
+| `pnpm start` | `"start": "node scripts/prepare-auth.mjs -- next start"` — identical wrapper. No `.env.local`, no build-time inlining question. |
+| Docker | `docker-entrypoint.sh` runs `node /app/scripts/prepare-auth.mjs --print-secret` (side effects: persist + initial-user log; stdout: the secret), then `export HOMEPAGE_AUTH_SECRET=…` before `exec … node server.js`. |
+| `pnpm build` | Unchanged (`next build --webpack`) — no server, no secret needed. |
+| `node server.js` raw (no entrypoint) | `[...nextauth].js` throws a clear startup error: no secret in the environment. |
+
+`middleware.js` and `[...nextauth].js` are **unchanged in how they read the
+secret** — `process.env.NEXTAUTH_SECRET || process.env.HOMEPAGE_AUTH_SECRET`,
+at module load. Neither imports any auth-file / bootstrap module. Cross-platform:
+the wrapper uses `node:child_process` `spawn`, not shell syntax.
+
+### Why a random initial password (not `admin`/`admin`)
+
+"Always-on login" means every deployment that upgrades — including ones on a
+public Cloudflare-tunnel hostname (`YSB_ALLOWED_HOSTS` on the reference
+deployment includes one) — gets a login gate immediately. With no app-level
+rate limiting, a literal `admin`/`admin` default is an online-guessable
+credential exposed the moment the container starts. A per-install random
+password removes that window at effectively zero UX cost: the operator reads
+one line from `docker compose logs` on first run. Recovery if the line is
+lost: `rm config/auth.json` (or delete just the `user` key) and restart.
+
+### Breaking changes
+
+1. Any deployment that did **not** set `HOMEPAGE_AUTH_ENABLED` now shows a
+   login screen. To keep no login: `HOMEPAGE_AUTH_ENABLED=false`.
+2. `src/pages/api/mcp/index.js` gates its session check on `isAuthEnabled()`;
+   with auth default-on, MCP now requires a bearer token **or** a session
+   unless `HOMEPAGE_AUTH_ENABLED=false`. The `HOMEPAGE_MCP_TOKEN` path is
+   unaffected.
+
+Both go in the changelog, `README.md`, and `docs/installation/index.md`.
 
 ## Goals / non-goals
 
 **Goals**
-- Zero-config secure-by-default: a fresh deployment has a login gate with obvious-but-flagged default credentials the operator is pushed to change.
-- Credentials changeable without touching env / redeploying.
-- One flow to change credentials and (optionally) turn on 2FA.
-- Session survival across restarts (persisted secret).
-- No regression to OIDC mode or to env-var-driven credential management.
+- Zero-config, secure-by-default: a fresh deployment has a login gate with a
+  unique password the operator is pushed to change.
+- Credentials changeable without env / redeploy.
+- One flow to change credentials and (optionally) enable 2FA.
+- Sessions survive restarts (persisted secret).
+- No regression to OIDC mode or to env-driven credential management.
+- Verified end-to-end with a real run before merge.
 
 **Non-goals**
 - Multiple users / roles.
-- Password reset via email, recovery codes (unchanged: 2FA recovery is deleting `config/auth.json`).
-- Rate limiting (still delegated to the reverse proxy).
+- Password reset via email; 2FA recovery codes (unchanged: delete
+  `config/auth.json`).
+- App-level rate limiting (still the reverse proxy's job — doc note strengthened).
 - Renaming `middleware.js` → `proxy.js` (Next 16 deprecation; separate task).
-- Changing the two-step **sign-in** page (username+password → optional code) — it already works and is untouched here.
+- Changing the two-step **sign-in** page (already shipped, untouched).
+- Argon2 (needs a native dep; scrypt is built in and sufficient).
 
-## Current state (post-2026-08-31 merge, for context)
+## Plan task 0 — spike (½ day, before any other task)
 
+Two unknowns can invalidate the shape of this design. Resolve both with a
+throwaway branch first:
+
+1. **Wrapper spawn.** `scripts/prepare-auth.mjs -- next dev` — confirm `spawn`
+   resolves `next` (`node_modules/.bin`, and `.cmd` on Windows if that matters),
+   forwards `Ctrl-C`, exits with the child's code, and that `next dev`'s
+   **middleware** sees `process.env.HOMEPAGE_AUTH_SECRET`. Do the same for
+   `next start` after a `next build`. This is the load-bearing mechanism.
+2. **`.mjs` resolution.** A `.js` runtime module `import`ing
+   `utils/auth/auth-file` (file is `auth-file.mjs`) resolves under **both** Next
+   16 and Vitest; and `node scripts/prepare-auth.mjs` importing
+   `../src/utils/auth/bootstrap.mjs` → `./auth-file.mjs` runs with no loader.
+
+If (1) fails, fall back to: require `HOMEPAGE_AUTH_SECRET` in the environment for
+non-Docker, keep the Docker entrypoint export, and drop the wrapper. If (2)
+fails, make `auth-file` / `bootstrap` plain `.js` and give the scripts a tiny
+duplicated file-reader instead of importing them.
+
+## Current state (post-2026-08-31 merge, verified against `dev`)
+
+- `next@^16.2.12`, `output: "standalone"`, no `instrumentation` file, middleware
+  has no `runtime` declaration → **Edge**.
+- `Dockerfile`: `ENTRYPOINT ["docker-entrypoint.sh"]`, `CMD ["node", "server.js"]`,
+  runs as root then `exec su-exec $PUID:$PGID "$@"`. `docker-entrypoint.sh`
+  chowns `/app/config` to `$PUID:$PGID` around line 33.
+- `.gitignore` already ignores `.env*.local` and `config/auth.json`.
 - `src/utils/env.js` — `isAuthEnabled()` = `process.env.HOMEPAGE_AUTH_ENABLED === "true"`.
-- `src/utils/auth/credentials.js` — `verifyPassword(u,p)` reads the two env vars, `sha256` + `timingSafeEqual`, returns `false` if unset / non-string; `logFailedPasswordSignIn()`.
-- `src/utils/auth/totp-store.js` — reads/writes `config/auth.json` (`{ totp: { secret, enabledAt } }`), `0600` + `chmodSync`, `readTotpState` / `writeTotpState` / `clearTotpState` / `isTotpEnabled`.
-- `src/utils/auth/totp.js` — `generateEnrollment` / `qrDataUrl` / `verifyToken` (`authenticator.options = { window: 1 }`).
-- `src/utils/auth/mode.js` — `passwordAuthActive()` = `isAuthEnabled() && !hasOidcConfig && Boolean(HOMEPAGE_AUTH_PASSWORD)`.
-- `src/pages/api/auth/[...nextauth].js` — module-load startup validation **throws** without `NEXTAUTH_URL`, without a ≥32-char secret, and (password mode) without username+password+secret. `authorize({username,password,token})` → `verifyPassword` then (if `isTotpEnabled()`) `verifyToken`. `useSecureCookies: parsedAuthUrl?.protocol === "https:"`.
-- `src/pages/api/auth/2fa-check.js` — `404` when `!passwordAuthActive()`, else pre-check.
-- `src/pages/api/security/totp/{enroll,confirm,disable}.js` — session-protected (middleware + defensive `getServerSession`).
-- `src/pages/security.jsx` — one card, `passwordAuthEnabled` prop gates it; enable/enrolling/disable phases.
-- `src/middleware.js` — `authEnabled` + `authSecret` computed at module load; when `authEnabled`, `getToken` → redirect `/auth/signin` (pages) or `401` (`/api/`). Matcher exempts `_next/*`, static, `api/auth`, `auth/`.
-- `src/pages/_app.jsx` — `<SessionProvider>` → `<SWRConfig>` → providers → `<NavHeader />` + `<Component />`.
-- `src/components/layout/NavHeader.jsx` — `NAV_ITEMS` incl. `{ href: "/security", label: "Security", icon: BiLockAlt }`.
-- Deploy: Docker on lxc200, `/opt/stacks/your-server-board`, `docker compose up -d --build`, `./config` volume → `/app/config`, `docker-entrypoint.sh` runs as root then drops to a non-root user via `su-exec`.
+- `src/utils/auth/credentials.js` — **sync** `verifyPassword(u,p)` reads the two
+  env vars, `sha256`+`timingSafeEqual`, `false` if unset/non-string;
+  `logFailedPasswordSignIn()`.
+- `src/utils/auth/totp-store.js` — reads/writes `config/auth.json`
+  (`{ totp: { secret, enabledAt } }`), `writeFileSync {mode:0o600}` + `chmodSync`,
+  corrupt file → `{}` + warn.
+- `src/utils/auth/totp.js` — `generateEnrollment`/`qrDataUrl`/`verifyToken`
+  (`authenticator.options = { window: 1 }`).
+- `src/utils/auth/mode.js` — `passwordAuthActive()` =
+  `isAuthEnabled() && !hasOidcConfig && Boolean(HOMEPAGE_AUTH_PASSWORD)`.
+- `src/pages/api/auth/[...nextauth].js` — module-load validation **throws**
+  without `NEXTAUTH_URL`, without a ≥32-char secret, and (password mode)
+  without username+password+secret. `authorize({username,password,token})` →
+  `verifyPassword` then (if `isTotpEnabled()`) `verifyToken`. `useSecureCookies:
+  parsedAuthUrl?.protocol === "https:"`.
+- `src/pages/api/auth/2fa-check.js` — `404` when `!passwordAuthActive()`, else
+  pre-check; `401` + `logFailedPasswordSignIn()` on bad creds.
+- `src/pages/api/security/totp/{enroll,confirm,disable}.js` — session-guarded.
+- `src/pages/security.jsx` — one card; `passwordAuthEnabled` prop; phases
+  `idle | enrolling | disabling`; single `error`/`busy` state.
+- `src/middleware.js` — `const authEnabled = isAuthEnabled();` and
+  `const authSecret = process.env.NEXTAUTH_SECRET || process.env.HOMEPAGE_AUTH_SECRET;`
+  at module load; when `authEnabled`, `getToken` → redirect `/auth/signin`
+  (pages) or `401` (`/api/`). Imports only `next-auth/jwt`, `next/server`,
+  `utils/env`. Matcher exempts `_next/*`, static, `api/auth`, `auth/`.
+- `src/pages/_app.jsx` — `<SessionProvider>` → `<SWRConfig>` → 4 providers →
+  `<NavHeader />` + `<Component />`.
+- `src/pages/api/mcp/index.js` — `hasHomepageSession()` returns `false` when
+  `!isAuthEnabled()`.
+- Deploy: Docker on lxc200, `/opt/stacks/your-server-board`, `./config` volume →
+  `/app/config`, `YSB_ALLOWED_HOSTS=10.0.1.104:3050,dashboard.vault1922.xyz`.
 
 ## Architecture
 
-### Credential resolution — one function, three sources
-
-`verifyPassword(username, password): boolean` (rewritten) checks, in order, and **does not fall through** once a source is authoritative:
-
-1. **Env override** — if BOTH `HOMEPAGE_AUTH_USERNAME` and `HOMEPAGE_AUTH_PASSWORD` are set: constant-time compare against them (today's `sha256`+`timingSafeEqual` path). Return the result.
-2. **Stored user** — else if `config/auth.json` has a `user` object: `scrypt`-verify `password` against `user.passwordHash` **and** constant-time compare `username` against `user.username`. Return the result.
-3. **Built-in default** — else: constant-time compare against `"admin"` / `"admin"`.
-
-Never throws; non-string input → `false`.
-
-Two companion predicates (in `mode.js` or a new `credentials-store.js`, see units):
-- `managedByEnv()` = `Boolean(process.env.HOMEPAGE_AUTH_USERNAME && process.env.HOMEPAGE_AUTH_PASSWORD)`.
-- `usingDefaultCredentials()` = `!managedByEnv() && !readUser()` — i.e. the effective credentials are the built-in `admin`/`admin`.
-
-### Always-on, and the secret
-
-- `isAuthEnabled()` → `process.env.HOMEPAGE_AUTH_ENABLED !== "false"`. Only the exact string `"false"` disables. (`""`, unset, `"true"`, anything else → enabled.)
-- `passwordAuthActive()` → `isAuthEnabled() && !hasOidcConfig`. (The password source is always available now — at minimum the default — so the `HOMEPAGE_AUTH_PASSWORD` clause is dropped.)
-- **`NEXTAUTH_SECRET`**: a new lean module `src/utils/auth/secret.js` (imports only `node:fs`, `node:path`, `node:crypto`) exposes:
-  - `resolveAuthSecret()` → `process.env.NEXTAUTH_SECRET || process.env.HOMEPAGE_AUTH_SECRET || <config/auth.json .secret>` or `undefined`.
-  - `ensureAuthSecret()` → `resolveAuthSecret()`; if none, generate `randomBytes(32).toString("base64")`, merge `{ secret }` into `config/auth.json` (preserving `user`/`totp`), `chmodSync 0600`, set `process.env.NEXTAUTH_SECRET`, return it.
-  - It replicates `CONF_DIR` inline (`process.env.HOMEPAGE_CONFIG_DIR || join(process.cwd(), "config")`) to avoid importing the heavy `utils/config/config` into the middleware bundle.
-  - Both `src/pages/api/auth/[...nextauth].js` and `src/middleware.js` call `ensureAuthSecret()` at module load. Within one Node process (the normal `next start` / `next dev` / single container case) the first module to initialise generates + persists + sets `process.env`; the second reads it back. **Multi-process / multi-replica deployments must set `HOMEPAGE_AUTH_SECRET` explicitly** (documented) — otherwise each process could generate a different secret. `docker-entrypoint.sh` also gets a pre-generate step (below) so the Docker path never races.
-- **`NEXTAUTH_URL`**: use `HOMEPAGE_EXTERNAL_URL` when set (still validated: absolute http(s), no creds/query/fragment). When **not** set in password mode, leave `NEXTAUTH_URL` unset — next-auth v4 derives the origin from request headers, which is fine for the credentials provider (no external redirects). The "NEXTAUTH_URL missing" warning routes through the sanitized logger.
-- **OIDC mode still requires `HOMEPAGE_EXTERNAL_URL`** (registered redirect URIs) — the startup throw for a missing URL is kept, but scoped to `hasOidcConfig`.
-- `useSecureCookies`: `parsedAuthUrl?.protocol === "https:"` — unchanged; `false` when no URL (LAN http), `true` when `HOMEPAGE_EXTERNAL_URL` is https.
-- The ≥32-char secret-length check stays but applies to the resolved/generated secret (generated is 44 chars).
-
-### Units
-
-| Unit | Responsibility | Depends on |
-|------|----------------|------------|
-| `src/utils/auth/secret.js` | `resolveAuthSecret()`, `ensureAuthSecret()` — the JWT signing secret, lean deps only | `node:fs/path/crypto` |
-| `src/utils/auth/credentials-store.js` | `readUser()`, `writeUser({username,password})` (scrypt), `clearUser()`, `usingDefaultCredentials()`, `managedByEnv()` — the `user` section of `config/auth.json` | `node:fs/path/crypto`, `CONF_DIR` |
-| `src/utils/auth/credentials.js` | `verifyPassword` (3-source), `logFailedPasswordSignIn` (unchanged) | `credentials-store`, `node:crypto` |
-| `src/utils/env.js` | `isAuthEnabled()` — default true | — |
-| `src/utils/auth/mode.js` | `passwordAuthActive()` — drop the password clause | `env` |
-| `src/pages/api/auth/[...nextauth].js` | `ensureAuthSecret()` at load; relax URL/secret throws; OIDC-only URL throw; `authorize` unchanged | `secret`, `credentials`, `totp*` |
-| `src/middleware.js` | `ensureAuthSecret()` at load for `getToken`; `authEnabled` now default-true | `secret`, `env` |
-| `src/pages/api/security/credentials.js` | `POST` — session; change username+password after verifying current; `409` if `managedByEnv()` | `credentials`, `credentials-store` |
-| `src/pages/api/security/credentials-status.js` | `GET` — session; `{ usingDefaultCredentials, managedByEnv, username }` for the banner | `credentials-store` |
-| `src/components/layout/CredentialsWarning.jsx` | Full-width banner; SWR on `credentials-status`; shows iff authenticated + `usingDefaultCredentials` | `next-auth/react`, `swr` |
-| `src/pages/security.jsx` | Add an **Account** card with the 2-step wizard; keep the 2FA card | the two new endpoints + existing totp endpoints |
-| `src/pages/_app.jsx` | Render `<CredentialsWarning />` after `<NavHeader />` | — |
-| `docker-entrypoint.sh` | Pre-generate `HOMEPAGE_AUTH_SECRET` into `config/auth.json` + env if absent | — |
-| `docker-compose.yml`, `.env.example` | Pass through all `HOMEPAGE_AUTH_*` / OIDC vars (optional) | — |
-
-### Storage: `config/auth.json`
+### `config/auth.json` — one file, three writers
 
 ```json
 {
   "secret": "<base64, 44 chars>",
-  "user": { "username": "myname", "passwordHash": "scrypt$16384$8$1$<saltB64>$<hashB64>", "updatedAt": "2026-09-01T…Z" },
+  "user": {
+    "username": "admin",
+    "passwordHash": "scrypt$16384$8$1$<saltB64>$<hashB64>",
+    "mustChange": true,
+    "updatedAt": "2026-09-01T…Z"
+  },
   "totp": { "secret": "<base32>", "enabledAt": "2026-09-01T…Z" }
 }
 ```
 
 - Any of `secret` / `user` / `totp` may be absent.
-- All writers (`secret.js`, `credentials-store.js`, `totp-store.js`) **read-modify-write the whole object** so they never clobber each other's keys, and each `chmodSync(path, 0o600)` after writing.
-- `writeTotpState` is refactored to a shared `readAuthFile()` / `writeAuthFile(obj)` helper (either exported from `totp-store.js` or a new `auth-file.js`) that the three modules share. Corrupt/unreadable file → treated as `{}` + a `warn` (existing behaviour), and a subsequent write overwrites it.
+- **`src/utils/auth/auth-file.mjs`** is the single file layer, `node:` builtins only
+  (`node:fs`, `node:path`), **no imports from `src/`** and no path aliases (it is
+  loaded both by Next/Vitest *and* by raw `node scripts/*.mjs`, so every import in
+  the `.mjs` chain is a bare `node:` specifier or a relative path):
+  - `readAuthFile()` → parsed object. **Cached**: a module-level `{ value, at }`;
+    re-reads from disk only when the cache is older than 5 s (safety net for
+    out-of-band edits / other replicas) — otherwise returns the cached object.
+    Corrupt/unreadable → `{}` + a one-time `warn`.
+  - `writeAuthFile(patch)` → read the file **fresh from disk** (not the cache),
+    merge: `next = { ...current, ...patch }`, then for every key where
+    `patch[k] === undefined` **`delete next[k]`** (so a writer can remove a
+    section without clobbering the others), `writeFileSync(path, JSON, {mode:0o600})`,
+    `chmodSync(path, 0o600)`, set the cache to `next`.
+  - `authFilePath()` → `join(process.env.HOMEPAGE_CONFIG_DIR || join(process.cwd(), "config"), "auth.json")`.
+  - Only ever imported by `.js`/`.mjs` in Node contexts (routes, `getServerSideProps`,
+    `scripts/`, tests). **Never imported by `middleware.js`.** Vitest resolves the
+    extensionless `utils/auth/auth-file` alias to `.mjs` (`.mjs` is first in Vite's
+    default extension list); the plan verifies this resolves under both Next and Vitest.
+- `totp-store.js` is refactored to thin wrappers over `auth-file`:
+  - `readTotpState()` → `readAuthFile()`.
+  - `writeTotpState(state)` → `writeAuthFile({ totp: state.totp })`.
+  - **`clearTotpState()` → `writeAuthFile({ totp: undefined })`** — this deletes
+    only the `totp` key. **Bug fixed here:** today `clearTotpState()` calls
+    `writeTotpState({})` which rewrites the whole file as `{}`; harmless while the
+    file holds only `totp`, but it would wipe `secret` + `user` once they live
+    there. The existing `totp-store.test.js` assertion that `clearTotpState` leaves
+    `{}` is reworked to assert it leaves `secret`/`user` intact and drops `totp`.
+  - `isTotpEnabled()` unchanged in behaviour.
 
-### Password hashing
+### Password hashing — async scrypt
 
-`scrypt` from `node:crypto` (no dependency):
+`node:crypto` `scrypt` (promisified), `N=16384, r=8, p=1`, 64-byte output:
 
-- `writeUser`: `salt = randomBytes(16)`; `hash = scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 })`; store `scrypt$16384$8$1$<salt base64>$<hash base64>`.
-- verify: parse params + salt, recompute, `timingSafeEqual`. Unknown format / parse failure → `false`.
-- Password rules on change: **min 8 characters**; new `username` trimmed, non-empty, `[A-Za-z0-9._-]{1,64}`; the pair may not be `admin`/`admin`.
+- `hashPassword(pw)` → `salt = randomBytes(16)`; `key = await scrypt(pw, salt, 64, {N,r,p})`;
+  return `scrypt$16384$8$1$<salt b64>$<key b64>`.
+- `verifyHash(pw, stored)` → parse; recompute; `timingSafeEqual`. Unknown
+  format / parse error → `false`. Never throws.
+- **Async** so a slow hash never blocks the event loop under repeated
+  unauthenticated attempts on `/api/auth/2fa-check`.
 
-## Component details
+### Credential resolution — `verifyPassword` (now async)
 
-### `src/pages/api/security/credentials.js`
+`async verifyPassword(username, password): Promise<boolean>` — checks, in order,
+**no fall-through** once a source is authoritative:
 
-- `POST` only → `405`. Session required (middleware guards `/api/security/*`; defensive `getServerSession` → `401`).
-- `managedByEnv()` → `409 { error: "Credentials are managed by environment variables." }`.
-- Body `{ currentPassword, username, password }`.
-- `!verifyPassword(effectiveUsername, currentPassword)` → `400 { error: "Current password is incorrect." }` + `logFailedPasswordSignIn()`. (`effectiveUsername` = stored `user.username` or `"admin"`.)
-- Validation failures → `400 { error: "<specific message>" }` (weak password, bad username chars, unchanged defaults).
-- On success: `writeUser({ username, password })` → `200 { username }`. Write failure → `500 { error: "Could not save credentials." }` + `createLogger("auth").error(...)`.
+1. **Env override** — if `Boolean(process.env.HOMEPAGE_AUTH_USERNAME) &&
+   Boolean(process.env.HOMEPAGE_AUTH_PASSWORD)`: constant-time `sha256` compare
+   of both (today's path). Return the result.
+2. **Stored user** — else if `readAuthFile().user`: compute **both**
+   `usernameOk = constantTimeEquals(username, user.username)` and
+   `passwordOk = await verifyHash(password, user.passwordHash)` without
+   short-circuiting (so a wrong username and a wrong password take the same time
+   — the scrypt runs either way), then `return usernameOk && passwordOk`.
+3. Neither → `false`. (There is no literal-default branch: the bootstrap always
+   persists a `user`, or the deployment is misconfigured and login is expected
+   to fail until the operator sets env creds.)
 
-### `src/pages/api/security/credentials-status.js`
+Non-string input → `false`; never throws. All callers become `await`:
+`authorize` (already async), `2fa-check.js` (already async), the new
+`credentials.js` API route.
 
-- `GET` only → `405`. Session required → `401`.
-- `200 { usingDefaultCredentials: boolean, managedByEnv: boolean, username: string }` where `username` = stored / env / `"admin"`.
+Predicates in `src/utils/auth/credentials-store.js`:
+- `managedByEnv()` = `Boolean(process.env.HOMEPAGE_AUTH_USERNAME && process.env.HOMEPAGE_AUTH_PASSWORD)`.
+- `readUser()` = `readAuthFile().user ?? null`.
+- `usingDefaultCredentials()` = `!managedByEnv() && readUser()?.mustChange === true`.
+- `async writeUser({ username, password })` → `writeAuthFile({ user: { username,
+  passwordHash: await hashPassword(password), mustChange: false, updatedAt: now } })`.
+- `currentUsername()` = `process.env.HOMEPAGE_AUTH_USERNAME || readUser()?.username || "admin"`.
 
-### `src/components/layout/CredentialsWarning.jsx`
+### Bootstrap — `src/utils/auth/bootstrap.mjs` + `scripts/prepare-auth.mjs`
 
-- `const { status } = useSession();` — render nothing unless `status === "authenticated"`.
-- `useSWR("/api/security/credentials-status")` — render nothing unless `data?.usingDefaultCredentials`.
-- Renders a full-width bar: `bg-red-600 text-white text-sm`, `px-4 py-2 pl-14 sm:pl-16` (left padding clears the absolutely-positioned NavHeader hamburger), text **"You're signed in with the default admin / admin credentials."** + a `<Link href="/security">` styled as an underlined button: **"Change them now"**. Not dismissible. `role="alert"`.
-- Placed in `_app.jsx` immediately after `<NavHeader />`, before `<Component />`, so it sits at the top of every page and pushes content down.
+**Only `prepare-auth.mjs` (a separate, pre-server process) ever generates or
+persists the secret. The running server — `[...nextauth].js` and `middleware.js`
+— reads the secret from `process.env` and nothing else.** This is the whole
+reason the design works with an Edge middleware: the secret is a real OS env var
+by the time `node server.js` starts.
 
-### `src/pages/security.jsx` — Account card + wizard
+**`bootstrap.mjs`** — `node:` builtins + relative import of `./auth-file.mjs`
+only. It **inlines** the three env predicates it needs (it must not `import`
+`env.js` / `mode.js` / `credentials-store.js`, which are ESM-syntax `.js` files
+that raw `node` would fail to parse):
 
-New **Account** card above the existing 2FA card:
+```js
+const authEnabledFromEnv = () => process.env.HOMEPAGE_AUTH_ENABLED !== "false";
+const hasOidcConfig = () => Boolean(process.env.HOMEPAGE_OIDC_ISSUER && process.env.HOMEPAGE_OIDC_CLIENT_ID && process.env.HOMEPAGE_OIDC_CLIENT_SECRET);
+const managedByEnv = () => Boolean(process.env.HOMEPAGE_AUTH_USERNAME && process.env.HOMEPAGE_AUTH_PASSWORD);
+```
 
-- **Summary (idle):** "Signed in as **`<username>`**." + button **"Change username & password"**. When `managedByEnv` (new prop from `getServerSideProps`): instead show "Credentials are managed by environment variables (`HOMEPAGE_AUTH_USERNAME` / `HOMEPAGE_AUTH_PASSWORD`)." and no button.
-- **Wizard step 1 (`account-credentials`):** fields — `Current password`, `New username` (prefilled with current), `New password`, `Confirm new password`. Submit → `POST /api/security/credentials`. On `400` show the returned message inline. On `200`: update the displayed username, `mutate("/api/security/credentials-status")` (drops the banner), advance to step 2.
-- **Wizard step 2 (`account-2fa`):** heading "Add two-factor authentication?" + two buttons: **"Set up 2FA"** and **"Not now"**.
-  - **"Not now"** → wizard closes, card returns to summary.
-  - **"Set up 2FA"** → reuse the existing `enrolling` phase (calls `/api/security/totp/enroll` then `/confirm`). On confirm success → `enabled = true`, wizard closes. (If 2FA is already on, step 2 is skipped and the wizard closes after step 1.)
-- The existing **Two-factor authentication** card stays exactly as it is for later standalone enable/disable.
-- `getServerSideProps` adds `managedByEnv` and `currentUsername` to props (alongside `passwordAuthEnabled`, `twoFactorEnabled`).
+`env.js` / `mode.js` / `credentials-store.js` keep their own copies of the
+equivalent checks; each carries a `// mirror of bootstrap.mjs` comment, and
+`bootstrap.test.js` + `mode.test.js` pin both to one truth table.
+
+Exports:
+
+- `resolveOrCreateSecret()` → returns `{ secret, source }` where `source ∈
+  {"env","file","generated"}`:
+  - `process.env.NEXTAUTH_SECRET || process.env.HOMEPAGE_AUTH_SECRET` → `"env"`.
+  - else `readAuthFile().secret` → `"file"`.
+  - else generate `randomBytes(32).toString("base64")`, `writeAuthFile({ secret })`
+    → `"generated"`. If the write throws (read-only `config/`), still return the
+    value with `source: "generated"` and `warn` "secret not persisted; set
+    HOMEPAGE_AUTH_SECRET or make config/ writable".
+- `async ensureInitialUser()` →
+  - `managedByEnv()` → `{ created: false, reason: "env" }`.
+  - `readAuthFile().user` → `{ created: false, reason: "exists" }`.
+  - `hasOidcConfig()` → `{ created: false, reason: "oidc" }`.
+  - else generate `password = randomBytes(9).toString("base64url")` (12 chars,
+    Node ≥ 16), `writeAuthFile({ user: { username: "admin", passwordHash: await
+    hashPassword(password), mustChange: true, updatedAt: now } })`,
+    return `{ created: true, username: "admin", password }`. If the write throws:
+    `{ created: false, reason: "readonly" }`.
+
+`hashPassword` is duplicated into `bootstrap.mjs` (same scrypt params — the
+`scrypt$16384$8$1$…` format string is the shared contract, documented above and
+in `credentials-store.js`; one line each, pinned by a cross-test).
+
+**`scripts/prepare-auth.mjs`** — imports `bootstrap.mjs` **relatively**
+(`../src/utils/auth/bootstrap.mjs`), top-level `await`. Two modes, dispatched on
+argv:
+
+Common preamble (both modes):
+1. `const { secret } = resolveOrCreateSecret();`
+2. `const init = await ensureInitialUser();`
+3. If `init.created`: print to **stderr**:
+   ```
+   ┌─ Initial admin account created ───────────────
+   │  username: admin
+   │  password: <init.password>
+   │  Change it now at /security — shown only once.
+   └──────────────────────────────────────────────
+   ```
+4. If `init.reason === "readonly"`: stderr `FATAL: config/ is not writable and
+   no HOMEPAGE_AUTH_USERNAME / HOMEPAGE_AUTH_PASSWORD is set — cannot create a
+   login.` then `process.exit(1)`.
+
+**Mode A — `--print-secret`** (Docker entrypoint): `process.stdout.write(secret)`
+— exactly the secret, nothing else on stdout — and exit `0`.
+
+**Mode B — `-- <cmd> <args…>`** (npm scripts): `process.env.HOMEPAGE_AUTH_SECRET
+= secret`, then `const child = spawn(cmd, args, { env: process.env, stdio:
+"inherit" })`; forward `SIGINT`/`SIGTERM` to the child; `process.exit(child
+status)` on close. Cross-platform (no shell).
+
+**`docker-entrypoint.sh`** — insert, **before** the `chown -R "$PUID:$PGID"
+/app/config` block. It runs **unconditionally** (even when the operator set
+`HOMEPAGE_AUTH_SECRET`) so `ensureInitialUser()` always gets a chance to create
+the admin account; it only *exports* a secret when one is not already set:
+
+```sh
+_ysb_secret="$(node /app/scripts/prepare-auth.mjs --print-secret)" || {
+  echo "FATAL: could not prepare auth (see stderr above)"; exit 1; }
+[ -z "$HOMEPAGE_AUTH_SECRET" ] && export HOMEPAGE_AUTH_SECRET="$_ysb_secret"
+unset _ysb_secret
+```
+
+Running it before the chown means the `config/auth.json` it writes (as root) is
+picked up by the subsequent `chown -R "$PUID:$PGID" /app/config` and ends up
+readable by the app user. `su-exec` preserves the exported env, so
+`HOMEPAGE_AUTH_SECRET` reaches `node server.js`. `ensureInitialUser()` runs here,
+so the initial-password box lands in `docker compose logs` on first start.
+
+**`Dockerfile`** — `output: "standalone"` only bundles traced files.
+`auth-file.mjs` is traced (imported by the credential routes), but `scripts/`
+and `bootstrap.mjs` are not. Add to the runner stage:
+
+```dockerfile
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/src/utils/auth/bootstrap.mjs ./src/utils/auth/bootstrap.mjs
+```
+
+`node` is already on `PATH` in the runner stage (it runs `node server.js`).
+`prepare-auth.mjs` imports `../src/utils/auth/bootstrap.mjs` which imports
+`./auth-file.mjs` — verify the relative paths line up with the standalone
+layout (`/app/scripts/…`, `/app/src/utils/auth/…`), the real build-stage name,
+and that `.dockerignore` does not exclude `scripts/`.
+
+**`package.json`** — change `"dev"` → `"node scripts/prepare-auth.mjs -- next dev"`
+and `"start"` → `"node scripts/prepare-auth.mjs -- next start"`. `"build"`
+unchanged. (`spawn("next", …)` resolves `next` from `node_modules/.bin` — pass
+`{ shell: false }` and resolve the bin path explicitly via
+`require.resolve`/`import.meta` + `node_modules/.bin/next` for Windows `.cmd`
+safety; the plan nails this down.)
+
+### Always-on switch
+
+- `src/utils/env.js`: `isAuthEnabled()` → `process.env.HOMEPAGE_AUTH_ENABLED !== "false"`.
+  Only the exact string `"false"` disables. `""` / unset / `"true"` / anything
+  else → enabled.
+- `src/utils/auth/mode.js`: `passwordAuthActive()` → `isAuthEnabled() && !hasOidcConfig`
+  (drop the `HOMEPAGE_AUTH_PASSWORD` clause — a password source always exists now).
 
 ### `src/pages/api/auth/[...nextauth].js` changes
 
-- At module load, before the validation block: `const resolvedSecret = ensureAuthSecret();` and `if (!process.env.NEXTAUTH_SECRET) process.env.NEXTAUTH_SECRET = resolvedSecret;`.
-- `NEXTAUTH_URL` mapping unchanged (`HOMEPAGE_EXTERNAL_URL` → `NEXTAUTH_URL` if set).
-- In the `if (authEnabled)` block:
-  - Only `parse + validate` the URL **when `process.env.NEXTAUTH_URL` is set**; skip the "missing" throw for password mode.
-  - Keep a `if (hasOidcConfig && !process.env.NEXTAUTH_URL) throw` (OIDC needs an absolute external URL).
-  - Password-mode branch: drop `!homepageAuthPassword || !homepageAuthUsername` from the throw condition (defaults cover it); keep `!process.env.NEXTAUTH_SECRET` as a safety net (should never fire after `ensureAuthSecret`).
-  - Keep the ≥32-char check on `process.env.NEXTAUTH_SECRET`.
-- `authorize`, `useSecureCookies`, logger, events, the `!authEnabled → res.json({})` handler: unchanged.
+- **Does not import `bootstrap.mjs` and never generates a secret.** It reads
+  `process.env.NEXTAUTH_SECRET || process.env.HOMEPAGE_AUTH_SECRET` exactly like
+  `middleware.js` does. If neither is set when `authEnabled`, it **throws** at
+  module load: *"No signing secret in the environment. Start the app via its
+  entrypoint / `pnpm start` / `pnpm dev` (which run `scripts/prepare-auth.mjs`),
+  or set `HOMEPAGE_AUTH_SECRET`."* — because if `[...nextauth].js` cannot see the
+  secret in `process.env`, neither can `middleware.js`, and login would
+  redirect-loop. Failing loudly at startup is correct.
+- `NEXTAUTH_URL` mapping unchanged (`HOMEPAGE_EXTERNAL_URL` → `NEXTAUTH_URL` when set).
+- In `if (authEnabled)`:
+  - Parse + validate the URL **only when `process.env.NEXTAUTH_URL` is set**
+    (keep the "must be absolute http(s), no creds/query/fragment" throw for a
+    *provided* URL).
+  - Keep `if (hasOidcConfig && !process.env.NEXTAUTH_URL) throw new
+    Error("OIDC auth requires HOMEPAGE_EXTERNAL_URL.")`.
+  - Password branch: the throw condition becomes just `!process.env.NEXTAUTH_SECRET`
+    (drop `!homepageAuthPassword || !homepageAuthUsername` — the bootstrap
+    account / env override cover credentials).
+  - Keep the ≥32-char check on the resolved secret.
+- `authorize`: `if (!(await verifyPassword(username, password)))` (add `await`);
+  everything else unchanged; `return { id: "homepage", name: username }`.
+- `useSecureCookies: parsedAuthUrl?.protocol === "https:"` unchanged → `false`
+  when no URL (LAN http), `true` when `HOMEPAGE_EXTERNAL_URL` is https. This is
+  what lets the credentials flow work over plain http without a URL — next-auth
+  otherwise defaults `Secure` cookies in production and the browser drops them.
+
+> **Missing `NEXTAUTH_URL` in password mode is safe here specifically because:**
+> (a) `useSecureCookies` is forced `false`; (b) the sign-in page uses
+> `signIn(..., { redirect: false })` + a sanitized relative `window.location.assign`,
+> so next-auth's URL-dependent redirect callback is never exercised;
+> (c) the middleware builds its `/auth/signin` redirect from `req.url`.
+> next-auth still logs one `[NEXTAUTH_URL]` warn through the sanitized logger.
+> **The verification step must confirm a real end-to-end login over plain
+> http with no URL set.**
 
 ### `src/middleware.js` changes
 
-- Replace `const authSecret = process.env.NEXTAUTH_SECRET || process.env.HOMEPAGE_AUTH_SECRET;` with `const authSecret = ensureAuthSecret();` (import from `utils/auth/secret`).
-- `const authEnabled = isAuthEnabled();` unchanged in form; its value now defaults true.
-- No matcher change. `/api/security/credentials` and `/api/security/credentials-status` are covered by the existing matcher (not under `api/auth`).
+- `const authEnabled = isAuthEnabled();` — unchanged in form, now default-true.
+- `authSecret` line unchanged (`process.env.NEXTAUTH_SECRET || process.env.HOMEPAGE_AUTH_SECRET`).
+  Guaranteed populated by `prepare-auth.mjs` — as a real env var on the spawned
+  `next` child (npm scripts) or exported by the entrypoint (Docker) — before the
+  process serves anything; if it were missing, `[...nextauth].js`'s startup throw
+  already stopped the server.
+- No import changes, no matcher changes, no `fs`, no Edge/Node runtime change.
 
-### `docker-entrypoint.sh`
+### `src/pages/api/security/credentials.js` (new)
 
-Add, before dropping privileges: if `HOMEPAGE_AUTH_SECRET` is unset **and** `config/auth.json` has no `.secret`, generate one and both (a) write `{ "secret": "…" }` merged into `config/auth.json` (via a `node -e` one-liner using the built image's node, or `python3`/`jq` already present — pick what the base image has; Alpine has neither `jq` nor python by default, so `node -e`), and (b) `export HOMEPAGE_AUTH_SECRET`. This makes the Docker path deterministic and race-free. If the file write fails (read-only volume), log a warning and continue with just the exported env var (sessions won't survive a restart, but the app runs).
+- `POST` only → `405`. Session required (middleware guards `/api/security/*`;
+  defensive `getServerSession` → `401`).
+- `managedByEnv()` → `409 { error: "Credentials are managed by environment variables." }`.
+- Body `{ currentPassword, username, password }`.
+- `!(await verifyPassword(currentUsername(), currentPassword))` →
+  `400 { error: "Current password is incorrect." }` + `logFailedPasswordSignIn()`.
+- Validation → `400 { error: <specific> }`:
+  - `password` length `< 8` → "Password must be at least 8 characters."
+  - `username` not `/^[A-Za-z0-9._-]{1,64}$/` (after `trim`) → "Username may only
+    contain letters, digits, dots, underscores and dashes."
+- On success: `await writeUser({ username: username.trim(), password })` →
+  `200 { username }`. Write failure → `500 { error: "Could not save credentials." }`
+  + `createLogger("auth").error(...)`.
+
+### `src/pages/api/security/credentials-status.js` (new)
+
+- `GET` only → `405`. Session required → `401`.
+- `200 { usingDefaultCredentials: boolean, managedByEnv: boolean, username: string }`
+  (`username` = `currentUsername()`).
+
+### `src/components/layout/CredentialsWarning.jsx` (new)
+
+- `const { status } = useSession();`
+- `const { data } = useSWR(status === "authenticated" ? "/api/security/credentials-status" : null);`
+  — **conditional key**: no request when unauthenticated / auth disabled.
+- Render `null` unless `data?.usingDefaultCredentials`.
+- Otherwise a full-width bar: `role="alert"`, `bg-red-600 text-white text-sm`,
+  `px-4 py-2 pl-14 sm:pl-16` (left padding clears the absolutely-positioned
+  NavHeader hamburger). Text: **"You're signed in with the initial admin
+  password."** + `<Link href="/security" className="underline font-medium">`
+  **"Change it now"**. Not dismissible.
+- Placed in `_app.jsx` immediately after `<NavHeader />`, before `<Component />`
+  (inside `SessionProvider` + `SWRConfig`). Known minor: a one-frame layout
+  shift on load while `useSession` resolves — acceptable for a security nag.
+
+### `src/pages/security.jsx` changes
+
+`getServerSideProps` adds `managedByEnv` and `currentUsername` to props
+(alongside `passwordAuthEnabled`, `twoFactorEnabled`).
+
+New **Account** card, rendered above the existing 2FA card, **with its own
+state** (`wizardStep: "summary" | "credentials" | "twofa"`, `wizardError`,
+`wizardBusy`, `wizardEnrollment`, `wizardCode`) — it does **not** touch the 2FA
+card's `phase` / `error` / `busy`:
+
+- **summary:** "Signed in as **`<currentUsername>`**." When `managedByEnv`:
+  "Credentials are managed by `HOMEPAGE_AUTH_USERNAME` / `HOMEPAGE_AUTH_PASSWORD`."
+  and no button. Else: button **"Change username & password"** → `credentials`.
+- **credentials:** fields `Current password`, `New username` (default =
+  `currentUsername`), `New password`, `Confirm new password`. Client checks
+  `New password === Confirm` before POST. Submit → `POST /api/security/credentials`.
+  `400`/`409`/`500` → inline `wizardError` with the server message. `200` →
+  update the displayed username, and `import { mutate } from "swr"` then
+  `mutate("/api/security/credentials-status")` — the banner shares that SWR key,
+  so it re-fetches and disappears. Then: if `twoFactorEnabled` → back to
+  `summary`; else → `twofa`.
+- **twofa:** "Add two-factor authentication?" + **"Set up 2FA"** /
+  **"Not now"**.
+  - "Not now" → `summary`.
+  - "Set up 2FA" → `POST /api/security/totp/enroll`, show QR + secret + a
+    6-digit field (same `CODE_INPUT_PROPS`), **"Confirm"** →
+    `POST /api/security/totp/confirm { secret, token }`. `400` →
+    "Invalid code, try again."; `200` → close the wizard to `summary`.
+- **2FA-card / wizard state coupling:** lift the 2FA card's `enabled` boolean to
+  the page component (initialised from the `twoFactorEnabled` prop). Both the
+  wizard's confirm and the standalone card's enable/disable call the same
+  `setEnabled(...)`. No `router.replace` / SSR re-fetch — one source of truth in
+  page state.
+- The existing **Two-factor authentication** card keeps its own `phase` /
+  `error` / `busy`; only `enabled` is lifted.
+
+### `src/pages/api/mcp/index.js`
+
+No code change. Its behaviour shift (session now required when auth default-on)
+is intentional; covered by a changelog note and by updating its tests to set
+`HOMEPAGE_AUTH_ENABLED=false` where they assumed "no auth".
 
 ### `docker-compose.yml` / `.env.example`
 
-`docker-compose.yml` `environment:` gains (all optional, `${VAR:-}` form so unset = absent, not empty-string-set):
+`docker-compose.yml` `environment:` gains, all optional:
 
 ```yaml
       - HOMEPAGE_AUTH_ENABLED=${YSB_AUTH_ENABLED:-}
@@ -198,72 +508,204 @@ Add, before dropping privileges: if `HOMEPAGE_AUTH_SECRET` is unset **and** `con
       - HOMEPAGE_OIDC_SCOPE=${YSB_OIDC_SCOPE:-}
 ```
 
-`${VAR:-}` yields an empty string when unset, which the app must treat as "not set" — so `[...nextauth].js` / `mode.js` / `credentials.js` must use **truthiness** checks (`Boolean(x)` / `if (!x)`), not `x !== undefined`. Audit the existing reads; they already use truthiness. `.env.example` documents all `YSB_*` knobs with the default-on note.
+`${VAR:-}` passes an **empty string** when unset. Every consumer must use
+truthiness (`Boolean(x)` / `if (!x)`), never `x !== undefined`. Audit:
+`[...nextauth].js` (`homepageAuthSecret`, `homepageExternalUrl`, `issuer`,
+`clientId`, `clientSecret`, `homepageAuthPassword`, `homepageAuthUsername` — all
+already truthiness), `mode.js`, `credentials.js`, `credentials-store.js`,
+`bootstrap.mjs`. Add one test asserting empty-string env vars behave as unset.
+
+`.env.example` documents every `YSB_*` knob and the default-on behaviour.
+
+## CONF_DIR / cwd
+
+`auth-file.mjs` uses `process.env.HOMEPAGE_CONFIG_DIR || join(process.cwd(),
+"config")`. It is only ever loaded in Node contexts whose cwd is the app root
+(`/app` in the image, repo root in dev) — never in middleware — so
+`process.cwd()` is consistent. `docs/installation/index.md` recommends an
+absolute `HOMEPAGE_CONFIG_DIR` for non-standard launchers.
 
 ## Data flow
 
 ```
-First run (Docker, nothing configured):
-  entrypoint → no HOMEPAGE_AUTH_SECRET, no .secret → generate, write config/auth.json, export
-  [...nextauth] load → ensureAuthSecret() reads env → authEnabled=true, password mode
-  GET /  → middleware: no token → redirect /auth/signin
-  signin → POST /api/auth/2fa-check {admin,admin} → verifyPassword: default branch → 200 {twoFactorEnabled:false}
-        → signIn("credentials",{admin,admin}) → authorize → verifyPassword ok → session
-  GET /  → CredentialsWarning: SWR /api/security/credentials-status → {usingDefaultCredentials:true} → banner
+Fresh Docker deploy, nothing configured:
+  entrypoint → prepare-auth.mjs --print-secret
+      resolveOrCreateSecret() → generate, writeAuthFile({secret})
+      ensureInitialUser()     → generate pw "Kd9-xY2..", writeAuthFile({user:{...mustChange:true}})
+      stdout: <secret> ; stderr: "password: Kd9-xY2.. — change it at /security"
+  entrypoint → export HOMEPAGE_AUTH_SECRET=<secret> ; chown config ; su-exec node server.js
+  GET /  → middleware: authEnabled, no token → redirect /auth/signin
+  signin → POST /api/auth/2fa-check {admin, "Kd9-xY2.."}
+         → verifyPassword: env? no. stored user? yes → scrypt ok → 200 {twoFactorEnabled:false}
+         → signIn("credentials",{username:"admin",password:"Kd9-xY2..",token:""})
+         → authorize → verifyPassword ok → JWT signed with process.env.NEXTAUTH_SECRET
+  GET /  → middleware: getToken(secret=same) → ok
+         → CredentialsWarning: SWR /api/security/credentials-status
+         → {usingDefaultCredentials:true} → red banner
 
 Change credentials:
-  /security → wizard step 1 → POST /api/security/credentials {currentPassword:"admin", username:"me", password:"…"}
-            → verifyPassword("admin","admin") ok → writeUser → 200
-            → mutate(credentials-status) → {usingDefaultCredentials:false} → banner gone
-            → step 2 "Set up 2FA" → /api/security/totp/enroll → /confirm → totp saved
-  next sign-in: verifyPassword → stored-user branch (scrypt); 2FA code required
+  /security → Account card → "credentials" step
+  POST /api/security/credentials {currentPassword:"Kd9-xY2..", username:"pavel", password:"<8+>"}
+      → verifyPassword("admin","Kd9-xY2..") ok → writeUser → mustChange:false → 200
+      → mutate(credentials-status) → {usingDefaultCredentials:false} → banner gone
+      → "twofa" step → "Set up 2FA" → enroll → confirm → totp saved
+  next sign-in: verifyPassword → stored-user branch (username "pavel"); 2FA code required
 ```
 
 ## Error handling
 
 | Situation | Behaviour |
 |-----------|-----------|
-| No secret anywhere, single process | `ensureAuthSecret()` generates + persists on first module load; second module reads it |
-| No secret, multi-process, `HOMEPAGE_AUTH_SECRET` unset | Each process may generate its own → sessions inconsistent. Documented: set `HOMEPAGE_AUTH_SECRET`. Entrypoint mitigates for Docker |
-| `config/auth.json` unwritable (read-only volume) | `ensureAuthSecret` / `writeUser` throw is caught by callers: secret falls back to an in-memory value + `warn` (sessions don't survive restart); `writeUser` → API `500` |
-| `config/auth.json` corrupt | Treated as `{}` + `warn`; next write overwrites |
-| `HOMEPAGE_AUTH_ENABLED=false` | `isAuthEnabled()` false → no gate, no banner, `/security` shows the "authentication disabled" state, `2fa-check` → `404` |
-| OIDC configured but no `HOMEPAGE_EXTERNAL_URL` | Startup throw (unchanged intent, now OIDC-scoped) |
-| `HOMEPAGE_EXTERNAL_URL` malformed | Startup throw (unchanged) |
-| Env username+password set | `verifyPassword` uses env only; `/api/security/credentials` → `409`; no banner; wizard step 1 hidden |
+| No secret, `config/` writable | `prepare-auth.mjs` generates + persists + puts it in the child's `env` (or exports for Docker); both runtimes read it from `process.env` |
+| No secret, `config/` read-only, no env creds | `prepare-auth.mjs` hits `reason:"readonly"` → FATAL + `exit 1` in **both** modes; the app does not start (there would be no way to log in) |
+| No secret, `config/` read-only, full `HOMEPAGE_AUTH_USERNAME`/`PASSWORD`/`SECRET` set | `ensureInitialUser` → `reason:"env"`, `resolveOrCreateSecret` → `source:"env"` → starts normally, no persistence needed |
+| No secret, multi-replica, **shared** `config/` volume | First replica persists `secret`; the rest read `source:"file"` → consistent |
+| No secret, multi-replica, **unshared** volumes | Each generates its own → sessions bounce between replicas. Documented: set `HOMEPAGE_AUTH_SECRET` |
+| `config/auth.json` corrupt | `readAuthFile()` → `{}` + warn; next `writeAuthFile` overwrites |
+| `config/auth.json` cache staleness (other replica changed a password) | Up to 5 s window where the old password still verifies. Acceptable for homelab; documented |
+| `HOMEPAGE_AUTH_ENABLED=false` | No gate, no banner, `/security` → "authentication disabled" state, `2fa-check` → `404`, MCP session check off |
+| OIDC configured, no `HOMEPAGE_EXTERNAL_URL` | Startup throw (OIDC-scoped) |
+| Provided `HOMEPAGE_EXTERNAL_URL` malformed | Startup throw (unchanged) |
+| `HOMEPAGE_AUTH_USERNAME` + `HOMEPAGE_AUTH_PASSWORD` set | `verifyPassword` uses env only; bootstrap skips the user; `/api/security/credentials` → `409`; wizard hidden; no banner |
 | Wrong current password in wizard | `400` + `logFailedPasswordSignIn()`; nothing written |
-| New password < 8 chars / bad username / still admin/admin | `400` with a specific message; nothing written |
-| `writeUser` succeeds, step 2 enroll fails | Credentials are already changed (banner gone); user retries 2FA from the standalone card |
+| New password `< 8` / bad username chars | `400` with a specific message; nothing written |
+| `writeUser` OK, then step-2 enroll fails | Credentials already changed (banner gone); user retries from the standalone 2FA card |
+| Repeated unauthenticated hits on `/api/auth/2fa-check` | Each does one **async** scrypt (~60 ms CPU, non-blocking) + a cached file read. No app-level throttle — `docs/installation/index.md` reverse-proxy rate-limit note is strengthened and names this route |
 
 ## Testing (Vitest)
 
+**Vitest's `include` glob is `src/**/*.test.{js,jsx}` — `.test.mjs` is NOT
+collected.** Every new test file is `*.test.js` (or `.jsx`); a `.test.js` file
+importing a `.mjs` module under test works (Vitest transforms both to ESM).
+
 New / reworked:
 
-- `src/utils/auth/secret.test.js` — `resolveAuthSecret` precedence (env → HOMEPAGE_AUTH_SECRET → file → undefined); `ensureAuthSecret` generates ≥32-char base64, persists to `config/auth.json` preserving `user`/`totp`, sets `process.env.NEXTAUTH_SECRET`, is idempotent on a second call; unwritable dir → returns a value + warns, no throw.
-- `src/utils/auth/credentials-store.test.js` — `writeUser`/`readUser` round-trip; scrypt hash format + verify; `clearUser`; `usingDefaultCredentials` / `managedByEnv` truth table; whole-object preservation when `totp`/`secret` already present; `0600`.
-- `src/utils/auth/credentials.test.js` (extend) — `verifyPassword` all three branches and their precedence: env set → env only (stored/default ignored); stored user → scrypt path; neither → `admin`/`admin`; wrong username with correct stored password → false; non-string → false; still constant-time (no throw on length mismatch).
-- `src/utils/env.test.js` (new) — `isAuthEnabled`: unset → true, `""` → true, `"true"` → true, `"false"` → false, `"0"` → true.
-- `src/utils/auth/mode.test.js` (update) — `passwordAuthActive` = `isAuthEnabled() && !hasOidcConfig` regardless of `HOMEPAGE_AUTH_PASSWORD`.
-- `src/__tests__/pages/api/auth/[...nextauth].test.js` (rework) — does **not** throw with auth on and no secret/URL/creds (generates secret, password mode from defaults); still throws for OIDC config without `HOMEPAGE_EXTERNAL_URL`; still throws for malformed `HOMEPAGE_EXTERNAL_URL`; `authEnabled` true by default, false only for `HOMEPAGE_AUTH_ENABLED=false`; `authorize` with default `admin`/`admin` → user; with stored user → user; `useSecureCookies` false without URL, true with https URL.
-- `src/middleware.test.js` (update) — default-on: no `HOMEPAGE_AUTH_ENABLED` → protected (redirect / `401`); `=false` → pass-through; `getToken` called with the resolved secret; `/api/security/credentials` unauthenticated → `401`.
-- `src/__tests__/pages/api/security/credentials.test.js` (new) — `405`; `401` no session; `409` when env-managed; `400` wrong current password (+ log); `400` weak password / bad username / unchanged-default; `200` writes user + returns username; `500` on write failure.
-- `src/__tests__/pages/api/security/credentials-status.test.js` (new) — `405` non-GET; `401` no session; response shape for default / stored / env cases.
-- `src/components/layout/CredentialsWarning.test.jsx` (new) — hidden when unauthenticated; hidden when `usingDefaultCredentials:false`; shown (with the `/security` link) when authenticated + default; `role="alert"`.
-- `src/__tests__/pages/security.test.jsx` (rework) — Account card summary shows username; `managedByEnv` → no change button, explanatory text; wizard step 1 validation + success advances to step 2 + `mutate` called; step 2 "Not now" closes; step 2 "Set up 2FA" runs enroll/confirm; existing 2FA-card tests still pass.
-- `src/__tests__/pages/auth/signin.test.jsx` (light) — a default `admin`/`admin` sign-in still completes (pre-check `200`, `signIn` ok, navigates).
-- `src/pages/api/mcp/index.test.js` — audit for the `isAuthEnabled` default flip (tests that assumed auth-off by absence of the env var must now set `HOMEPAGE_AUTH_ENABLED=false`).
+- `src/utils/auth/auth-file.test.js` — `readAuthFile` caching (2nd call within
+  5 s does not re-read; after 5 s it does); `writeAuthFile` merge preserves other
+  keys, sets `0o600`, updates the cache; **`writeAuthFile({ totp: undefined })`
+  deletes only `totp`, leaving `secret`/`user`**; corrupt file → `{}` + one warn.
+- `src/utils/auth/bootstrap.test.js` — `resolveOrCreateSecret`: `source` is
+  `"env"` / `"file"` / `"generated"` accordingly; generated is ≥32-char and
+  persisted; read-only dir → value returned with `source:"generated"` + warn, no
+  throw. `ensureInitialUser`: `managedByEnv` / existing user / OIDC → not created;
+  clean → creates `{username:"admin", passwordHash scrypt, mustChange:true}` +
+  returns a plaintext password that `credentials-store.verifyHash` accepts (pins
+  the shared scrypt format); read-only → `{created:false, reason:"readonly"}`.
+  The inlined `authEnabledFromEnv` / `hasOidcConfig` / `managedByEnv` are pinned
+  against `env.js` / `mode.js` on the same inputs.
+- `src/utils/auth/credentials-store.test.js` — `hashPassword`/`verifyHash` round
+  trip + bad format → false; `writeUser` sets `mustChange:false`, preserves
+  `secret`/`totp`; `usingDefaultCredentials` / `managedByEnv` / `currentUsername`
+  truth tables.
+- `src/utils/auth/credentials.test.js` (rework) — **async** `verifyPassword`
+  now returns `Promise<boolean>`; existing sync assertions become `await`.
+  Branches: env override wins and the stored user is ignored even if it would
+  also match; env absent + stored user → scrypt path, wrong username → `false`;
+  neither env nor stored user → `false`; non-string → `false`; constant-time (no
+  throw on unequal byte length); empty-string env vars treated as unset. All
+  callers (`authorize`, `2fa-check.js`, `credentials.js`) `await` it — the
+  existing `[...nextauth].test.js` / `2fa-check.test.js` mocks of `verifyPassword`
+  switch to `mockResolvedValue`.
+- `src/utils/env.test.js` (new) — `isAuthEnabled`: unset → true, `""` → true,
+  `"true"` → true, `"false"` → false, `"0"` / `"no"` → true.
+- `src/utils/auth/mode.test.js` (update) — `passwordAuthActive` =
+  `isAuthEnabled() && !hasOidcConfig`, independent of `HOMEPAGE_AUTH_PASSWORD`.
+- `src/__tests__/pages/api/auth/[...nextauth].test.js` (rework) — the module no
+  longer imports bootstrap; it reads `process.env.NEXTAUTH_SECRET ||
+  HOMEPAGE_AUTH_SECRET` and **throws when `authEnabled` and neither is set**.
+  So: `authEnabled` defaults true (tests for the disabled path now set
+  `HOMEPAGE_AUTH_ENABLED="false"`); a **new** test asserts the "no secret in env"
+  throw with a clear message; every other auth-on test sets a valid
+  `HOMEPAGE_AUTH_SECRET`; the "throws without external URL" test becomes
+  OIDC-scoped (password mode with no URL no longer throws); the malformed-URL
+  throw stays (URL provided); `authorize` `await`s the mocked
+  `verifyPassword` (`mockResolvedValue`); `useSecureCookies` is `false` with no
+  URL and `true` with an https `HOMEPAGE_EXTERNAL_URL`; the credentials-provider
+  build no longer requires `HOMEPAGE_AUTH_USERNAME`/`PASSWORD`.
+- `src/middleware.test.js` (**broad rework**, not a tweak) — `isAuthEnabled()`
+  now defaults true, so **every existing test that relied on auth being off by
+  the absence of `HOMEPAGE_AUTH_ENABLED` changes behaviour**. Audit each case:
+  those that assert unauthenticated pass-through must now set
+  `HOMEPAGE_AUTH_ENABLED="false"`; add the default-on cases (no env var →
+  redirect for pages, `401` for `/api/`), `="false"` → pass-through, `getToken`
+  called with `process.env.NEXTAUTH_SECRET`, `/api/security/credentials`
+  unauthenticated → `401`, host-check still runs first regardless.
+- **Repo-wide audit:** grep every test that sets or omits `HOMEPAGE_AUTH_ENABLED`
+  (`[...nextauth].test.js`, `middleware.test.js`, `2fa-check.test.js`,
+  `security/*` tests, `mcp/index.test.js`, `mode.test.js`). Any that assert an
+  auth-*off* behaviour without setting `="false"` is now wrong and must be
+  fixed.
+- `src/__tests__/pages/api/security/credentials.test.js` (new) — `405`; `401`
+  no session; `409` env-managed; `400` wrong current password (+ log, nothing
+  written); `400` weak password / bad username; `200` writes user + returns
+  username; `500` on write failure.
+- `src/__tests__/pages/api/security/credentials-status.test.js` (new) — `405`
+  non-GET; `401` no session; shape for default / changed / env-managed.
+- `src/components/layout/CredentialsWarning.test.jsx` (new) — hidden when
+  unauthenticated (and **no** SWR request fired); hidden when
+  `usingDefaultCredentials:false`; shown with the `/security` link when
+  authenticated + default; `role="alert"`.
+- `src/__tests__/pages/security.test.jsx` (rework) — Account summary shows the
+  username; `managedByEnv` → explanatory text, no button; wizard step 1
+  validation + success → `mutate` called + advances (to `twofa` when 2FA off,
+  to `summary` when already on); step 2 "Not now" → summary; step 2 "Set up 2FA"
+  → enroll/confirm happy path; the standalone 2FA-card tests still pass and its
+  state is not disturbed by the wizard.
+- `src/__tests__/pages/auth/signin.test.jsx` (light) — a stored-user sign-in
+  (`admin` + generated password, mocked) completes and navigates.
+- `src/pages/api/mcp/index.test.js` (update) — set `HOMEPAGE_AUTH_ENABLED="false"`
+  in the cases that assumed auth-off; add one asserting a session is required
+  when it is unset.
+- `scripts/prepare-auth.test.js` — `execFileSync("node", ["scripts/prepare-auth.mjs",
+  "--print-secret"], { env: { ...process.env, HOMEPAGE_CONFIG_DIR: <tmp> } })`:
+  stdout is exactly the secret (44 base64 chars, no trailing newline), stderr
+  carries the password box on first run and is quiet on the second run, and the
+  `config/auth.json` in the tmp dir is valid + `0600` + has `secret` and
+  `user.mustChange:true`.
+
+## Verification (before merge — mandatory)
+
+A real run, not just green unit tests:
+
+1. Fresh `config/` (no `auth.json`), no auth env vars. `pnpm build && pnpm start`
+   over plain `http://localhost:3000`.
+2. Confirm the wrapper prints the initial-password box once (stderr); confirm
+   `config/auth.json` has `secret` + `user.mustChange:true`, mode `600`.
+3. Browse to `/` → redirected to `/auth/signin`. Log in with `admin` + the
+   printed password. Confirm you land on the dashboard — this is the load-bearing
+   check that the secret reached **both** the Node route runtime and the Edge
+   middleware runtime (a mismatch shows as an immediate redirect back to signin).
+   Also run `pnpm dev` and repeat this check.
+4. Confirm the red banner shows. Open `/security`, run the wizard step 1 → banner
+   disappears without a reload. Continue to step 2, enable 2FA, confirm a code.
+5. Sign out, sign in again with the new username/password + a TOTP code.
+6. Restart the server → confirm the existing session cookie still works (secret
+   persisted).
+7. Set `HOMEPAGE_AUTH_ENABLED=false`, restart → no login gate, no banner.
+8. Re-run steps 1–3 inside the Docker image (`docker compose up --build`) and
+   confirm the password line appears in `docker compose logs`.
 
 ## Documentation
 
-- `docs/installation/index.md` — rewrite Security & Authentication: **login is on by default**, accepts `admin` / `admin`, change it immediately from the Security page (or set `HOMEPAGE_AUTH_USERNAME`/`HOMEPAGE_AUTH_PASSWORD`); disable entirely with `HOMEPAGE_AUTH_ENABLED=false`; `NEXTAUTH_SECRET` auto-generated to `config/auth.json` (set `HOMEPAGE_AUTH_SECRET` for multi-replica); `HOMEPAGE_EXTERNAL_URL` optional for password mode, required for OIDC and for `Secure` cookies over HTTPS; recovery unchanged (delete `config/auth.json`). Breaking-change admonition.
-- `README.md` — update the auth bullet(s) and the security note for default-on + `admin`/`admin`.
-- `progress.md` — shipped entry; breaking change (auth on by default).
+- `docs/installation/index.md` — rewrite Security & Authentication: **login is
+  on by default**; first run creates an `admin` account with a **random
+  password printed to the server log** (`docker compose logs`); change it from
+  the Security page (or pin `HOMEPAGE_AUTH_USERNAME` + `HOMEPAGE_AUTH_PASSWORD`);
+  disable entirely with `HOMEPAGE_AUTH_ENABLED=false`; `NEXTAUTH_SECRET`
+  auto-generated to `config/auth.json` (set `HOMEPAGE_AUTH_SECRET` for
+  multi-replica or read-only `config/`); `HOMEPAGE_EXTERNAL_URL` optional for
+  password mode, required for OIDC and for `Secure` cookies over HTTPS;
+  strengthen the reverse-proxy rate-limit note (name `/api/auth/2fa-check` and
+  `/api/auth/callback/credentials`); recovery = delete `config/auth.json`.
+  Breaking-change admonition (#1 and #2).
+- `README.md` — update the auth bullet(s) and the security note for default-on
+  + random initial password.
+- `progress.md` — shipped entry; both breaking changes.
 - `.env.example` — the new `YSB_*` knobs.
 - Changelog note.
 
 ## Out-of-scope follow-ups
 
-- `middleware.js` → `proxy.js` rename (Next 16).
-- Multi-user.
-- Password reset flow / email.
-- Argon2 (would add a native dependency; scrypt is sufficient and built in).
+- `middleware.js` → `proxy.js` (Next 16).
+- Per-IP throttle on `/api/auth/2fa-check` and the credentials callback.
+- Multi-user, roles, email password reset.
