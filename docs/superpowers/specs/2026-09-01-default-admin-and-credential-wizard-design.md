@@ -1,7 +1,7 @@
 # Default admin + in-app credential & 2FA wizard — design
 
-**Date:** 2026-09-01 (rev. 7)
-**Status:** Draft for review
+**Date:** 2026-09-01 (rev. 8)
+**Status:** Draft for review — Task 0 spike done; see "Next 16: middleware runtime"
 **Builds on:** `docs/superpowers/specs/2026-08-31-dashboard-2fa-login-design.md` (username + password + TOTP 2FA, shipped on `dev`)
 
 ## Summary
@@ -30,21 +30,36 @@ This change:
 - **OIDC mode is unchanged** and, when active, suppresses the bootstrap account,
   the banner, and the wizard.
 
-### Next 16: middleware runs on the Node.js runtime
+### Next 16: middleware runtime
 
-Verified against the installed docs
-(`node_modules/next/dist/docs/.../proxy.md`): *"v16.0.0 — Middleware is
-deprecated and renamed to Proxy. Proxy defaults to the Node.js runtime"* and
-*"The `runtime` config option is not available in Proxy files"*. The current
-`src/middleware.js` (kept as the deprecated alias for `proxy.js`, functionally
-identical) therefore runs on **Node.js** in this project's Next 16.3.0 — it can
-`readFileSync`.
+**Task 0 spike result (empirical, on this Next 16.3.0 build):** the docs'
+*"Proxy defaults to the Node.js runtime"* applies to the **new `proxy.js`**
+convention. The **deprecated `src/middleware.js` alias still compiles to the
+Edge runtime** — `node:fs` breaks the webpack build and `fs` throws
+`"the edge runtime does not support Node.js 'fs' module"` at runtime;
+`middleware-manifest.json` confirms Edge.
 
-That collapses the whole "how does the secret reach the Edge sandbox" problem
-from earlier drafts. **`config/auth.json` is the single source of truth for the
-signing secret; middleware, the NextAuth route, and `instrumentation.js` all read
-it directly** via one shared helper. No `spawn` wrapper, no `--print-secret`, no
-`.env.local`, no entrypoint changes, no `.mjs` gymnastics.
+**Ruling:** add one line to `src/middleware.js`:
+
+```js
+export const config = { runtime: "nodejs" };
+```
+
+The spike confirmed this builds and runs `fs` fine on `middleware.js` (the
+"`runtime` config is rejected" caveat is only for the new `proxy.js` files). A
+full rename to `proxy.js` is the eventual migration (already a scoped
+follow-up) — not this change.
+
+With Node-runtime middleware, **`config/auth.json` is the single source of truth
+for the signing secret; middleware, the NextAuth route, and `instrumentation.js`
+all read it directly** via one shared helper. No `spawn` wrapper, no
+`--print-secret`, no `.env.local`, no entrypoint changes, no `.mjs` gymnastics.
+
+**Also from the spike:** a `throw` in `instrumentation.js` `register()` does
+**not** exit the process — it fails closed (`unhandledRejection` logged, every
+route including `/api/healthcheck` returns HTTP 500, server stays up). Still a
+loud, unmissable failure with the message in `docker compose logs`; the design
+keeps the throw for the read-only-`config/` case on that basis.
 
 ### Default credentials `admin` / `admin` — the exposure this accepts
 
@@ -95,7 +110,16 @@ Both go in the changelog, `README.md`, and `docs/installation/index.md`.
 - Renaming `middleware.js` → `proxy.js` (Next 16 deprecation; separate task).
 - Argon2 (needs a native dep; scrypt is built in and sufficient).
 
-## Plan task 0 — spike (~2 h, before any other task)
+## Plan task 0 — spike — DONE (2026-09-01)
+
+Ran. Findings folded into "Next 16: middleware runtime" above:
+`middleware.js` is Edge by default → **add `export const config = { runtime:
+"nodejs" }`** (spike-verified: builds + `fs` works). `instrumentation.js`
+`register()` runs + is bundled into standalone; a `throw` there fails the app
+closed (all routes 500 + logged) rather than exiting. The original spike text
+and its fallback are retained below for the record.
+
+<details><summary>original spike brief</summary>
 
 One load-bearing unknown: **confirm `src/middleware.js` on this Next 16.3.0 build
 runs on the Node.js runtime and can `readFileSync`.** The docs say yes; verify by
@@ -110,13 +134,17 @@ for middleware only.
 Also confirm `instrumentation.js` `register()` runs (and can throw to fail
 startup) for this pages-router standalone build.
 
+</details>
+
 ## Current state (post-2026-08-31 merge, verified against `dev`)
 
 - `next@16.3.0`, `output: "standalone"`, no `instrumentation` file.
-- **Middleware runtime: Node.js** (Next 16 default for middleware/proxy; the
-  `runtime` config option is rejected). `src/middleware.js` currently imports
-  only `next-auth/jwt`, `next/server`, `utils/env` — all Node-and-Edge safe; it
-  emits the "middleware is deprecated, use proxy" warning at dev start.
+- **Middleware runtime: Edge** (the deprecated `middleware.js` alias stays Edge
+  in Next 16 — only the new `proxy.js` defaults to Node). `src/middleware.js`
+  currently imports only `next-auth/jwt`, `next/server`, `utils/env` — all
+  Edge-safe; it emits the "middleware is deprecated, use proxy" warning at dev
+  start. **This change adds `export const config = { runtime: "nodejs" }` to
+  flip it** (Task 0 ruling).
 - `Dockerfile`: two stages `builder` / `runner` (`node:22-slim` → `node:22-alpine`).
   `runner` copies `/app/.next/standalone/` and `/app/.next/static/` with
   `--link --chown=1000:1000`. `ENTRYPOINT ["docker-entrypoint.sh"]`,
@@ -311,11 +339,15 @@ export async function register() {
 ```
 
 - `instrumentation` is **stable since Next 15** — no `experimental` flag.
-  `register()` runs once, before the server accepts requests. Traced into
+  `register()` runs once, before the server accepts requests. Confirmed by the
+  Task 0 spike: it runs on the nodejs runtime at startup and is bundled into
   `output: "standalone"`. Located at `src/instrumentation.js` because this
-  project uses `src/`. **The spike (plan task 0) confirms a `throw` in
-  `register()` actually aborts startup on this build** — the docs say it "must
-  complete before the server is ready" but do not spell out the throw path.
+  project uses `src/`.
+- **A `throw` in `register()` does not exit the process** (spike finding) — it
+  fails closed: `unhandledRejection` logged, every route (incl.
+  `/api/healthcheck`) returns HTTP 500, the server stays up. That is still an
+  unmissable failure — the message is in `docker compose logs` and nothing
+  works — so the design keeps the `throw` for the read-only-`config/` case.
 - Dynamic `import()` (not top-level) so the Edge invocation of `register()`
   never even loads the `node:fs` modules.
 - It runs as the **app user** inside the container (post-`su-exec`), in an
@@ -334,10 +366,13 @@ export async function register() {
 
 ### `src/middleware.js`
 
+- **Add `export const config = { runtime: "nodejs" };`** (Task 0 ruling — the
+  file is Edge by default and must be Node to `readFileSync`).
 - `const authEnabled = isAuthEnabled();` — unchanged in form, now default-true.
 - `const authSecret = authEnabled ? ensureAuthSecret() : undefined;` (import
   from `utils/auth/secret`) — replaces the `process.env.NEXTAUTH_SECRET || …`
-  line. Node runtime, `fs` fine.
+  line. Now on the Node runtime, so `fs` (transitively via `ensureAuthSecret`)
+  is fine.
 - **Map `HOMEPAGE_EXTERNAL_URL` → `NEXTAUTH_URL` at module load too**
   (`if (!process.env.NEXTAUTH_URL && process.env.HOMEPAGE_EXTERNAL_URL)
   process.env.NEXTAUTH_URL = process.env.HOMEPAGE_EXTERNAL_URL;`). `getToken`
@@ -576,7 +611,7 @@ Change credentials:
 | Situation | Behaviour |
 |-----------|-----------|
 | Fresh start, `config/` writable | `instrumentation` generates + persists secret + user; middleware & routes read the file |
-| `config/` read-only, no env creds/secret | `instrumentation.register()` throws → server does not start (there would be no way to log in) |
+| `config/` read-only, no env creds/secret | `instrumentation.register()` throws → app fails closed (every route 500s, `unhandledRejection` in the logs — there would be no way to log in anyway) |
 | `config/` read-only, full `HOMEPAGE_AUTH_USERNAME`/`PASSWORD`/`SECRET` | `ensureInitialUser` → `reason:"env"`, `ensureAuthSecret` → env value → starts normally |
 | Multi-replica, **shared** `config/` volume | First to init persists `secret`; the rest read it → consistent |
 | Multi-replica, **unshared** volumes | Each may generate its own → sessions bounce. Documented: set `HOMEPAGE_AUTH_SECRET` |
@@ -679,11 +714,13 @@ New / reworked:
 
 ## Verification (before merge — mandatory)
 
-1. **Spike first** (plan task 0): confirm `middleware.js` on 16.3.0 can
-   `readFileSync` at module scope over a real `pnpm build && pnpm start` + a
-   protected-route request.
-2. Fresh `config/` (no `auth.json`), no auth env vars. `pnpm build && pnpm start`
-   over plain `http://localhost:3000`.
+Use `node .next/standalone/server.js` (or `pnpm dev`) — `pnpm start` warns it
+doesn't support `output: standalone`.
+
+1. **Spike done** (plan task 0) — `middleware.js` needs `runtime: "nodejs"`;
+   `instrumentation.js` throw fails closed, doesn't exit.
+2. Fresh `config/` (no `auth.json`), no auth env vars. `pnpm build` then
+   `node .next/standalone/server.js` over plain `http://localhost:3000`.
 3. Console prints the default-credentials box once; `config/auth.json` has
    `secret` + `user:{username:"admin"}` (no `passwordHash`), mode `600`.
 4. `/` → redirect to `/auth/signin`; log in `admin` / `admin` → land on the
@@ -703,8 +740,10 @@ New / reworked:
     no hash evaluation; wait past the window → a correct password logs in and
     resets. `curl` hammering `/api/auth/callback/credentials` cannot beat the
     growing window.
-11. `config/` made read-only + no env secret → `instrumentation` aborts startup
-    with the clear message (not a redirect loop).
+11. `config/` made read-only + no env secret → every route returns 500 with the
+    "config/ is not writable" message in the logs (fail-closed, not a redirect loop).
+12. Also verify the reworked `pnpm test` **and** `pnpm build` both succeed with
+    `middleware.js`'s `runtime: "nodejs"` and `src/instrumentation.js` present.
 
 ## Documentation
 

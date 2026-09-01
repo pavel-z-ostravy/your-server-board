@@ -12,7 +12,8 @@
 
 ## Global Constraints
 
-- **Middleware runtime is Node.js** (Next 16 default; the `runtime` config option is rejected). Task 0 verifies `readFileSync` works there before anything else.
+- **Task 0 ruling (spike done):** the deprecated `src/middleware.js` compiles to the **Edge** runtime in Next 16.3 — `node:fs` breaks the build. Fix: **add `export const config = { runtime: "nodejs" };` to `src/middleware.js`** (Task 7). Spike-verified that this builds and runs `fs` fine. A `throw` in `instrumentation.js` `register()` does **not** exit the process — it fails closed (every route 500s + `unhandledRejection` logged). `pnpm start` doesn't support `output: standalone`; use `node .next/standalone/server.js` or `pnpm dev` for the manual runs.
+- **`pnpm build` must succeed** — run it (not just `pnpm test`) at the end of Task 7 (the `runtime` config + `ensureAuthSecret` import in middleware), Task 9 (`instrumentation.js`), and Task 15.
 - `isAuthEnabled()` becomes `process.env.HOMEPAGE_AUTH_ENABLED !== "false"` — only the exact string `"false"` disables. Every consumer uses truthiness on env vars (`Boolean(x)` / `!x`), never `x !== undefined` (docker-compose passes `""` for unset).
 - Password hashing: `node:crypto` `scrypt`, params `N=16384, r=8, p=1`, 64-byte output, format string exactly `scrypt$16384$8$1$<saltB64>$<keyB64>`. Async (`scrypt` promisified) — never `scryptSync`.
 - Constant-time compares go through the existing hash-first `constantTimeEquals` helper (sha256 then `timingSafeEqual`) — never a raw `===`, never `timingSafeEqual` on raw strings.
@@ -46,7 +47,9 @@
 
 ---
 
-## Task 0: Spike — confirm middleware Node runtime + instrumentation
+## Task 0: Spike — confirm middleware Node runtime + instrumentation — ✅ DONE (2026-09-01)
+
+**Result:** PARTIAL. `middleware.js` is Edge by default (`node:fs` breaks the build) → **fix: add `export const config = { runtime: "nodejs" };`** (spike-verified to build + run `fs`). `instrumentation.register()` runs on nodejs + is bundled into standalone, but a `throw` there does not exit the process (fail-closed: routes 500 + `unhandledRejection` logged). See `task-0-report.md`. The steps below are retained for the record; the plan's Global Constraints and Task 7 already carry the ruling.
 
 **Files:** throwaway edits to `src/middleware.js`, a throwaway `src/instrumentation.js`. Nothing committed.
 
@@ -903,6 +906,10 @@ if (authEnabled && Boolean(homepageAuthUsername) !== Boolean(homepageAuthPasswor
 import { ensureAuthSecret } from "utils/auth/secret";
 import { isAuthEnabled } from "utils/env";
 
+// Task 0 ruling: middleware.js is Edge by default in Next 16 and must be Node
+// to read config/auth.json. (A full rename to proxy.js is a separate follow-up.)
+export const config = { runtime: "nodejs" };
+
 const authEnabled = isAuthEnabled();
 if (!process.env.NEXTAUTH_URL && process.env.HOMEPAGE_EXTERNAL_URL) {
   process.env.NEXTAUTH_URL = process.env.HOMEPAGE_EXTERNAL_URL;
@@ -910,7 +917,7 @@ if (!process.env.NEXTAUTH_URL && process.env.HOMEPAGE_EXTERNAL_URL) {
 const authSecret = authEnabled ? ensureAuthSecret() : undefined;
 ```
 
-Everything below (`getToken`, redirect, `401`, matcher, host check) unchanged.
+**Note:** the existing `middleware.js` already has `export const config = { matcher: [...] }`. Merge — `export const config = { runtime: "nodejs", matcher: [...] }`. Everything below (`getToken`, redirect, `401`, host check) unchanged.
 
 - [ ] **Step 6: Rework `src/__tests__/pages/api/auth/[...nextauth].test.js`**
 
@@ -942,9 +949,9 @@ Set `process.env.HOMEPAGE_AUTH_ENABLED = "false"` in the cases that assumed "no 
 grep -rn "HOMEPAGE_AUTH_ENABLED" src --include="*.test.js" --include="*.test.jsx"
 ```
 
-Any test asserting auth-*off* behaviour that does not set `="false"` is now wrong — fix it.
+Any test asserting auth-*off* behaviour that does not set `="false"` is now wrong — fix it. **Skip `src/__tests__/pages/api/auth/2fa-check.test.js`** — Task 10 deletes it.
 
-- [ ] **Step 10: `pnpm test` — green. Commit**
+- [ ] **Step 10: `pnpm test` — green, then `pnpm build` — succeeds** (this is where the `runtime: "nodejs"` config + `ensureAuthSecret` fs-import in middleware first hit a real webpack build). **Commit**
 
 ```bash
 git add src/utils/env.js src/utils/env.test.js "src/pages/api/auth/[...nextauth].js" src/middleware.js src/__tests__ src/pages/api/mcp/index.test.js
