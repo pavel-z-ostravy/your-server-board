@@ -265,11 +265,11 @@ describe("middleware", () => {
     expect(res.init.status).toBe(401);
   });
 
-  it("does not gate /api/auth/2fa-check (excluded from the matcher)", async () => {
+  it("does not gate /api/auth/* routes (excluded from the matcher)", async () => {
     const { config } = await import("./middleware");
     const pattern = config.matcher.find((m) => m.includes("api/auth"));
     const regex = new RegExp(`^${pattern}$`);
-    expect(regex.test("/api/auth/2fa-check")).toBe(false);
+    expect(regex.test("/api/auth/callback/credentials")).toBe(false);
     // a normal API route is still matched
     expect(regex.test("/api/widgets-catalog/install")).toBe(true);
   });
