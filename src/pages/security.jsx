@@ -3,10 +3,7 @@ import { mutate } from "swr";
 
 import PageBackground from "components/layout/PageBackground";
 
-import {
-  currentUsername as readCurrentUsername,
-  managedByEnv as readManagedByEnv,
-} from "utils/auth/credentials-store";
+import { currentUsername as readCurrentUsername, managedByEnv as readManagedByEnv } from "utils/auth/credentials-store";
 import { passwordAuthActive } from "utils/auth/mode";
 import { isTotpEnabled } from "utils/auth/totp-store";
 import { getSettings } from "utils/config/config";
@@ -244,8 +241,8 @@ export default function SecurityPage({
 
           {!passwordAuthEnabled && (
             <p className="mt-4 text-sm text-gray-600 dark:text-slate-300">
-              Username &amp; password are managed outside this dashboard (OIDC, or authentication is disabled), so
-              there is nothing to change here.
+              Username &amp; password are managed outside this dashboard (OIDC, or authentication is disabled), so there
+              is nothing to change here.
             </p>
           )}
 

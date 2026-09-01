@@ -14,7 +14,9 @@ beforeEach(() => {
   process.env.HOMEPAGE_CONFIG_DIR = dir;
   for (const k of ["HOMEPAGE_AUTH_USERNAME", "HOMEPAGE_AUTH_PASSWORD"]) delete process.env[k];
 });
-afterEach(() => { delete process.env.HOMEPAGE_CONFIG_DIR; });
+afterEach(() => {
+  delete process.env.HOMEPAGE_CONFIG_DIR;
+});
 
 const load = () => import("utils/auth/credentials");
 

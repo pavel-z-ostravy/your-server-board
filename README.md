@@ -118,19 +118,19 @@ the password gate, prefer an authenticating reverse proxy or tunnel
 
 ## What this fork adds on top of Homepage
 
-| Area                                                                   | Upstream Homepage      | This fork                                              |
-| ---------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------ |
-| Service widgets, bookmarks, search, theming, i18n                      | ✅ full support        | unchanged                                              |
-| Proxmox VM/CT status widget                                            | ✅ read-only           | unchanged (used for the live data above)               |
-| Disk health (SMART)                                                    | ❌ none                | ✅ live (dashboard section + `/api/disks`)             |
-| Drag-and-drop section reordering                                       | ❌ none                | ✅ live (drag whole dashboard sections into any order) |
-| Proxmox host status header (CPU/RAM/disk/uptime/PVE version/IP)        | ❌ none                | ✅ live (above the VM/LXC card grid)                   |
-| Widget catalog browser (search, live GitHub-synced, copy-to-clipboard) | ❌ none                | ✅ live (`/widgets` page)                              |
-| Widget one-click install (writes to services.yaml/widgets.yaml)        | ❌ none                | ✅ live, **no auth yet** — see `progress.md`           |
-| Backup lifecycle (list/run/download/delete/retention)                  | ❌ none                | planned                                                |
-| VM/CT power actions                                                    | ❌ none                | planned                                                |
+| Area                                                                   | Upstream Homepage      | This fork                                                                                                   |
+| ---------------------------------------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Service widgets, bookmarks, search, theming, i18n                      | ✅ full support        | unchanged                                                                                                   |
+| Proxmox VM/CT status widget                                            | ✅ read-only           | unchanged (used for the live data above)                                                                    |
+| Disk health (SMART)                                                    | ❌ none                | ✅ live (dashboard section + `/api/disks`)                                                                  |
+| Drag-and-drop section reordering                                       | ❌ none                | ✅ live (drag whole dashboard sections into any order)                                                      |
+| Proxmox host status header (CPU/RAM/disk/uptime/PVE version/IP)        | ❌ none                | ✅ live (above the VM/LXC card grid)                                                                        |
+| Widget catalog browser (search, live GitHub-synced, copy-to-clipboard) | ❌ none                | ✅ live (`/widgets` page)                                                                                   |
+| Widget one-click install (writes to services.yaml/widgets.yaml)        | ❌ none                | ✅ live, **no auth yet** — see `progress.md`                                                                |
+| Backup lifecycle (list/run/download/delete/retention)                  | ❌ none                | planned                                                                                                     |
+| VM/CT power actions                                                    | ❌ none                | planned                                                                                                     |
 | Login                                                                  | optional password only | ✅ on by default (`admin`/`admin` bootstrap), username + password, optional TOTP 2FA via `/security` wizard |
-| Alerting                                                               | ❌ none                | planned (SMART/disk/backup-failure via email)          |
+| Alerting                                                               | ❌ none                | planned (SMART/disk/backup-failure via email)                                                               |
 
 For everything in the "unchanged" row — the config format, the 100+
 third-party service integrations, custom CSS/JS, layout options — the

@@ -8,17 +8,26 @@ beforeEach(() => {
   vi.resetModules();
   dir = mkdtempSync(join(tmpdir(), "ysb-credstore-"));
   process.env.HOMEPAGE_CONFIG_DIR = dir;
-  for (const k of ["HOMEPAGE_AUTH_ENABLED", "HOMEPAGE_AUTH_USERNAME", "HOMEPAGE_AUTH_PASSWORD",
-    "HOMEPAGE_OIDC_ISSUER", "HOMEPAGE_OIDC_CLIENT_ID", "HOMEPAGE_OIDC_CLIENT_SECRET"]) delete process.env[k];
+  for (const k of [
+    "HOMEPAGE_AUTH_ENABLED",
+    "HOMEPAGE_AUTH_USERNAME",
+    "HOMEPAGE_AUTH_PASSWORD",
+    "HOMEPAGE_OIDC_ISSUER",
+    "HOMEPAGE_OIDC_CLIENT_ID",
+    "HOMEPAGE_OIDC_CLIENT_SECRET",
+  ])
+    delete process.env[k];
 });
-afterEach(() => { delete process.env.HOMEPAGE_CONFIG_DIR; });
+afterEach(() => {
+  delete process.env.HOMEPAGE_CONFIG_DIR;
+});
 
 const load = () => import("utils/auth/credentials-store");
 
 describe("utils/auth/credentials-store", () => {
   it("ensureInitialUser: skips when auth disabled", async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "false";
-    expect((await (await load()).ensureInitialUser())).toEqual({ created: false, reason: "disabled" });
+    expect(await (await load()).ensureInitialUser()).toEqual({ created: false, reason: "disabled" });
   });
 
   it("ensureInitialUser: skips when env-managed / OIDC / already exists", async () => {
@@ -26,8 +35,11 @@ describe("utils/auth/credentials-store", () => {
     process.env.HOMEPAGE_AUTH_PASSWORD = "p";
     expect((await (await load()).ensureInitialUser()).reason).toBe("env");
     vi.resetModules();
-    delete process.env.HOMEPAGE_AUTH_USERNAME; delete process.env.HOMEPAGE_AUTH_PASSWORD;
-    process.env.HOMEPAGE_OIDC_ISSUER = "x"; process.env.HOMEPAGE_OIDC_CLIENT_ID = "x"; process.env.HOMEPAGE_OIDC_CLIENT_SECRET = "x";
+    delete process.env.HOMEPAGE_AUTH_USERNAME;
+    delete process.env.HOMEPAGE_AUTH_PASSWORD;
+    process.env.HOMEPAGE_OIDC_ISSUER = "x";
+    process.env.HOMEPAGE_OIDC_CLIENT_ID = "x";
+    process.env.HOMEPAGE_OIDC_CLIENT_SECRET = "x";
     expect((await (await load()).ensureInitialUser()).reason).toBe("oidc");
   });
 

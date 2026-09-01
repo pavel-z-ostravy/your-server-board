@@ -1,8 +1,8 @@
 import { authenticator } from "otplib";
 import QRCode from "qrcode";
 
-import { getSettings } from "utils/config/config";
 import { readTotpState } from "utils/auth/totp-store";
+import { getSettings } from "utils/config/config";
 
 // otplib defaults to window 0 (exact step only). The spec calls for a ±1 step
 // tolerance so codes near a 30s boundary or under mild clock skew still verify.

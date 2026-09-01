@@ -21,6 +21,7 @@ username) or **OIDC**. This work extends the password mode into a
 ## Goals / non-goals
 
 **Goals**
+
 - Single-user credential login hardened with a second factor.
 - 2FA enrollment entirely in-app (scan QR, confirm code) — no manual
   secret generation.
@@ -30,6 +31,7 @@ username) or **OIDC**. This work extends the password mode into a
   (`<nextauth> Failed password sign-in attempt`) keeps working.
 
 **Non-goals**
+
 - Multiple users / a user database.
 - Recovery codes. Losing the authenticator is recovered by deleting the
   server-side state file (`config/auth.json`).
@@ -58,7 +60,7 @@ username) or **OIDC**. This work extends the password mode into a
   `useSession()` status is `authenticated`.
 - `src/utils/config/config.js` — `CONF_DIR` (`HOMEPAGE_CONFIG_DIR` or
   `<cwd>/config`), the mounted volume; fs helpers pattern to follow.
-- `progress.md` lists "TOTP-based 2FA login" under *Not yet implemented*.
+- `progress.md` lists "TOTP-based 2FA login" under _Not yet implemented_.
 
 ## Architecture
 
@@ -86,19 +88,19 @@ surface than a single-user tool warrants.
 
 ### Units
 
-| Unit | Responsibility | Depends on |
-|------|----------------|------------|
-| `src/utils/auth/credentials.js` | `verifyPassword(username, password)` — constant-time username + password check against env | `node:crypto`, env |
-| `src/utils/auth/totp-store.js` | `readTotpState()`, `writeTotpState(state)`, `clearTotpState()` — read/write `config/auth.json` | `fs`, `CONF_DIR` |
-| `src/utils/auth/totp.js` | `generateEnrollment(username)`, `qrDataUrl(otpauthUrl)`, `verifyToken(token)` | `otplib`, `qrcode`, `totp-store`, settings |
-| `src/pages/api/auth/2fa-check.js` | Session-less credential pre-check; returns `{ twoFactorEnabled }` | `credentials`, `totp-store`, logger |
-| `src/pages/api/auth/[...nextauth].js` | `authorize()` = password + (conditional) TOTP; startup validation | `credentials`, `totp` |
-| `src/pages/api/security/totp/enroll.js` | Session-protected; returns `{ secret, otpauthUrl, qrDataUrl }` | `totp`, `totp-store` |
-| `src/pages/api/security/totp/confirm.js` | Session-protected; verifies `{ secret, token }`, then persists | `totp`, `totp-store` |
-| `src/pages/api/security/totp/disable.js` | Session-protected; verifies current `{ token }`, then clears | `totp`, `totp-store` |
-| `src/pages/security.jsx` | Security page — 2FA status + enable/disable UI | the `/api/security/totp/*` routes |
-| `src/pages/auth/signin.jsx` | Two-step form (credentials → totp) | `/api/auth/2fa-check`, `signIn` |
-| `src/components/layout/NavHeader.jsx` | + Security nav entry | — |
+| Unit                                     | Responsibility                                                                                 | Depends on                                 |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `src/utils/auth/credentials.js`          | `verifyPassword(username, password)` — constant-time username + password check against env     | `node:crypto`, env                         |
+| `src/utils/auth/totp-store.js`           | `readTotpState()`, `writeTotpState(state)`, `clearTotpState()` — read/write `config/auth.json` | `fs`, `CONF_DIR`                           |
+| `src/utils/auth/totp.js`                 | `generateEnrollment(username)`, `qrDataUrl(otpauthUrl)`, `verifyToken(token)`                  | `otplib`, `qrcode`, `totp-store`, settings |
+| `src/pages/api/auth/2fa-check.js`        | Session-less credential pre-check; returns `{ twoFactorEnabled }`                              | `credentials`, `totp-store`, logger        |
+| `src/pages/api/auth/[...nextauth].js`    | `authorize()` = password + (conditional) TOTP; startup validation                              | `credentials`, `totp`                      |
+| `src/pages/api/security/totp/enroll.js`  | Session-protected; returns `{ secret, otpauthUrl, qrDataUrl }`                                 | `totp`, `totp-store`                       |
+| `src/pages/api/security/totp/confirm.js` | Session-protected; verifies `{ secret, token }`, then persists                                 | `totp`, `totp-store`                       |
+| `src/pages/api/security/totp/disable.js` | Session-protected; verifies current `{ token }`, then clears                                   | `totp`, `totp-store`                       |
+| `src/pages/security.jsx`                 | Security page — 2FA status + enable/disable UI                                                 | the `/api/security/totp/*` routes          |
+| `src/pages/auth/signin.jsx`              | Two-step form (credentials → totp)                                                             | `/api/auth/2fa-check`, `signIn`            |
+| `src/components/layout/NavHeader.jsx`    | + Security nav entry                                                                           | —                                          |
 
 ### Why the endpoints split across two path prefixes
 
@@ -114,11 +116,11 @@ surface than a single-user tool warrants.
 
 ### Environment variables
 
-| Var | Change |
-|-----|--------|
-| `HOMEPAGE_AUTH_USERNAME` | **New, required** when auth is enabled and OIDC is not configured. Startup throws if missing, same as the existing password/secret checks. |
-| `HOMEPAGE_AUTH_PASSWORD` | Unchanged — still required in password mode, still hashed with SHA-256 + `timingSafeEqual`. |
-| all OIDC / secret / URL vars | Unchanged. |
+| Var                          | Change                                                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `HOMEPAGE_AUTH_USERNAME`     | **New, required** when auth is enabled and OIDC is not configured. Startup throws if missing, same as the existing password/secret checks. |
+| `HOMEPAGE_AUTH_PASSWORD`     | Unchanged — still required in password mode, still hashed with SHA-256 + `timingSafeEqual`.                                                |
+| all OIDC / secret / URL vars | Unchanged.                                                                                                                                 |
 
 Breaking change: existing password-only deployments must add
 `HOMEPAGE_AUTH_USERNAME`. Called out in the changelog and install docs.
@@ -167,10 +169,10 @@ verifyPassword(username, password) -> boolean
 
 - `generateEnrollment(username)` → `{ secret, otpauthUrl }` using
   `authenticator.generateSecret()` and `authenticator.keyuri(username,
-  issuer, secret)`, where `issuer = getSettings().title || "Homepage"`.
+issuer, secret)`, where `issuer = getSettings().title || "Homepage"`.
 - `qrDataUrl(otpauthUrl)` → `await QRCode.toDataURL(otpauthUrl)`.
 - `verifyToken(token, secret?)` → `authenticator.check(token, secret ??
-  readTotpState().totp.secret)`. `otplib` default step 30s, window ±1.
+readTotpState().totp.secret)`. `otplib` default step 30s, window ±1.
   Returns `false` for a malformed token or when no secret is available.
 
 ### `src/pages/api/auth/2fa-check.js`
@@ -179,7 +181,7 @@ verifyPassword(username, password) -> boolean
 - Body `{ username, password }`.
 - `verifyPassword` false → `logFailedPasswordSignIn()` (imported/shared
   with `[...nextauth].js`, same message string) → `401 { error: "Invalid
-  credentials" }`.
+credentials" }`.
 - `verifyPassword` true → `200 { twoFactorEnabled: isTotpEnabled() }`.
 - Never reveals `twoFactorEnabled` on the `401` path.
 - No body / not JSON → `400`.
@@ -204,7 +206,7 @@ All three: `POST` only; defensively call `getToken({ req, secret })` and
 `401` if absent (middleware already guarantees this, belt-and-braces).
 
 - **`enroll`** — `isTotpEnabled()` true → `409 { error: "2FA already
-  enabled" }`. Else `generateEnrollment(session username)` →
+enabled" }`. Else `generateEnrollment(session username)` →
   `200 { secret, otpauthUrl, qrDataUrl }`. Nothing is persisted.
 - **`confirm`** — body `{ secret, token }`. `verifyToken(token, secret)`
   false → `400 { error: "Invalid code" }`. Else
@@ -244,14 +246,14 @@ All three: `POST` only; defensively call `getToken({ req, secret })` and
   - `fetch("/api/auth/2fa-check", { method: "POST", body: JSON })`.
   - `401` → set an inline "Invalid username or password" error.
   - `200 && !twoFactorEnabled` → `signIn("credentials", { redirect:
-    true, callbackUrl, username, password })`.
+true, callbackUrl, username, password })`.
   - `200 && twoFactorEnabled` → `setStep("totp")`.
 - **Step 2** (`totp`): single 6-digit field
   (`inputMode="numeric"`, `autoComplete="one-time-code"`,
   `maxLength={6}`), "Verify" button, and a "← Back" link that returns to
   step 1 and clears `token`.
   - On submit: `signIn("credentials", { redirect: true, callbackUrl,
-    username, password, token })`.
+username, password, token })`.
   - `router.query.error` present → "Invalid code, please try again"
     while staying on step 2 (the page reloads with `?error` after a
     failed `signIn` redirect; guard so step 2 renders when `username`
@@ -287,18 +289,18 @@ Enable 2FA:
 
 ## Error handling
 
-| Situation | Behaviour |
-|-----------|-----------|
-| `auth.json` missing / `{}` / no `totp` | 2FA disabled; normal flow |
-| `auth.json` unparseable / unreadable | 2FA treated as disabled; `warn` log; no crash |
-| `HOMEPAGE_AUTH_USERNAME` missing at startup (password mode) | Startup throw with a clear message |
-| Wrong password at `2fa-check` | `401`; `Failed password sign-in attempt` logged; `twoFactorEnabled` not disclosed |
-| Wrong TOTP at `signIn` | next-auth redirect with `?error=CredentialsSignin`; step 2 shows "Invalid code" |
-| `enroll` while already enabled | `409` |
-| `confirm` with wrong code | `400`; nothing persisted |
-| `confirm` write failure | `500`; 2FA stays disabled |
-| `disable` without a valid code | `400`; state unchanged |
-| Lost authenticator | Operator deletes / empties `config/auth.json` (documented) |
+| Situation                                                   | Behaviour                                                                         |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `auth.json` missing / `{}` / no `totp`                      | 2FA disabled; normal flow                                                         |
+| `auth.json` unparseable / unreadable                        | 2FA treated as disabled; `warn` log; no crash                                     |
+| `HOMEPAGE_AUTH_USERNAME` missing at startup (password mode) | Startup throw with a clear message                                                |
+| Wrong password at `2fa-check`                               | `401`; `Failed password sign-in attempt` logged; `twoFactorEnabled` not disclosed |
+| Wrong TOTP at `signIn`                                      | next-auth redirect with `?error=CredentialsSignin`; step 2 shows "Invalid code"   |
+| `enroll` while already enabled                              | `409`                                                                             |
+| `confirm` with wrong code                                   | `400`; nothing persisted                                                          |
+| `confirm` write failure                                     | `500`; 2FA stays disabled                                                         |
+| `disable` without a valid code                              | `400`; state unchanged                                                            |
+| Lost authenticator                                          | Operator deletes / empties `config/auth.json` (documented)                        |
 
 ## Testing (vitest, TDD)
 
@@ -333,14 +335,14 @@ Following `src/__tests__/` layout:
 
 ## Documentation
 
-- `docs/installation/index.md` — under *Security & Authentication*:
+- `docs/installation/index.md` — under _Security & Authentication_:
   `HOMEPAGE_AUTH_USERNAME` now required for password login; describe 2FA
   setup via the Security page; note that recovery from a lost
   authenticator is emptying `config/auth.json`; keep the existing
   reverse-proxy rate-limit warning and note it also covers
   `/api/auth/2fa-check`.
-- `progress.md` — move "TOTP-based 2FA login" out of *Not yet
-  implemented* into the shipped section; record the breaking
+- `progress.md` — move "TOTP-based 2FA login" out of _Not yet
+  implemented_ into the shipped section; record the breaking
   `HOMEPAGE_AUTH_USERNAME` requirement.
 - Changelog / release note — breaking change callout.
 

@@ -118,19 +118,13 @@ describe("pages/security — Account card + wizard", () => {
       />,
     );
     expect(screen.getByText(/managed outside this dashboard/i)).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /change username & password/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /change username & password/i })).not.toBeInTheDocument();
   });
 
   it("explains env-managed credentials and hides the change button", () => {
-    render(
-      <SecurityPage initialSettings={{}} twoFactorEnabled={false} managedByEnv currentUsername="admin" />,
-    );
+    render(<SecurityPage initialSettings={{}} twoFactorEnabled={false} managedByEnv currentUsername="admin" />);
     expect(screen.getByText(/managed by/i)).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /change username & password/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /change username & password/i })).not.toBeInTheDocument();
   });
 
   it("blocks the POST when the new passwords do not match", async () => {
@@ -143,10 +137,7 @@ describe("pages/security — Account card + wizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
     expect(await screen.findByText(/do not match/i)).toBeInTheDocument();
-    expect(global.fetch).not.toHaveBeenCalledWith(
-      "/api/security/credentials",
-      expect.anything(),
-    );
+    expect(global.fetch).not.toHaveBeenCalledWith("/api/security/credentials", expect.anything());
   });
 
   it("shows the server error when the credentials POST fails", async () => {
@@ -159,9 +150,7 @@ describe("pages/security — Account card + wizard", () => {
   });
 
   it("applies a credentials change and advances to 2FA setup when 2FA is off", async () => {
-    global.fetch = vi
-      .fn()
-      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ username: "pavel" }) });
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ username: "pavel" }) });
     render(<SecurityPage initialSettings={{}} twoFactorEnabled={false} currentUsername="admin" />);
     await openCredentialsStep();
 
@@ -170,9 +159,7 @@ describe("pages/security — Account card + wizard", () => {
   });
 
   it("applies a credentials change and returns to the summary when 2FA is already on", async () => {
-    global.fetch = vi
-      .fn()
-      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ username: "pavel" }) });
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ username: "pavel" }) });
     render(<SecurityPage initialSettings={{}} twoFactorEnabled currentUsername="admin" />);
     await openCredentialsStep();
 
@@ -182,9 +169,7 @@ describe("pages/security — Account card + wizard", () => {
   });
 
   it("returns to the summary from the 2FA offer via Not now", async () => {
-    global.fetch = vi
-      .fn()
-      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ username: "pavel" }) });
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ username: "pavel" }) });
     render(<SecurityPage initialSettings={{}} twoFactorEnabled={false} currentUsername="admin" />);
     await openCredentialsStep();
 

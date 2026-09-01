@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
-import { readUser, managedByEnv } from "utils/auth/credentials-store";
+import { managedByEnv, readUser } from "utils/auth/credentials-store";
 import { verifyHash } from "utils/auth/password-hash";
 import createLogger from "utils/logger";
 

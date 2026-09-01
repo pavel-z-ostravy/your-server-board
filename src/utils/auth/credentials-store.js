@@ -1,6 +1,6 @@
 import { authFileCorrupt, readAuthFile, writeAuthFile } from "utils/auth/auth-file";
-import { hashPassword } from "utils/auth/password-hash";
 import { hasOidcConfig } from "utils/auth/mode";
+import { hashPassword } from "utils/auth/password-hash";
 import { isAuthEnabled } from "utils/env";
 
 export function managedByEnv() {

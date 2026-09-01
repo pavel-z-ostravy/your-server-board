@@ -134,7 +134,7 @@ describe("middleware", () => {
     expect(apiRes.init.status).toBe(401);
   });
 
-  it("passes through when HOMEPAGE_AUTH_ENABLED is \"false\" and no token is present", async () => {
+  it('passes through when HOMEPAGE_AUTH_ENABLED is "false" and no token is present', async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "false";
 
     const middleware = await loadMiddleware();

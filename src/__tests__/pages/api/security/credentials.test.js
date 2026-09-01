@@ -1,10 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import createMockRes from "test-utils/create-mock-res";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { getServerSession, verifyPassword, logFailedPasswordSignIn, currentUsername, managedByEnv, writeUser } =
   vi.hoisted(() => ({
-    getServerSession: vi.fn(), verifyPassword: vi.fn(), logFailedPasswordSignIn: vi.fn(),
-    currentUsername: vi.fn(() => "admin"), managedByEnv: vi.fn(() => false), writeUser: vi.fn(),
+    getServerSession: vi.fn(),
+    verifyPassword: vi.fn(),
+    logFailedPasswordSignIn: vi.fn(),
+    currentUsername: vi.fn(() => "admin"),
+    managedByEnv: vi.fn(() => false),
+    writeUser: vi.fn(),
   }));
 vi.mock("next-auth/next", () => ({ getServerSession }));
 vi.mock("pages/api/auth/[...nextauth]", () => ({ authOptions: {} }));
@@ -59,7 +63,10 @@ describe("POST /api/security/credentials", () => {
   it("200 trims the username and writes", async () => {
     verifyPassword.mockResolvedValue(true);
     const res = createMockRes();
-    await handler({ method: "POST", body: { currentPassword: "ok", username: "  pavel  ", password: "longenough" } }, res);
+    await handler(
+      { method: "POST", body: { currentPassword: "ok", username: "  pavel  ", password: "longenough" } },
+      res,
+    );
     expect(writeUser).toHaveBeenCalledWith({ username: "pavel", password: "longenough" });
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ username: "pavel" });

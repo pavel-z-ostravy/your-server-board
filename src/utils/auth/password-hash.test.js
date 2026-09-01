@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { hashPassword, verifyHash } from "utils/auth/password-hash";
+import { describe, expect, it } from "vitest";
 
 describe("utils/auth/password-hash", () => {
   it("round-trips", async () => {

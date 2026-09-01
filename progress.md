@@ -99,7 +99,7 @@ visitors; this file is the fuller running log.
   color/theme settings from `settings.yaml` (previously only the dashboard
   applied them). Caught a real bug in the process: both pages used
   `getStaticProps`, which this Docker image's multi-stage build evaluates
-  *before* the real `config/` volume is mounted, so they silently served
+  _before_ the real `config/` volume is mounted, so they silently served
   whatever the auto-copied template config contained at build time, not the
   user's actual settings — fixed by switching both to
   `getServerSideProps`. Nav order changed so Backups appears above Widgets.
@@ -127,7 +127,7 @@ visitors; this file is the fuller running log.
   (e.g. the Proxmox card's "Host" label). Fixed with a persistent
   semi-opaque backdrop.
 - **Username + password + optional TOTP 2FA login** — the password login
-  gate now takes a username *and* a password. **BREAKING:** existing
+  gate now takes a username _and_ a password. **BREAKING:** existing
   deployments that only set `HOMEPAGE_AUTH_PASSWORD` must now also set
   `HOMEPAGE_AUTH_USERNAME`, or password auth refuses to start. An optional
   authenticator-app second factor is enrolled from a new **Security** page
@@ -159,12 +159,12 @@ visitors; this file is the fuller running log.
   server-side in `getServerSideProps` instead. Password mode no longer
   needs `HOMEPAGE_EXTERNAL_URL` (still required for OIDC and for `Secure`
   cookies on HTTPS). Recovery from a forgotten password: `rm
-  config/auth.json` (or delete just the `user` key) and restart.
-  **BREAKING #1:** any deployment that did *not* set
+config/auth.json` (or delete just the `user` key) and restart.
+  **BREAKING #1:** any deployment that did _not_ set
   `HOMEPAGE_AUTH_ENABLED` now shows a login screen — set
   `HOMEPAGE_AUTH_ENABLED=false` to keep no login. **BREAKING #2:**
   `/api/mcp` gates its session check on `isAuthEnabled()`, so with auth
-  default-on the MCP endpoint now needs a bearer token *or* a session
+  default-on the MCP endpoint now needs a bearer token _or_ a session
   unless `HOMEPAGE_AUTH_ENABLED=false` (the `HOMEPAGE_MCP_TOKEN` path is
   unaffected).
   - Spec: `docs/superpowers/specs/2026-09-01-default-admin-and-credential-wizard-design.md`
