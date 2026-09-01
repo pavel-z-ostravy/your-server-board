@@ -1,39 +1,17 @@
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-
-import { CONF_DIR } from "utils/config/config";
-import createLogger from "utils/logger";
-
-const AUTH_FILE = "auth.json";
-
-function authPath() {
-  return join(CONF_DIR, AUTH_FILE);
-}
+import { readAuthFile, writeAuthFile } from "utils/auth/auth-file";
 
 export function readTotpState() {
-  const path = authPath();
-  if (!existsSync(path)) return {};
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8") || "{}");
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch (error) {
-    createLogger("auth").warn("Could not read %s, treating 2FA as disabled: %s", AUTH_FILE, error.message);
-    return {};
-  }
+  return readAuthFile();
 }
 
 export function writeTotpState(state) {
-  const path = authPath();
-  writeFileSync(path, JSON.stringify(state, null, 2), { mode: 0o600 });
-  // `mode` only takes effect when writeFileSync creates the file; tighten an
-  // already-existing auth.json that may have been created with looser perms.
-  chmodSync(path, 0o600);
+  writeAuthFile({ totp: state.totp });
 }
 
 export function clearTotpState() {
-  writeTotpState({});
+  writeAuthFile({ totp: undefined });
 }
 
 export function isTotpEnabled() {
-  return Boolean(readTotpState().totp?.secret);
+  return Boolean(readAuthFile().totp?.secret);
 }
