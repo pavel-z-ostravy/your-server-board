@@ -108,6 +108,21 @@ describe("pages/security — Account card + wizard", () => {
     expect(screen.getByRole("button", { name: /change username & password/i })).toBeInTheDocument();
   });
 
+  it("gates the Account card when password auth is not active", () => {
+    render(
+      <SecurityPage
+        initialSettings={{}}
+        twoFactorEnabled={false}
+        passwordAuthEnabled={false}
+        currentUsername="admin"
+      />,
+    );
+    expect(screen.getByText(/managed outside this dashboard/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /change username & password/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("explains env-managed credentials and hides the change button", () => {
     render(
       <SecurityPage initialSettings={{}} twoFactorEnabled={false} managedByEnv currentUsername="admin" />,

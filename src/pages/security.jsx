@@ -242,7 +242,14 @@ export default function SecurityPage({
         <div className={`${CARD_CLASS} mb-4`}>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Account</h2>
 
-          {wizardStep === "summary" && (
+          {!passwordAuthEnabled && (
+            <p className="mt-4 text-sm text-gray-600 dark:text-slate-300">
+              Username &amp; password are managed outside this dashboard (OIDC, or authentication is disabled), so
+              there is nothing to change here.
+            </p>
+          )}
+
+          {passwordAuthEnabled && wizardStep === "summary" && (
             <div className="mt-4 space-y-4">
               <p className="text-sm text-gray-600 dark:text-slate-300">
                 Signed in as{" "}
@@ -260,7 +267,7 @@ export default function SecurityPage({
             </div>
           )}
 
-          {wizardStep === "credentials" && (
+          {passwordAuthEnabled && wizardStep === "credentials" && (
             <form className="mt-4 space-y-4" onSubmit={submitCredentials}>
               <div>
                 <label htmlFor="wizard-current-password" className={LABEL_CLASS}>
@@ -332,7 +339,7 @@ export default function SecurityPage({
             </form>
           )}
 
-          {wizardStep === "twofa" && (
+          {passwordAuthEnabled && wizardStep === "twofa" && (
             <div className="mt-4 space-y-4">
               {!wizardEnrollment ? (
                 <>
