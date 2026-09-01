@@ -174,14 +174,14 @@ export default function SecurityPage({
         username: newUsername,
         password: newPassword,
       });
+      const body = await res.json();
       if (!res.ok) {
-        setWizardError((await res.json()).error);
+        setWizardError(body.error || "Could not save credentials. Please try again.");
         return;
       }
-      const { username } = await res.json();
-      setDisplayUsername(username);
+      setDisplayUsername(body.username);
       mutate("/api/security/credentials-status");
-      setWizardStep(twoFactorEnabled ? "summary" : "twofa");
+      setWizardStep(enabled ? "summary" : "twofa");
     } catch {
       setWizardError("Something went wrong. Please try again.");
     } finally {

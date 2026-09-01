@@ -48,6 +48,28 @@ describe("verifyPassword", () => {
     expect(await verifyPassword("admin", "wrong")).toBe(false);
   });
 
+  it("stored user with no username → rejects 'undefined'/'admin'", async () => {
+    const { writeAuthFile } = await import("utils/auth/auth-file");
+    writeAuthFile({ user: {} });
+    const { verifyPassword } = await load();
+    expect(await verifyPassword("undefined", "admin")).toBe(false);
+    expect(await verifyPassword("", "admin")).toBe(false);
+  });
+
+  it("stored user with an empty passwordHash → rejects, no admin fall-through", async () => {
+    const { writeAuthFile } = await import("utils/auth/auth-file");
+    writeAuthFile({ user: { username: "admin", passwordHash: "" } });
+    const { verifyPassword } = await load();
+    expect(await verifyPassword("admin", "admin")).toBe(false);
+  });
+
+  it("stored user with a null passwordHash → rejects, no admin fall-through", async () => {
+    const { writeAuthFile } = await import("utils/auth/auth-file");
+    writeAuthFile({ user: { username: "admin", passwordHash: null } });
+    const { verifyPassword } = await load();
+    expect(await verifyPassword("admin", "admin")).toBe(false);
+  });
+
   it("no user, no env → false; non-string → false", async () => {
     const { verifyPassword } = await load();
     expect(await verifyPassword("admin", "admin")).toBe(false);

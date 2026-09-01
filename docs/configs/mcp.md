@@ -26,9 +26,9 @@ http://your-homepage-instance/api/mcp
 
 ## Authentication
 
-The MCP endpoint requires authentication. Requests from an authenticated Homepage session are allowed when Homepage auth is enabled with `HOMEPAGE_AUTH_ENABLED`.
+The MCP endpoint requires authentication. Homepage auth is on by default, so an authenticated Homepage session can reach the endpoint out of the box. (If you have set `HOMEPAGE_AUTH_ENABLED=false`, browser-session auth is unavailable and a token is mandatory.)
 
-For MCP clients that cannot use the browser session, set `HOMEPAGE_MCP_TOKEN`. An MCP token is required when Homepage auth is not enabled. The token grants read access to every configured service credential and, with writes enabled, control of `custom.js` (which runs in every browser), so it must be at least 32 characters — generate one with `openssl rand -base64 32`. Homepage refuses MCP requests while a shorter token is configured. Requests can include either of the following headers:
+For non-browser MCP clients, or when `HOMEPAGE_AUTH_ENABLED=false`, set `HOMEPAGE_MCP_TOKEN`. The token grants read access to every configured service credential and, with writes enabled, control of `custom.js` (which runs in every browser), so it must be at least 32 characters — generate one with `openssl rand -base64 32`. Homepage refuses MCP requests while a shorter token is configured. Requests can include either of the following headers:
 
 ```txt
 Authorization: Bearer your-token
@@ -40,12 +40,11 @@ or:
 X-Homepage-MCP-Token: your-token
 ```
 
-Example Docker Compose environment block:
+Example Docker Compose environment block (the token lets non-browser clients in; it does not gate the endpoint on `HOMEPAGE_AUTH_ENABLED`):
 
 ```yaml
 environment:
   HOMEPAGE_MCP_ENABLED: "true"
-  HOMEPAGE_AUTH_ENABLED: "true"
   HOMEPAGE_MCP_TOKEN: "generate-with-openssl-rand-base64-32"
 ```
 

@@ -193,6 +193,32 @@ describe("pages/security — Account card + wizard", () => {
     expect(screen.getByRole("button", { name: /change username & password/i })).toBeInTheDocument();
   });
 
+  it("skips the wizard's 2FA offer when 2FA was just enabled from the standalone card", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ secret: "S", otpauthUrl: "otpauth://x", qrDataUrl: "data:image/png;base64,AAA" }),
+      })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ enabled: true }) })
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ username: "pavel" }) });
+
+    render(<SecurityPage initialSettings={{}} twoFactorEnabled={false} currentUsername="admin" />);
+
+    // enable 2FA via the standalone card first
+    fireEvent.click(screen.getByRole("button", { name: /enable 2fa/i }));
+    await screen.findByAltText("2FA QR code");
+    fireEvent.change(screen.getByLabelText(/authentication code/i), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: /^confirm$/i }));
+    await waitFor(() => expect(screen.getByText(/2fa is on/i)).toBeInTheDocument());
+
+    // now run the credential wizard — it must go straight to the summary
+    await openCredentialsStep();
+    expect(await screen.findByText("pavel")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /set up 2fa/i })).not.toBeInTheDocument();
+  });
+
   it("sets up 2FA from the wizard", async () => {
     global.fetch = vi
       .fn()

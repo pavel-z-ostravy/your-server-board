@@ -15,7 +15,6 @@ describe("utils/auth/password-hash", () => {
 
   it("returns false (no throw) for junk stored values", async () => {
     for (const junk of ["", "nope", "scrypt$1$1$1$x", "scrypt$16384$8$1$abc", null, undefined]) {
-      // eslint-disable-next-line no-await-in-loop
       expect(await verifyHash("a", junk)).toBe(false);
     }
   });

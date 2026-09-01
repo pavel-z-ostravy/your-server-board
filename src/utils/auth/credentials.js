@@ -23,12 +23,17 @@ export async function verifyPassword(username, password) {
 
   const user = readUser();
   if (!user) return false;
+  if (typeof user.username !== "string" || user.username.length === 0) return false;
 
-  if (user.passwordHash) {
+  if (typeof user.passwordHash === "string" && user.passwordHash.length > 0) {
     const usernameOk = constantTimeEquals(username, user.username);
     const passwordOk = await verifyHash(password, user.passwordHash);
     return usernameOk && passwordOk;
   }
+  // A present-but-unusable passwordHash (empty string, null, wrong type) is a
+  // broken record, not a bootstrap invitation — reject rather than fall through
+  // to the literal admin/admin branch.
+  if (user.passwordHash !== undefined) return false;
 
   const usernameOk = constantTimeEquals(username, user.username);
   const passwordOk = constantTimeEquals(password, "admin");
