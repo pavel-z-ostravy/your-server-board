@@ -1,6 +1,6 @@
 # Default admin + in-app credential & 2FA wizard — design
 
-**Date:** 2026-09-01 (rev. 4)
+**Date:** 2026-09-01 (rev. 5)
 **Status:** Draft for review
 **Builds on:** `docs/superpowers/specs/2026-08-31-dashboard-2fa-login-design.md` (username + password + TOTP 2FA, shipped on `dev`)
 
@@ -25,6 +25,11 @@ This change:
 - **A two-step wizard on `/security`**: step 1 changes username + password
   (verifying the current password); step 2 optionally sets up 2FA in the same
   sitting.
+- **`/api/auth/2fa-check` is deleted.** For a single user, "is 2FA enabled" is a
+  global fact — the sign-in page reads it in `getServerSideProps`, so there is no
+  unauthenticated endpoint that verifies a password. `authorize()` is the only
+  place credentials are checked, and it gains a **progressive-delay brute-force
+  throttle**.
 - **OIDC mode is unchanged** and, when active, suppresses the bootstrap
   account, the banner, and the wizard.
 
@@ -167,7 +172,8 @@ duplicated file-reader instead of importing them.
   `verifyPassword` then (if `isTotpEnabled()`) `verifyToken`. `useSecureCookies:
   parsedAuthUrl?.protocol === "https:"`.
 - `src/pages/api/auth/2fa-check.js` — `404` when `!passwordAuthActive()`, else
-  pre-check; `401` + `logFailedPasswordSignIn()` on bad creds.
+  pre-check; `401` + `logFailedPasswordSignIn()` on bad creds. **(This file, its
+  test, and the `signin.jsx` fetch that calls it are deleted in this change.)**
 - `src/pages/api/security/totp/{enroll,confirm,disable}.js` — session-guarded.
 - `src/pages/security.jsx` — one card; `passwordAuthEnabled` prop; phases
   `idle | enrolling | disabling`; single `error`/`busy` state.
@@ -249,9 +255,7 @@ duplication. Promisified `scrypt`, `N=16384, r=8, p=1` (fits Node's 32 MB
   salt, 64, {N,r,p})`; return `scrypt$16384$8$1$<salt b64>$<key b64>`.
 - `async verifyHash(pw, stored)` → parse the format; recompute; `timingSafeEqual`.
   Unknown format / parse error → `false`. Never throws.
-- **Async** so a slow hash never blocks the event loop under repeated
-  unauthenticated attempts on `/api/auth/2fa-check` (see the open question about
-  that route below).
+- **Async** so a slow hash never blocks the event loop.
 
 ### Credential resolution — `verifyPassword` (now async)
 
@@ -270,9 +274,8 @@ duplication. Promisified `scrypt`, `N=16384, r=8, p=1` (fits Node's 32 MB
    persists a `user`, or the deployment is misconfigured and login is expected
    to fail until the operator sets env creds.)
 
-Non-string input → `false`; never throws. All callers become `await`:
-`authorize` (already async), `2fa-check.js` (already async), the new
-`credentials.js` API route.
+Non-string input → `false`; never throws. Callers: `authorize` (already async)
+and the new `credentials.js` API route both `await` it.
 
 Predicates in `src/utils/auth/credentials-store.js`:
 - `managedByEnv()` = `Boolean(process.env.HOMEPAGE_AUTH_USERNAME && process.env.HOMEPAGE_AUTH_PASSWORD)`.
@@ -432,8 +435,48 @@ safety; the plan nails this down.)
     (drop `!homepageAuthPassword || !homepageAuthUsername` — the bootstrap
     account / env override cover credentials).
   - Keep the ≥32-char check on the resolved secret.
-- `authorize`: `if (!(await verifyPassword(username, password)))` (add `await`);
-  everything else unchanged; `return { id: "homepage", name: username }`.
+- `authorize` — add `await` **and a progressive-delay brute-force throttle**:
+
+  ```js
+  // module scope
+  const FAIL_THRESHOLD = 5;
+  let consecutiveFailures = 0;
+  let blockedUntil = 0;
+
+  async authorize(credentials) {
+    if (Date.now() < blockedUntil) { logFailedPasswordSignIn(); return null; }
+    const { username, password, token } = credentials ?? {};
+
+    if (!(await verifyPassword(username, password))) {
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= FAIL_THRESHOLD) {
+        const over = consecutiveFailures - FAIL_THRESHOLD;          // 0,1,2,…
+        blockedUntil = Date.now() + Math.min(1000 * 2 ** over, 30_000);  // 1s,2s,…,30s
+      }
+      logFailedPasswordSignIn();
+      return null;
+    }
+
+    if (isTotpEnabled() && !verifyToken(token)) {
+      // valid password, wrong 2FA code — NOT a password brute-force,
+      // so consecutiveFailures is left untouched
+      logFailedPasswordSignIn();
+      return null;
+    }
+
+    consecutiveFailures = 0;
+    blockedUntil = 0;
+    return { id: "homepage", name: username };
+  }
+  ```
+
+  Global counter (single user); rejects immediately while blocked (no held
+  connection); resets on any fully-successful sign-in. In-memory — resets on a
+  server restart, which an attacker cannot trigger. Topology-independent: no
+  reliance on `X-Forwarded-For` / client IP. The 5th consecutive wrong password
+  triggers a 1 s block; each further failure doubles it to a 30 s cap. A
+  legitimate user who mistypes waits at most a few seconds; the sign-in page
+  shows the generic "invalid" error during the block.
 - `useSecureCookies: parsedAuthUrl?.protocol === "https:"` unchanged → `false`
   when no URL (LAN http), `true` when `HOMEPAGE_EXTERNAL_URL` is https. This is
   what lets the credentials flow work over plain http without a URL — next-auth
@@ -447,6 +490,29 @@ safety; the plan nails this down.)
 > next-auth still logs one `[NEXTAUTH_URL]` warn through the sanitized logger.
 > **The verification step must confirm a real end-to-end login over plain
 > http with no URL set.**
+
+### Delete `/api/auth/2fa-check`; move the flag into the sign-in page
+
+- **Delete** `src/pages/api/auth/2fa-check.js` and `src/__tests__/pages/api/auth/2fa-check.test.js`.
+- `src/pages/auth/signin.jsx` `getServerSideProps` adds
+  `twoFactorEnabled: passwordAuthActive() ? isTotpEnabled() : false` to its props
+  (it already returns providers + public settings; add one cached file read).
+- `signin.jsx` form logic, driven entirely by that prop — **no client fetch**:
+  - `twoFactorEnabled === false` → the current single step (username + password) →
+    `signIn("credentials", { redirect: false, username, password })`.
+  - `twoFactorEnabled === true` → two **client-side** steps: step 1 collects
+    username + password, "Continue" reveals step 2 (the 6-digit field), submit →
+    `signIn("credentials", { redirect: false, username, password, token })`.
+  - The old step-1 pre-check `fetch` and its "Invalid username or password" at
+    step 1 are removed. All credential errors now come from `signIn`'s result
+    (`redirect: false` → `{ ok, error }`): a failed `signIn` shows the generic
+    "Invalid username or password" (2FA off) or "Invalid username, password, or
+    code" (2FA on). The sanitized-`callbackUrl` + `window.location.assign` on
+    success is unchanged.
+- Net effect: **no unauthenticated endpoint verifies a password.** `authorize()`
+  (with its throttle) is the single credential chokepoint. `twoFactorEnabled` is
+  visible to anyone who loads `/auth/signin` — a config fact, not a secret, and
+  arguably a deterrent (an attacker sees a second factor is required).
 
 ### `src/middleware.js` changes
 
@@ -582,10 +648,10 @@ Fresh Docker deploy, nothing configured:
       stdout: <secret> ; stderr: "username: admin / password: admin — change at /security"
   entrypoint → export HOMEPAGE_AUTH_SECRET=<secret> ; chown config ; su-exec node server.js
   GET /  → middleware: authEnabled, no token → redirect /auth/signin
-  signin → POST /api/auth/2fa-check {admin, admin}
-         → verifyPassword: env? no. stored user? yes → scrypt ok → 200 {twoFactorEnabled:false}
-         → signIn("credentials",{username:"admin",password:"admin",token:""})
-         → authorize → verifyPassword ok → JWT signed with process.env.NEXTAUTH_SECRET
+  GET /auth/signin → getServerSideProps: twoFactorEnabled = isTotpEnabled() = false
+         → single-step form → signIn("credentials",{redirect:false,username:"admin",password:"admin"})
+         → authorize → throttle ok → verifyPassword (stored user, scrypt) ok
+                     → JWT signed with process.env.NEXTAUTH_SECRET
   GET /  → middleware: getToken(secret=same) → ok
          → CredentialsWarning: SWR /api/security/credentials-status
          → {usingDefaultCredentials:true} → red banner
@@ -610,14 +676,16 @@ Change credentials:
 | No secret, multi-replica, **unshared** volumes | Each generates its own → sessions bounce between replicas. Documented: set `HOMEPAGE_AUTH_SECRET` |
 | `config/auth.json` corrupt | `readAuthFile()` → `{}` + warn; next `writeAuthFile` overwrites |
 | `config/auth.json` cache staleness (other replica changed a password) | Up to 5 s window where the old password still verifies. Acceptable for homelab; documented |
-| `HOMEPAGE_AUTH_ENABLED=false` | No gate, no banner, `/security` → "authentication disabled" state, `2fa-check` → `404`, MCP session check off |
+| `HOMEPAGE_AUTH_ENABLED=false` | No gate, no banner, no bootstrap user, `/security` → "authentication disabled" state, MCP session check off |
 | OIDC configured, no `HOMEPAGE_EXTERNAL_URL` | Startup throw (OIDC-scoped) |
 | Provided `HOMEPAGE_EXTERNAL_URL` malformed | Startup throw (unchanged) |
 | `HOMEPAGE_AUTH_USERNAME` + `HOMEPAGE_AUTH_PASSWORD` set | `verifyPassword` uses env only; bootstrap skips the user; `/api/security/credentials` → `409`; wizard hidden; no banner |
 | Wrong current password in wizard | `400` + `logFailedPasswordSignIn()`; nothing written |
 | New password `< 8` / bad username chars | `400` with a specific message; nothing written |
 | `writeUser` OK, then step-2 enroll fails | Credentials already changed (banner gone); user retries from the standalone 2FA card |
-| Repeated unauthenticated hits on `/api/auth/2fa-check` | See **Open question** below — recommended resolution drops the password check here, removing the scrypt cost entirely; otherwise each hit is one async scrypt (~60 ms, non-blocking) + a cached read, and the reverse-proxy rate-limit doc note must name this route |
+| Online password brute-force against `/api/auth/callback/credentials` | After 5 consecutive password failures `authorize()` rejects immediately for an exponential window (1 s → … → 30 s cap); resets on success. Not IP-based. Reverse-proxy rate-limiting + fail2ban on the log line still recommended for internet-exposed deployments |
+| Legit user mistypes password 6+ times | Same throttle applies — waits a few seconds; the sign-in page shows the generic "invalid" error until the window passes |
+| Wrong 2FA code (valid password) | `authorize()` returns null but **does not** advance the brute-force counter (it is not a password guess) |
 
 ## Testing (Vitest)
 
@@ -657,10 +725,9 @@ New / reworked:
   Branches: env override wins and the stored user is ignored even if it would
   also match; env absent + stored user → scrypt path, wrong username → `false`;
   neither env nor stored user → `false`; non-string → `false`; constant-time (no
-  throw on unequal byte length); empty-string env vars treated as unset. All
-  callers (`authorize`, `2fa-check.js`, `credentials.js`) `await` it — the
-  existing `[...nextauth].test.js` / `2fa-check.test.js` mocks of `verifyPassword`
-  switch to `mockResolvedValue`.
+  throw on unequal byte length); empty-string env vars treated as unset. Callers
+  (`authorize`, `credentials.js`) `await` it — the existing `[...nextauth].test.js`
+  mock of `verifyPassword` switches to `mockResolvedValue`.
 - `src/utils/env.test.js` (new) — `isAuthEnabled`: unset → true, `""` → true,
   `"true"` → true, `"false"` → false, `"0"` / `"no"` → true.
 - `src/utils/auth/mode.test.js` (update) — `passwordAuthActive` =
@@ -678,6 +745,12 @@ New / reworked:
   `verifyPassword` (`mockResolvedValue`); `useSecureCookies` is `false` with no
   URL and `true` with an https `HOMEPAGE_EXTERNAL_URL`; the credentials-provider
   build no longer requires `HOMEPAGE_AUTH_USERNAME`/`PASSWORD`.
+  **Throttle** (fake timers): the 5th consecutive wrong-password `authorize`
+  call sets a block; a call while blocked returns `null` **without** invoking
+  `verifyPassword`; advancing time past the window lets a correct password
+  through and resets `consecutiveFailures`/`blockedUntil`; a correct password +
+  wrong `verifyToken` returns `null` but leaves the counter untouched (a 6th
+  wrong-*password* call is still needed to grow the block).
 - `src/middleware.test.js` (**broad rework**, not a tweak) — `isAuthEnabled()`
   now defaults true, so **every existing test that relied on auth being off by
   the absence of `HOMEPAGE_AUTH_ENABLED` changes behaviour**. Audit each case:
@@ -686,11 +759,11 @@ New / reworked:
   redirect for pages, `401` for `/api/`), `="false"` → pass-through, `getToken`
   called with `process.env.NEXTAUTH_SECRET`, `/api/security/credentials`
   unauthenticated → `401`, host-check still runs first regardless.
+- **Delete `src/__tests__/pages/api/auth/2fa-check.test.js`** with the endpoint.
 - **Repo-wide audit:** grep every test that sets or omits `HOMEPAGE_AUTH_ENABLED`
-  (`[...nextauth].test.js`, `middleware.test.js`, `2fa-check.test.js`,
-  `security/*` tests, `mcp/index.test.js`, `mode.test.js`). Any that assert an
-  auth-*off* behaviour without setting `="false"` is now wrong and must be
-  fixed.
+  (`[...nextauth].test.js`, `middleware.test.js`, `security/*` tests,
+  `mcp/index.test.js`, `mode.test.js`). Any that assert an auth-*off* behaviour
+  without setting `="false"` is now wrong and must be fixed.
 - `src/__tests__/pages/api/security/credentials.test.js` (new) — `405`; `401`
   no session; `409` env-managed; `400` wrong current password (+ log, nothing
   written); `400` weak password / bad username; `200` writes user + returns
@@ -707,8 +780,15 @@ New / reworked:
   to `summary` when already on); step 2 "Not now" → summary; step 2 "Set up 2FA"
   → enroll/confirm happy path; the standalone 2FA-card tests still pass and its
   state is not disturbed by the wizard.
-- `src/__tests__/pages/auth/signin.test.jsx` (light) — a default `admin` /
-  `admin` sign-in (mocked `verifyPassword`) completes and navigates.
+- `src/__tests__/pages/auth/signin.test.jsx` (**rework**) — no more
+  `/api/auth/2fa-check` fetch mock. `getServerSideProps` returns
+  `twoFactorEnabled` from a mocked `isTotpEnabled` (and `false` when
+  `passwordAuthActive()` is false). Form: `twoFactorEnabled=false` → single step
+  → `signIn` with `{redirect:false}` → success navigates, failure shows "Invalid
+  username or password". `twoFactorEnabled=true` → step 1 → "Continue" reveals
+  the code field → `signIn` with the token → failure shows "Invalid username,
+  password, or code". The sanitized-`callbackUrl` tests from the 2026-08-31 work
+  are kept (they now run against the no-fetch flow).
 - `src/pages/api/mcp/index.test.js` (update) — set `HOMEPAGE_AUTH_ENABLED="false"`
   in the cases that assumed auth-off; add one asserting a session is required
   when it is unset.
@@ -742,9 +822,15 @@ A real run, not just green unit tests:
 5. Sign out, sign in again with the new username/password + a TOTP code.
 6. Restart the server → confirm the existing session cookie still works (secret
    persisted).
-7. Set `HOMEPAGE_AUTH_ENABLED=false`, restart → no login gate, no banner.
+7. Set `HOMEPAGE_AUTH_ENABLED=false`, restart → no login gate, no banner,
+   `config/auth.json` has no `user` key.
 8. Re-run steps 1–3 inside the Docker image (`docker compose up --build`) and
    confirm the default-credentials box appears in `docker compose logs`.
+9. **Throttle:** submit a wrong password 5×, then a 6th within ~1 s → still
+   rejected without delay from the client's view but the server no longer
+   evaluates the hash; wait ~2 s → a correct password logs in and the counter
+   resets. Confirm `curl` hammering `/api/auth/callback/credentials` cannot
+   exceed roughly one attempt per the growing window.
 
 ## Documentation
 
@@ -756,44 +842,32 @@ A real run, not just green unit tests:
   auto-generated to `config/auth.json` (set `HOMEPAGE_AUTH_SECRET` for
   multi-replica or read-only `config/`); `HOMEPAGE_EXTERNAL_URL` optional for
   password mode, required for OIDC and for `Secure` cookies over HTTPS;
-  strengthen the reverse-proxy rate-limit note (name `/api/auth/2fa-check` and
-  `/api/auth/callback/credentials`); recovery = delete `config/auth.json`.
-  Breaking-change admonition (#1 and #2).
+  document the in-app sign-in throttle **and** still recommend reverse-proxy
+  rate-limiting + `fail2ban`/CrowdSec on `<nextauth> Failed password sign-in
+  attempt` for `POST /api/auth/callback/credentials` on internet-exposed
+  deployments (the throttle is a backstop, not a replacement); recovery = delete
+  `config/auth.json`. Breaking-change admonition (#1 and #2).
 - `README.md` — update the auth bullet(s) and the security note for default-on
   + `admin`/`admin`, with the "change before exposing publicly" warning.
 - `progress.md` — shipped entry; both breaking changes.
 - `.env.example` — the new `YSB_*` knobs.
 - Changelog note.
 
-## Open question — `/api/auth/2fa-check` on the unauthenticated path
+## Resolved: no unauthenticated password endpoint (rev 5)
 
-Today `2fa-check` verifies the username+password before returning
-`{ twoFactorEnabled }`, so a wrong-password caller gets a `401` and learns
-nothing (a deliberate 2026-08-31 decision). With always-on auth this route is
-now exposed on **every** non-OIDC deployment, and once a real password is set
-each guess costs the server one `scrypt` (~60 ms) with no app-level rate limit —
-a modest DoS lever and an online password oracle for `admin`.
-
-**Alternative:** `2fa-check` returns `{ twoFactorEnabled: isTotpEnabled() }`
-**without verifying the password** (still `404` when `!passwordAuthActive()`).
-`authorize()` remains the only place credentials are checked and the only place
-a session is minted. Trade-off: the sign-in page shows the code field to anyone
-who reached step 1; a wrong password on a 2FA-enabled instance is reported only
-after the code step. What leaks: the global `twoFactorEnabled` boolean (a config
-fact, not a credential).
-
-**Ripple:** the alternative touches `signin.jsx` step 1 (listed as "untouched"
-otherwise) — step 1 would stop showing "invalid username or password" and let
-`signIn`/`authorize` surface the error (immediately for 2FA-off; after the code
-step for 2FA-on). Small, contained change.
-
-**Recommendation:** take the alternative — it removes the DoS lever and the
-oracle, and `authorize()` still enforces everything. If the signin.jsx ripple is
-unwanted scope, keep the password check and make the reverse-proxy rate-limit
-doc note prominent and specific. **Decide before writing the plan.**
+The 2026-08-31 `/api/auth/2fa-check` pre-check verified username+password
+unauthenticated. With always-on auth that becomes a scrypt-per-guess DoS lever
+and a clean password oracle on every non-OIDC deployment. **Resolution (see
+"Delete `/api/auth/2fa-check`" above):** delete it; `twoFactorEnabled` is a
+single-user global fact the sign-in page reads in `getServerSideProps`.
+Combined with the `authorize()` throttle, the **only** unauthenticated
+password-checking surface is next-auth's own `/api/auth/callback/credentials`,
+which is the login endpoint and inherently must check — and it is now throttled.
 
 ## Out-of-scope follow-ups
 
 - `middleware.js` → `proxy.js` (Next 16).
-- Per-IP throttle on `/api/auth/callback/credentials`.
+- Per-IP / distributed throttle (the in-app one is global + in-memory; fine for
+  single-replica homelab, but a load-balanced deployment would want Redis-backed
+  or proxy-level rate limiting).
 - Multi-user, roles, email password reset.
