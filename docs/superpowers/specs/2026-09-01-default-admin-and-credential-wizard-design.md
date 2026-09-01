@@ -257,9 +257,16 @@ startup) for this pages-router standalone build.
   process.env.HOMEPAGE_AUTH_SECRET || readAuthFile().secret`; if none, generate
   `randomBytes(32).toString("base64url")` (43 url-safe chars, no `+/=`),
   `writeAuthFile({ secret })`, return it. If the write throws (read-only
-  `config/`), return the in-memory value + `console.warn` "secret not persisted;
-  set HOMEPAGE_AUTH_SECRET or make config/ writable — sessions won't survive a
-  restart".
+  `config/`), return the in-memory value + `console.warn` that names the real
+  symptom: with no persisted secret and no `HOMEPAGE_AUTH_SECRET`, the middleware
+  bundle and the auth-route bundle each generate their own secret and every
+  sign-in fails (not merely "sessions won't survive a restart").
+- `src/instrumentation.js` guards this: when `isAuthEnabled()` and the secret
+  came from neither env nor a successful write (`readAuthFile().secret !==` the
+  returned value), `register()` throws — the same fail-closed treatment the
+  `reason:"readonly"` user-record path gets, producing a clean 500 instead of a
+  silent redirect loop. The throw is at the instrumentation level, never inside
+  `ensureAuthSecret()` itself (that would break the middleware bundle's load).
 - Called **only when `isAuthEnabled()`** — by `src/middleware.js`,
   `src/pages/api/auth/[...nextauth].js`, and `src/instrumentation.js`, each at
   module load / `register()`. Node module init is sequential within a process →
@@ -286,8 +293,14 @@ startup) for this pages-router standalone build.
   - `managedByEnv()` → `{ reason: "env" }`.
   - `hasOidcConfig()` → `{ reason: "oidc" }`.
   - `readAuthFile().user` → `{ reason: "exists" }`.
+  - `authFileCorrupt()` (file present but did not parse, or parsed to a
+    non-object) → `{ reason: "corrupt" }`; `instrumentation.js` throws on it so an
+    accidental truncation is a loud stop rather than a silent reset to
+    `admin`/`admin` with 2FA dropped.
   - else `writeAuthFile({ user: { username: "admin" } })` → `{ created: true }`.
     If the write throws → `{ created: false, reason: "readonly" }`.
+    `writeAuthFile` writes `auth.json.tmp` then `renameSync`s it into place so a
+    crash mid-write cannot leave a half-written file.
   (`isAuthEnabled` / `hasOidcConfig` imported from `env.js` / `mode.js`.)
 
 ### Credential resolution — `verifyPassword` (now async)

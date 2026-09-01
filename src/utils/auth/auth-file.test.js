@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -74,6 +74,44 @@ describe("utils/auth/auth-file", () => {
     const realNow = Date.now();
     vi.spyOn(Date, "now").mockReturnValue(realNow + 6000);
     expect(readAuthFile().secret).toBe("s2"); // cache expired
+  });
+
+  it("authFileCorrupt: false when absent, false for a valid object", async () => {
+    const { readAuthFile, writeAuthFile, authFileCorrupt } = await load();
+    expect(readAuthFile()).toEqual({});
+    expect(authFileCorrupt()).toBe(false);
+    writeAuthFile({ secret: "s1" });
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 6000);
+    readAuthFile();
+    expect(authFileCorrupt()).toBe(false);
+  });
+
+  it("authFileCorrupt: true after reading invalid JSON", async () => {
+    writeFileSync(join(dir, "auth.json"), "not json {");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { readAuthFile, authFileCorrupt } = await load();
+    expect(readAuthFile()).toEqual({});
+    expect(authFileCorrupt()).toBe(true);
+  });
+
+  it("authFileCorrupt: true after reading a valid JSON scalar", async () => {
+    writeFileSync(join(dir, "auth.json"), '"5"');
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { readAuthFile, authFileCorrupt } = await load();
+    expect(readAuthFile()).toEqual({});
+    expect(authFileCorrupt()).toBe(true);
+  });
+
+  it("writeAuthFile is atomic: leaves no auth.json.tmp behind", async () => {
+    const { writeAuthFile } = await load();
+    writeAuthFile({ secret: "s1" });
+    writeAuthFile({ user: { username: "admin" } });
+    expect(readdirSync(dir).some((f) => f.endsWith(".tmp"))).toBe(false);
+    expect(existsSync(join(dir, "auth.json"))).toBe(true);
+    expect(JSON.parse(readFileSync(join(dir, "auth.json"), "utf8"))).toEqual({
+      secret: "s1",
+      user: { username: "admin" },
+    });
   });
 
   it("treats a corrupt file as {} and warns once", async () => {

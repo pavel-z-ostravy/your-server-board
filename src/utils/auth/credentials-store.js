@@ -1,4 +1,4 @@
-import { readAuthFile, writeAuthFile } from "utils/auth/auth-file";
+import { authFileCorrupt, readAuthFile, writeAuthFile } from "utils/auth/auth-file";
 import { hashPassword } from "utils/auth/password-hash";
 import { hasOidcConfig } from "utils/auth/mode";
 import { isAuthEnabled } from "utils/env";
@@ -31,6 +31,9 @@ export async function ensureInitialUser() {
   if (managedByEnv()) return { created: false, reason: "env" };
   if (hasOidcConfig()) return { created: false, reason: "oidc" };
   if (readAuthFile().user) return { created: false, reason: "exists" };
+  // readAuthFile() above forced a fresh read on the startup path; if that file
+  // exists but did not parse, refuse to overwrite it with a default account.
+  if (authFileCorrupt()) return { created: false, reason: "corrupt" };
   try {
     writeAuthFile({ user: { username: "admin" } });
   } catch {

@@ -13,10 +13,10 @@ export function ensureAuthSecret() {
   try {
     writeAuthFile({ secret });
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.warn(
-      `Could not persist the auth signing secret (${error.message}). ` +
-        `Set HOMEPAGE_AUTH_SECRET or make config/ writable — sessions will not survive a restart.`,
+      `Could not persist the auth signing secret to config/auth.json (${error.message}). ` +
+        `Set HOMEPAGE_AUTH_SECRET, or make config/ writable — otherwise the middleware and the ` +
+        `auth route generate different secrets and every sign-in fails.`,
     );
   }
   return secret;

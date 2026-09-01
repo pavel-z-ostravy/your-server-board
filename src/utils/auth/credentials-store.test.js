@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -37,6 +37,16 @@ describe("utils/auth/credentials-store", () => {
     expect(cs.readUser()).toEqual({ username: "admin" });
     expect(cs.usingDefaultCredentials()).toBe(true);
     expect(cs.currentUsername()).toBe("admin");
+  });
+
+  it("ensureInitialUser: refuses to bootstrap over a corrupt auth.json", async () => {
+    const path = join(dir, "auth.json");
+    writeFileSync(path, '{"secret":"s1","user":{"passwordHash"'); // truncated
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const before = readFileSync(path, "utf8");
+    const cs = await load();
+    expect(await cs.ensureInitialUser()).toEqual({ created: false, reason: "corrupt" });
+    expect(readFileSync(path, "utf8")).toBe(before); // untouched
   });
 
   it("writeUser adds a verifiable hash, clears default, preserves other keys", async () => {
