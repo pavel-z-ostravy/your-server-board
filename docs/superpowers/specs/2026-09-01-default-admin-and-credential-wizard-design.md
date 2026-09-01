@@ -1,6 +1,6 @@
 # Default admin + in-app credential & 2FA wizard — design
 
-**Date:** 2026-09-01 (rev. 2)
+**Date:** 2026-09-01 (rev. 3)
 **Status:** Draft for review
 **Builds on:** `docs/superpowers/specs/2026-08-31-dashboard-2fa-login-design.md` (username + password + TOTP 2FA, shipped on `dev`)
 
@@ -14,10 +14,9 @@ This change:
 
 - **Login is on by default.** `isAuthEnabled()` is true unless `HOMEPAGE_AUTH_ENABLED=false`.
 - **A first-run bootstrap** generates the NextAuth signing secret **and** an
-  initial `admin` account with a **random password**, persists both to
-  `config/auth.json`, and prints the password to the server log once. No env
-  vars, no startup crash. (Literal `admin`/`admin` is **not** used — see
-  "Why a random initial password".)
+  initial account **`admin` / `admin`**, persists both to `config/auth.json`
+  (password scrypt-hashed, flagged `mustChange`), and logs a reminder once. No
+  env vars, no startup crash.
 - **Credentials are editable in-app** and persist to `config/auth.json`
   (scrypt-hashed). `HOMEPAGE_AUTH_USERNAME` + `HOMEPAGE_AUTH_PASSWORD`, when
   both set, remain an override that locks the in-app editor.
@@ -53,16 +52,25 @@ secret** — `process.env.NEXTAUTH_SECRET || process.env.HOMEPAGE_AUTH_SECRET`,
 at module load. Neither imports any auth-file / bootstrap module. Cross-platform:
 the wrapper uses `node:child_process` `spawn`, not shell syntax.
 
-### Why a random initial password (not `admin`/`admin`)
+### Default credentials `admin` / `admin` — the exposure this accepts
 
-"Always-on login" means every deployment that upgrades — including ones on a
-public Cloudflare-tunnel hostname (`YSB_ALLOWED_HOSTS` on the reference
-deployment includes one) — gets a login gate immediately. With no app-level
-rate limiting, a literal `admin`/`admin` default is an online-guessable
-credential exposed the moment the container starts. A per-install random
-password removes that window at effectively zero UX cost: the operator reads
-one line from `docker compose logs` on first run. Recovery if the line is
-lost: `rm config/auth.json` (or delete just the `user` key) and restart.
+Decided by the project owner. "Always-on login" means every deployment that
+upgrades gets a login gate immediately; a literal `admin` / `admin` default is
+online-guessable, and there is no app-level rate limiting. On a deployment
+reachable from the internet (reverse proxy / Cloudflare tunnel — the reference
+`YSB_ALLOWED_HOSTS` includes one) the window between first start and changing
+the credentials is a real exposure.
+
+Mitigations the design carries:
+- The non-dismissible red banner on every page until the password is changed.
+- `docs/installation/index.md` gets a prominent callout: **change the
+  credentials before exposing the dashboard publicly, or pin them with
+  `HOMEPAGE_AUTH_USERNAME` / `HOMEPAGE_AUTH_PASSWORD`.**
+- `HOMEPAGE_AUTH_ENABLED=false` for a trusted-LAN-only deployment that wants no
+  login at all.
+
+Recovery if the stored credentials are forgotten: `rm config/auth.json` (or
+delete just the `user` key) and restart — first run recreates `admin` / `admin`.
 
 ### Breaking changes
 
@@ -280,11 +288,9 @@ Exports:
   - `managedByEnv()` → `{ created: false, reason: "env" }`.
   - `readAuthFile().user` → `{ created: false, reason: "exists" }`.
   - `hasOidcConfig()` → `{ created: false, reason: "oidc" }`.
-  - else generate `password = randomBytes(9).toString("base64url")` (12 chars,
-    Node ≥ 16), `writeAuthFile({ user: { username: "admin", passwordHash: await
-    hashPassword(password), mustChange: true, updatedAt: now } })`,
-    return `{ created: true, username: "admin", password }`. If the write throws:
-    `{ created: false, reason: "readonly" }`.
+  - else `writeAuthFile({ user: { username: "admin", passwordHash: await
+    hashPassword("admin"), mustChange: true, updatedAt: now } })`, return
+    `{ created: true }`. If the write throws: `{ created: false, reason: "readonly" }`.
 
 `hashPassword` is duplicated into `bootstrap.mjs` (same scrypt params — the
 `scrypt$16384$8$1$…` format string is the shared contract, documented above and
@@ -299,10 +305,11 @@ Common preamble (both modes):
 2. `const init = await ensureInitialUser();`
 3. If `init.created`: print to **stderr**:
    ```
-   ┌─ Initial admin account created ───────────────
+   ┌─ Login enabled with default credentials ──────
    │  username: admin
-   │  password: <init.password>
-   │  Change it now at /security — shown only once.
+   │  password: admin
+   │  Change them now at /security — do not expose
+   │  this dashboard publicly until you have.
    └──────────────────────────────────────────────
    ```
 4. If `init.reason === "readonly"`: stderr `FATAL: config/ is not writable and
@@ -333,7 +340,7 @@ Running it before the chown means the `config/auth.json` it writes (as root) is
 picked up by the subsequent `chown -R "$PUID:$PGID" /app/config` and ends up
 readable by the app user. `su-exec` preserves the exported env, so
 `HOMEPAGE_AUTH_SECRET` reaches `node server.js`. `ensureInitialUser()` runs here,
-so the initial-password box lands in `docker compose logs` on first start.
+so the default-credentials box lands in `docker compose logs` on first start.
 
 **`Dockerfile`** — `output: "standalone"` only bundles traced files.
 `auth-file.mjs` is traced (imported by the credential routes), but `scripts/`
@@ -442,9 +449,10 @@ safety; the plan nails this down.)
 - Render `null` unless `data?.usingDefaultCredentials`.
 - Otherwise a full-width bar: `role="alert"`, `bg-red-600 text-white text-sm`,
   `px-4 py-2 pl-14 sm:pl-16` (left padding clears the absolutely-positioned
-  NavHeader hamburger). Text: **"You're signed in with the initial admin
-  password."** + `<Link href="/security" className="underline font-medium">`
-  **"Change it now"**. Not dismissible.
+  NavHeader hamburger). Text: **"You're signed in with the default admin / admin
+  credentials — anyone who can reach this page can log in."** +
+  `<Link href="/security" className="underline font-medium">` **"Change them
+  now"**. Not dismissible.
 - Placed in `_app.jsx` immediately after `<NavHeader />`, before `<Component />`
   (inside `SessionProvider` + `SWRConfig`). Known minor: a one-frame layout
   shift on load while `useSession` resolves — acceptable for a security nag.
@@ -531,13 +539,13 @@ absolute `HOMEPAGE_CONFIG_DIR` for non-standard launchers.
 Fresh Docker deploy, nothing configured:
   entrypoint → prepare-auth.mjs --print-secret
       resolveOrCreateSecret() → generate, writeAuthFile({secret})
-      ensureInitialUser()     → generate pw "Kd9-xY2..", writeAuthFile({user:{...mustChange:true}})
-      stdout: <secret> ; stderr: "password: Kd9-xY2.. — change it at /security"
+      ensureInitialUser()     → writeAuthFile({user:{username:"admin", passwordHash:scrypt("admin"), mustChange:true}})
+      stdout: <secret> ; stderr: "username: admin / password: admin — change at /security"
   entrypoint → export HOMEPAGE_AUTH_SECRET=<secret> ; chown config ; su-exec node server.js
   GET /  → middleware: authEnabled, no token → redirect /auth/signin
-  signin → POST /api/auth/2fa-check {admin, "Kd9-xY2.."}
+  signin → POST /api/auth/2fa-check {admin, admin}
          → verifyPassword: env? no. stored user? yes → scrypt ok → 200 {twoFactorEnabled:false}
-         → signIn("credentials",{username:"admin",password:"Kd9-xY2..",token:""})
+         → signIn("credentials",{username:"admin",password:"admin",token:""})
          → authorize → verifyPassword ok → JWT signed with process.env.NEXTAUTH_SECRET
   GET /  → middleware: getToken(secret=same) → ok
          → CredentialsWarning: SWR /api/security/credentials-status
@@ -545,8 +553,8 @@ Fresh Docker deploy, nothing configured:
 
 Change credentials:
   /security → Account card → "credentials" step
-  POST /api/security/credentials {currentPassword:"Kd9-xY2..", username:"pavel", password:"<8+>"}
-      → verifyPassword("admin","Kd9-xY2..") ok → writeUser → mustChange:false → 200
+  POST /api/security/credentials {currentPassword:"admin", username:"pavel", password:"<8+>"}
+      → verifyPassword("admin","admin") ok → writeUser → mustChange:false → 200
       → mutate(credentials-status) → {usingDefaultCredentials:false} → banner gone
       → "twofa" step → "Set up 2FA" → enroll → confirm → totp saved
   next sign-in: verifyPassword → stored-user branch (username "pavel"); 2FA code required
@@ -588,11 +596,12 @@ New / reworked:
   `"env"` / `"file"` / `"generated"` accordingly; generated is ≥32-char and
   persisted; read-only dir → value returned with `source:"generated"` + warn, no
   throw. `ensureInitialUser`: `managedByEnv` / existing user / OIDC → not created;
-  clean → creates `{username:"admin", passwordHash scrypt, mustChange:true}` +
-  returns a plaintext password that `credentials-store.verifyHash` accepts (pins
-  the shared scrypt format); read-only → `{created:false, reason:"readonly"}`.
-  The inlined `authEnabledFromEnv` / `hasOidcConfig` / `managedByEnv` are pinned
-  against `env.js` / `mode.js` on the same inputs.
+  clean → creates `{username:"admin", passwordHash scrypt, mustChange:true}` and
+  the stored hash **verifies against `"admin"`** via `credentials-store.verifyHash`
+  (pins the shared scrypt format across the two modules); read-only →
+  `{created:false, reason:"readonly"}`. The inlined `authEnabledFromEnv` /
+  `hasOidcConfig` / `managedByEnv` are pinned against `env.js` / `mode.js` on the
+  same inputs.
 - `src/utils/auth/credentials-store.test.js` — `hashPassword`/`verifyHash` round
   trip + bad format → false; `writeUser` sets `mustChange:false`, preserves
   `secret`/`totp`; `usingDefaultCredentials` / `managedByEnv` / `currentUsername`
@@ -651,17 +660,17 @@ New / reworked:
   to `summary` when already on); step 2 "Not now" → summary; step 2 "Set up 2FA"
   → enroll/confirm happy path; the standalone 2FA-card tests still pass and its
   state is not disturbed by the wizard.
-- `src/__tests__/pages/auth/signin.test.jsx` (light) — a stored-user sign-in
-  (`admin` + generated password, mocked) completes and navigates.
+- `src/__tests__/pages/auth/signin.test.jsx` (light) — a default `admin` /
+  `admin` sign-in (mocked `verifyPassword`) completes and navigates.
 - `src/pages/api/mcp/index.test.js` (update) — set `HOMEPAGE_AUTH_ENABLED="false"`
   in the cases that assumed auth-off; add one asserting a session is required
   when it is unset.
 - `scripts/prepare-auth.test.js` — `execFileSync("node", ["scripts/prepare-auth.mjs",
   "--print-secret"], { env: { ...process.env, HOMEPAGE_CONFIG_DIR: <tmp> } })`:
   stdout is exactly the secret (44 base64 chars, no trailing newline), stderr
-  carries the password box on first run and is quiet on the second run, and the
-  `config/auth.json` in the tmp dir is valid + `0600` + has `secret` and
-  `user.mustChange:true`.
+  carries the default-credentials box on first run and is quiet on the second
+  run, and the `config/auth.json` in the tmp dir is valid + `0600` + has `secret`
+  and `user` (`username:"admin"`, `mustChange:true`).
 
 ## Verification (before merge — mandatory)
 
@@ -669,13 +678,14 @@ A real run, not just green unit tests:
 
 1. Fresh `config/` (no `auth.json`), no auth env vars. `pnpm build && pnpm start`
    over plain `http://localhost:3000`.
-2. Confirm the wrapper prints the initial-password box once (stderr); confirm
-   `config/auth.json` has `secret` + `user.mustChange:true`, mode `600`.
-3. Browse to `/` → redirected to `/auth/signin`. Log in with `admin` + the
-   printed password. Confirm you land on the dashboard — this is the load-bearing
-   check that the secret reached **both** the Node route runtime and the Edge
-   middleware runtime (a mismatch shows as an immediate redirect back to signin).
-   Also run `pnpm dev` and repeat this check.
+2. Confirm the wrapper prints the default-credentials box once (stderr); confirm
+   `config/auth.json` has `secret` + `user` with `username:"admin"` +
+   `mustChange:true`, mode `600`.
+3. Browse to `/` → redirected to `/auth/signin`. Log in with `admin` / `admin`.
+   Confirm you land on the dashboard — this is the load-bearing check that the
+   secret reached **both** the Node route runtime and the Edge middleware runtime
+   (a mismatch shows as an immediate redirect back to signin). Also run
+   `pnpm dev` and repeat this check.
 4. Confirm the red banner shows. Open `/security`, run the wizard step 1 → banner
    disappears without a reload. Continue to step 2, enable 2FA, confirm a code.
 5. Sign out, sign in again with the new username/password + a TOTP code.
@@ -683,14 +693,14 @@ A real run, not just green unit tests:
    persisted).
 7. Set `HOMEPAGE_AUTH_ENABLED=false`, restart → no login gate, no banner.
 8. Re-run steps 1–3 inside the Docker image (`docker compose up --build`) and
-   confirm the password line appears in `docker compose logs`.
+   confirm the default-credentials box appears in `docker compose logs`.
 
 ## Documentation
 
 - `docs/installation/index.md` — rewrite Security & Authentication: **login is
-  on by default**; first run creates an `admin` account with a **random
-  password printed to the server log** (`docker compose logs`); change it from
-  the Security page (or pin `HOMEPAGE_AUTH_USERNAME` + `HOMEPAGE_AUTH_PASSWORD`);
+  on by default with `admin` / `admin`**; a prominent **warning** callout —
+  change the credentials from the Security page (or pin `HOMEPAGE_AUTH_USERNAME`
+  + `HOMEPAGE_AUTH_PASSWORD`) **before exposing the dashboard to the internet**;
   disable entirely with `HOMEPAGE_AUTH_ENABLED=false`; `NEXTAUTH_SECRET`
   auto-generated to `config/auth.json` (set `HOMEPAGE_AUTH_SECRET` for
   multi-replica or read-only `config/`); `HOMEPAGE_EXTERNAL_URL` optional for
@@ -699,7 +709,7 @@ A real run, not just green unit tests:
   `/api/auth/callback/credentials`); recovery = delete `config/auth.json`.
   Breaking-change admonition (#1 and #2).
 - `README.md` — update the auth bullet(s) and the security note for default-on
-  + random initial password.
+  + `admin`/`admin`, with the "change before exposing publicly" warning.
 - `progress.md` — shipped entry; both breaking changes.
 - `.env.example` — the new `YSB_*` knobs.
 - Changelog note.
