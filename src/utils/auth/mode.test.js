@@ -47,6 +47,7 @@ describe("utils/auth/mode", () => {
     });
 
     it("is false when auth is disabled", () => {
+      process.env.HOMEPAGE_AUTH_ENABLED = "false";
       expect(passwordAuthActive()).toBe(false);
     });
 

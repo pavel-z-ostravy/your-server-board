@@ -52,6 +52,7 @@ describe("pages/api/mcp", () => {
   });
 
   it("returns 404 while disabled", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
     delete process.env.HOMEPAGE_MCP_ENABLED;
     const handler = await loadHandler();
     const res = mockResponse();
@@ -62,6 +63,7 @@ describe("pages/api/mcp", () => {
   });
 
   it("requires bearer token when configured", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
     process.env.HOMEPAGE_MCP_ENABLED = "true";
     process.env.HOMEPAGE_MCP_TOKEN = "mcp-tok-0123456789abcdefghijklmnopqrstuv";
     const handler = await loadHandler();
@@ -73,6 +75,7 @@ describe("pages/api/mcp", () => {
   });
 
   it("fails closed with 500 when the configured MCP token is too short", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
     process.env.HOMEPAGE_MCP_ENABLED = "true";
     process.env.HOMEPAGE_MCP_TOKEN = "change-me";
     const handler = await loadHandler();
@@ -95,7 +98,7 @@ describe("pages/api/mcp", () => {
 
   it("rejects requests when neither Homepage auth nor an MCP token is configured", async () => {
     process.env.HOMEPAGE_MCP_ENABLED = "true";
-    delete process.env.HOMEPAGE_AUTH_ENABLED;
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
     delete process.env.HOMEPAGE_MCP_TOKEN;
     const handler = await loadHandler();
     const res = mockResponse();
@@ -106,7 +109,24 @@ describe("pages/api/mcp", () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
+  it("rejects requests with no bearer token and no session when auth is on by default", async () => {
+    process.env.HOMEPAGE_MCP_ENABLED = "true";
+    delete process.env.HOMEPAGE_AUTH_ENABLED;
+    delete process.env.HOMEPAGE_MCP_TOKEN;
+    process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
+    process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
+    getServerSession.mockResolvedValueOnce(null);
+    const handler = await loadHandler();
+    const res = mockResponse();
+
+    await handler({ method: "POST", headers: {}, body: { jsonrpc: "2.0", id: 1, method: "tools/list" } }, res);
+
+    expect(getServerSession).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(401);
+  });
+
   it("handles JSON-RPC requests when enabled and authorized", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
     process.env.HOMEPAGE_MCP_ENABLED = "true";
     process.env.HOMEPAGE_MCP_TOKEN = "mcp-tok-0123456789abcdefghijklmnopqrstuv";
     const handler = await loadHandler();
@@ -185,6 +205,7 @@ describe("pages/api/mcp", () => {
   });
 
   it("returns 202 for JSON-RPC notifications", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
     process.env.HOMEPAGE_MCP_ENABLED = "true";
     process.env.HOMEPAGE_MCP_TOKEN = "mcp-tok-0123456789abcdefghijklmnopqrstuv";
     const handler = await loadHandler();
@@ -204,6 +225,7 @@ describe("pages/api/mcp", () => {
   });
 
   it("rejects non-POST requests", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "false";
     process.env.HOMEPAGE_MCP_ENABLED = "true";
     process.env.HOMEPAGE_MCP_TOKEN = "mcp-tok-0123456789abcdefghijklmnopqrstuv";
     const handler = await loadHandler();

@@ -27,7 +27,7 @@ export async function writeUser({ username, password }) {
 }
 
 export async function ensureInitialUser() {
-  if (process.env.HOMEPAGE_AUTH_ENABLED === "false") return { created: false, reason: "disabled" };
+  if (!isAuthEnabled()) return { created: false, reason: "disabled" };
   if (managedByEnv()) return { created: false, reason: "env" };
   if (hasOidcConfig()) return { created: false, reason: "oidc" };
   if (readAuthFile().user) return { created: false, reason: "exists" };
