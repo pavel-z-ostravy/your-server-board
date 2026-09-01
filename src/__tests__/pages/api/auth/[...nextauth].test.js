@@ -353,6 +353,49 @@ describe("pages/api/auth/[...nextauth]", () => {
     });
   });
 
+  it("throttles after 5 consecutive wrong passwords", async () => {
+    vi.useFakeTimers();
+    try {
+      process.env.HOMEPAGE_AUTH_ENABLED = "true";
+      verifyPasswordMock.mockResolvedValue(false);
+      const mod = await import("pages/api/auth/[...nextauth]");
+      const authorize = mod.authOptions.providers[0].options.authorize;
+
+      for (let i = 0; i < 5; i += 1) {
+        await authorize({ username: "admin", password: "x" });
+      }
+      verifyPasswordMock.mockClear();
+      warnMock.mockClear();
+      await authorize({ username: "admin", password: "x" }); // blocked
+      expect(verifyPasswordMock).not.toHaveBeenCalled();
+      expect(warnMock).not.toHaveBeenCalled(); // blocked path does not log
+
+      vi.advanceTimersByTime(1100);
+      verifyPasswordMock.mockResolvedValue(true);
+      isTotpEnabledMock.mockReturnValue(false);
+      await expect(authorize({ username: "admin", password: "ok" })).resolves.toEqual({
+        id: "homepage",
+        name: "admin",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a wrong 2FA code does not advance the throttle", async () => {
+    process.env.HOMEPAGE_AUTH_ENABLED = "true";
+    verifyPasswordMock.mockResolvedValue(true);
+    isTotpEnabledMock.mockReturnValue(true);
+    verifyTokenMock.mockReturnValue(false);
+    const mod = await import("pages/api/auth/[...nextauth]");
+    const authorize = mod.authOptions.providers[0].options.authorize;
+    for (let i = 0; i < 8; i += 1) {
+      expect(await authorize({ username: "admin", password: "ok", token: "000000" })).toBeNull();
+    }
+    // still evaluating (not blocked) — verifyPassword called every time
+    expect(verifyPasswordMock).toHaveBeenCalledTimes(8);
+  });
+
   it("throws when only partial OIDC settings are provided", async () => {
     process.env.HOMEPAGE_AUTH_ENABLED = "true";
     process.env.HOMEPAGE_OIDC_ISSUER = "https://issuer.example";

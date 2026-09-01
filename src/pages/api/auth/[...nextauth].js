@@ -10,6 +10,10 @@ import createLogger from "utils/logger";
 
 const MIN_AUTH_SECRET_LENGTH = 32;
 
+const FAIL_THRESHOLD = 5;
+let consecutiveFailures = 0;
+let blockedUntil = 0;
+
 const authEnabled = isAuthEnabled();
 const issuer = process.env.HOMEPAGE_OIDC_ISSUER;
 const clientId = process.env.HOMEPAGE_OIDC_CLIENT_ID;
@@ -119,8 +123,15 @@ if (authEnabled) {
           token: { label: "Authentication code", type: "text" },
         },
         async authorize(credentials) {
+          if (Date.now() < blockedUntil) return null;
           const { username, password, token } = credentials ?? {};
+
           if (!(await verifyPassword(username, password))) {
+            consecutiveFailures += 1;
+            if (consecutiveFailures >= FAIL_THRESHOLD) {
+              const over = consecutiveFailures - FAIL_THRESHOLD;
+              blockedUntil = Date.now() + Math.min(1000 * 2 ** over, 30_000);
+            }
             logFailedPasswordSignIn();
             return null;
           }
@@ -128,6 +139,8 @@ if (authEnabled) {
             logFailedPasswordSignIn();
             return null;
           }
+          consecutiveFailures = 0;
+          blockedUntil = 0;
           return { id: "homepage", name: username };
         },
       }),
