@@ -247,7 +247,7 @@ describe("pages/api/auth/[...nextauth]", () => {
     process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
     process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
-    verifyPasswordMock.mockReturnValue(true);
+    verifyPasswordMock.mockResolvedValue(true);
 
     const mod = await import("pages/api/auth/[...nextauth]");
     const [provider] = mod.authOptions.providers;
@@ -264,7 +264,7 @@ describe("pages/api/auth/[...nextauth]", () => {
     process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
     process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
-    verifyPasswordMock.mockReturnValue(false);
+    verifyPasswordMock.mockResolvedValue(false);
 
     const mod = await import("pages/api/auth/[...nextauth]");
     const [provider] = mod.authOptions.providers;
@@ -280,7 +280,7 @@ describe("pages/api/auth/[...nextauth]", () => {
     process.env.HOMEPAGE_AUTH_PASSWORD = "secret";
     process.env.HOMEPAGE_AUTH_SECRET = "rk3Xk9wQ0mVJt7cZbN2yLpA8sHdF4gRuEwTiOaSvBnM=";
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
-    verifyPasswordMock.mockReturnValue(true);
+    verifyPasswordMock.mockResolvedValue(true);
     isTotpEnabledMock.mockReturnValue(true);
 
     const mod = await import("pages/api/auth/[...nextauth]");

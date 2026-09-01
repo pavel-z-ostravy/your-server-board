@@ -29,7 +29,7 @@ describe("pages/api/auth/2fa-check", () => {
 
   it("404s when password auth is not the active mode (auth disabled or OIDC)", async () => {
     passwordAuthActive.mockReturnValue(false);
-    verifyPassword.mockReturnValue(true);
+    verifyPassword.mockResolvedValue(true);
     const res = createMockRes();
     await handler({ method: "POST", body: { username: "admin", password: "ok" } }, res);
     expect(res.statusCode).toBe(404);
@@ -43,7 +43,7 @@ describe("pages/api/auth/2fa-check", () => {
   });
 
   it("401s and logs when credentials are wrong, without disclosing 2FA state", async () => {
-    verifyPassword.mockReturnValue(false);
+    verifyPassword.mockResolvedValue(false);
     const res = createMockRes();
     await handler({ method: "POST", body: { username: "admin", password: "x" } }, res);
     expect(res.statusCode).toBe(401);
@@ -53,7 +53,7 @@ describe("pages/api/auth/2fa-check", () => {
   });
 
   it("200s with twoFactorEnabled:false when 2FA is off", async () => {
-    verifyPassword.mockReturnValue(true);
+    verifyPassword.mockResolvedValue(true);
     isTotpEnabled.mockReturnValue(false);
     const res = createMockRes();
     await handler({ method: "POST", body: { username: "admin", password: "ok" } }, res);
@@ -62,7 +62,7 @@ describe("pages/api/auth/2fa-check", () => {
   });
 
   it("200s with twoFactorEnabled:true when 2FA is on", async () => {
-    verifyPassword.mockReturnValue(true);
+    verifyPassword.mockResolvedValue(true);
     isTotpEnabled.mockReturnValue(true);
     const res = createMockRes();
     await handler({ method: "POST", body: { username: "admin", password: "ok" } }, res);

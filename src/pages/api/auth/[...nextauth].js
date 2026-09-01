@@ -112,7 +112,7 @@ if (authEnabled) {
         },
         async authorize(credentials) {
           const { username, password, token } = credentials ?? {};
-          if (!verifyPassword(username, password)) {
+          if (!(await verifyPassword(username, password))) {
             logFailedPasswordSignIn();
             return null;
           }

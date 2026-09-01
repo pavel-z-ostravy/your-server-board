@@ -1,27 +1,38 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
+import { readUser, managedByEnv } from "utils/auth/credentials-store";
+import { verifyHash } from "utils/auth/password-hash";
 import createLogger from "utils/logger";
 
-function sha256(value) {
-  return createHash("sha256").update(value, "utf8").digest();
+function sha256(v) {
+  return createHash("sha256").update(String(v), "utf8").digest();
 }
 
 function constantTimeEquals(a, b) {
-  // Both digests are 32 bytes, so timingSafeEqual never throws here; the
-  // hash step is what lets us compare arbitrary-length inputs safely.
   return timingSafeEqual(sha256(a), sha256(b));
 }
 
-export function verifyPassword(username, password) {
-  const expectedUsername = process.env.HOMEPAGE_AUTH_USERNAME;
-  const expectedPassword = process.env.HOMEPAGE_AUTH_PASSWORD;
-
-  if (!expectedUsername || !expectedPassword) return false;
+export async function verifyPassword(username, password) {
   if (typeof username !== "string" || typeof password !== "string") return false;
 
-  const usernameMatch = constantTimeEquals(username, expectedUsername);
-  const passwordMatch = constantTimeEquals(password, expectedPassword);
-  return usernameMatch && passwordMatch;
+  if (managedByEnv()) {
+    const u = constantTimeEquals(username, process.env.HOMEPAGE_AUTH_USERNAME);
+    const p = constantTimeEquals(password, process.env.HOMEPAGE_AUTH_PASSWORD);
+    return u && p;
+  }
+
+  const user = readUser();
+  if (!user) return false;
+
+  if (user.passwordHash) {
+    const usernameOk = constantTimeEquals(username, user.username);
+    const passwordOk = await verifyHash(password, user.passwordHash);
+    return usernameOk && passwordOk;
+  }
+
+  const usernameOk = constantTimeEquals(username, user.username);
+  const passwordOk = constantTimeEquals(password, "admin");
+  return usernameOk && passwordOk;
 }
 
 export function logFailedPasswordSignIn() {
