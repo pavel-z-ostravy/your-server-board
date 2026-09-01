@@ -52,13 +52,17 @@ describe("utils/auth/totp-store", () => {
     expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 
-  it("treats a corrupt file as disabled and warns", async () => {
+  it("treats a corrupt file as disabled and warns once", async () => {
     writeFileSync(join(dir, "auth.json"), "not json{");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { readTotpState, isTotpEnabled } = await loadStore();
+    const { writeAuthFile } = await import("utils/auth/auth-file");
     expect(readTotpState()).toEqual({});
     expect(isTotpEnabled()).toBe(false);
-    expect(warn).toHaveBeenCalled();
+    // writeAuthFile re-parses the still-corrupt file fresh — the `warned` flag
+    // must suppress the second warning.
+    writeAuthFile({ x: 1 });
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it("clearTotpState drops only totp and keeps secret/user", async () => {
@@ -67,6 +71,7 @@ describe("utils/auth/totp-store", () => {
     writeAuthFile({ secret: "s1", user: { username: "admin" } });
     writeTotpState({ totp: { secret: "ABC", enabledAt: "x" } });
     clearTotpState();
-    expect(readAuthFile()).toEqual({ secret: "s1", user: { username: "admin" } });
+    expect(readAuthFile()).toStrictEqual({ secret: "s1", user: { username: "admin" } });
+    expect("totp" in readAuthFile()).toBe(false);
   });
 });

@@ -38,7 +38,17 @@ describe("utils/auth/auth-file", () => {
     const { readAuthFile, writeAuthFile } = await load();
     writeAuthFile({ secret: "s1", totp: { secret: "abc" } });
     writeAuthFile({ totp: undefined });
-    expect(readAuthFile()).toEqual({ secret: "s1" });
+    expect(readAuthFile()).toStrictEqual({ secret: "s1" });
+    expect("totp" in readAuthFile()).toBe(false);
+  });
+
+  it("writeAuthFile merges onto the fresh disk state, not the stale cache", async () => {
+    const { readAuthFile, writeAuthFile, authFilePath } = await load();
+    writeAuthFile({ secret: "s1" });
+    // out-of-band edit adds a key the module cache does not know about
+    writeFileSync(authFilePath(), JSON.stringify({ secret: "s1", extra: "oob" }));
+    writeAuthFile({ user: { username: "admin" } });
+    expect(readAuthFile()).toStrictEqual({ secret: "s1", extra: "oob", user: { username: "admin" } });
   });
 
   it("writes mode 0600", async () => {
@@ -61,16 +71,19 @@ describe("utils/auth/auth-file", () => {
     // out-of-band edit
     writeFileSync(authFilePath(), JSON.stringify({ secret: "s2" }));
     expect(readAuthFile().secret).toBe("s1"); // still cached
-    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 6000);
+    const realNow = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(realNow + 6000);
     expect(readAuthFile().secret).toBe("s2"); // cache expired
   });
 
   it("treats a corrupt file as {} and warns once", async () => {
     writeFileSync(join(dir, "auth.json"), "not json {");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { readAuthFile } = await load();
+    const { readAuthFile, writeAuthFile } = await load();
     expect(readAuthFile()).toEqual({});
-    readAuthFile();
+    // writeAuthFile re-parses the (still corrupt) file fresh from disk — a second
+    // warn path. The module-level `warned` flag must suppress the repeat.
+    writeAuthFile({ x: 1 });
     expect(warn).toHaveBeenCalledTimes(1);
   });
 });
