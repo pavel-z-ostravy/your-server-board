@@ -26,12 +26,15 @@ describe("components/toggles/signout", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders and signs out when authenticated", () => {
+  it("renders and signs out to an absolute URL on the current origin when authenticated", () => {
     useSession.mockReturnValue({ status: "authenticated" });
 
     const { getByRole } = render(<SignOut />);
     fireEvent.click(getByRole("button"));
 
-    expect(signOut).toHaveBeenCalledWith({ callbackUrl: "/" });
+    // jsdom's default origin is http://localhost:3000 — the point is that it is
+    // absolute and built from window.location, not a bare "/".
+    expect(signOut).toHaveBeenCalledWith({ callbackUrl: `${window.location.origin}/` });
+    expect(signOut.mock.calls[0][0].callbackUrl).toMatch(/^https?:\/\//);
   });
 });
