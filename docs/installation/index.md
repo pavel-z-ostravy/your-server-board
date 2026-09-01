@@ -45,41 +45,90 @@ This can be disabled by setting `HOMEPAGE_ALLOWED_HOSTS` to `*` but this is not 
 
 ### Security & Authentication
 
-Public deployments of Homepage should be secured via a reverse proxy, VPN, or similar. As of version 2.0, Homepage supports a simple authorization gate with a password or OIDC. When enabled, Homepage will use password login by default unless OIDC variables are provided.
-
-Required environment variables for authentication:
-
-- `HOMEPAGE_AUTH_ENABLED=true`
-- `HOMEPAGE_AUTH_SECRET` (random string for signing/encrypting cookies, at least 32 characters; generate one with `openssl rand -base64 32`)
-- `HOMEPAGE_EXTERNAL_URL` (the absolute URL used to access Homepage, including scheme and port when needed)
-
-Use an `https://` URL for public or TLS-terminated deployments so authentication cookies are marked `Secure`. Trusted HTTP-only LAN deployments may use an `http://` URL.
-
-For password login:
-
-- `HOMEPAGE_AUTH_USERNAME` (the login username)
-- `HOMEPAGE_AUTH_PASSWORD` (a strong, unique password)
-
-Both are required for password login unless OIDC settings are provided.
+**Dashboard login is on by default.** On the first server start with no
+`config/auth.json` and no authentication environment variables set, Homepage
+creates a bootstrap user `admin` / `admin`, auto-generates the session signing
+secret into `config/auth.json` (file mode `0600`), and prints a one-time notice
+to the console telling you to change the credentials. Every page then shows a
+non-dismissible red banner until the password is changed.
 
 !!! warning
 
-    **Breaking change:** `HOMEPAGE_AUTH_USERNAME` is now required for password login. Existing deployments that only set `HOMEPAGE_AUTH_PASSWORD` must add `HOMEPAGE_AUTH_USERNAME` or password auth will fail to start.
+    `admin` / `admin` is online-guessable. **Change the credentials before you
+    expose the dashboard publicly** (reverse proxy, tunnel, port-forward). Either
+    open **`/security` → Account** and run the change-credentials wizard, or pin
+    the credentials up front with `HOMEPAGE_AUTH_USERNAME` +
+    `HOMEPAGE_AUTH_PASSWORD` (env-set credentials skip the bootstrap user and the
+    banner entirely).
+
+To disable login completely — a trusted-LAN-only deployment that wants no gate
+at all — set `HOMEPAGE_AUTH_ENABLED=false`.
+
+Environment variables:
+
+- `HOMEPAGE_AUTH_ENABLED` — defaults to on. Set to `false` to disable the login
+  gate entirely.
+- `HOMEPAGE_AUTH_SECRET` — the cookie signing/encryption secret. **Auto-generated
+  into `config/auth.json` on first start**, so you normally don't set this. Set
+  it explicitly (a random string, at least 32 characters — generate one with
+  `openssl rand -base64 32`) only when running multiple replicas that must share
+  a secret, or when `config/` is read-only so Homepage can't persist one.
+- `HOMEPAGE_EXTERNAL_URL` — the absolute URL used to reach Homepage, including
+  scheme and port when needed. **Optional for password login** (it was required
+  in earlier versions). Still required for OIDC, and required for any
+  TLS-terminated deployment so the authentication cookies are marked `Secure`.
+- `HOMEPAGE_AUTH_USERNAME` / `HOMEPAGE_AUTH_PASSWORD` — pin the password-login
+  credentials via the environment instead of the stored user. When both are set
+  they take precedence over `config/auth.json`, and no bootstrap `admin` user or
+  change-credentials banner is created.
+
+Use an `https://` URL for public or TLS-terminated deployments so authentication
+cookies are marked `Secure`. Trusted HTTP-only LAN deployments may use an
+`http://` URL.
+
+#### Recovering a forgotten password
+
+Delete `config/auth.json` (or just remove the `user` key from it) and restart.
+The next start recreates the `admin` / `admin` bootstrap user (unless
+`HOMEPAGE_AUTH_USERNAME` / `HOMEPAGE_AUTH_PASSWORD` are set, in which case those
+apply). The auto-generated `secret` in the same file is regenerated too if you
+delete the whole file, which invalidates existing session cookies.
 
 #### Two-factor authentication (TOTP)
 
-Once signed in with a username and password, open the **Security** page
-from the navigation menu to enable an authenticator-app second factor.
-Scan the QR code, confirm a code, and every subsequent sign-in will ask
-for the 6-digit code after the password.
+An authenticator-app second factor is enrolled from the **Security** page
+(`/security`) — either from the standalone **Two-factor authentication** card,
+or as the optional step 2 of the **Account** change-credentials wizard. Scan the
+QR code, confirm a code, and every subsequent sign-in asks for the 6-digit code
+after the password.
 
-2FA state is stored in `config/auth.json` (created automatically). If you
-lose access to your authenticator, delete or empty that file to disable
-2FA; the next sign-in will only require the username and password.
+2FA state is stored in `config/auth.json` (created automatically). If you lose
+access to your authenticator, delete or empty that file to disable 2FA; the next
+sign-in will only require the username and password.
 
 !!! warning
 
-    Homepage does not apply application-level rate limiting to password attempts. Deployments exposed outside a trusted network should configure their reverse proxy or ingress to rate limit POST requests to `/api/auth/callback/credentials` and `/api/auth/2fa-check` (the session-less pre-check that reports whether 2FA is required). Each failed attempt is logged at `warn` level as `<nextauth> Failed password sign-in attempt`, which can be used as a fail2ban or CrowdSec filter.
+    Homepage applies an in-process progressive-delay throttle to `authorize()`:
+    after 5 wrong passwords a sign-in attempt is blocked for a growing interval
+    (capped at 30 seconds) without evaluating the password hash. This is a
+    best-effort in-memory guard, not a substitute for edge protection.
+    Deployments exposed outside a trusted network should **also** configure their
+    reverse proxy or ingress to rate limit `POST` requests to
+    `/api/auth/callback/credentials`. Each failed attempt is logged at `warn`
+    level as `<nextauth> Failed password sign-in attempt`, which can be used as a
+    fail2ban or CrowdSec filter.
+
+!!! danger "Breaking changes"
+
+    1. **Login is now on by default.** Any deployment that did *not* set
+       `HOMEPAGE_AUTH_ENABLED` previously had no login and now shows a sign-in
+       screen (with the bootstrap `admin` / `admin` user). To keep no login, set
+       `HOMEPAGE_AUTH_ENABLED=false`.
+    2. **`/api/mcp` now requires authentication by default.** The MCP endpoint
+       gates its session check on whether auth is enabled; with auth on by
+       default, `/api/mcp` now needs a bearer token *or* a signed-in session
+       unless `HOMEPAGE_AUTH_ENABLED=false`. The `HOMEPAGE_MCP_TOKEN` path is
+       unaffected.
 
 For OIDC login (overrides password login):
 

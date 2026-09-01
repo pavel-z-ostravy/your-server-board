@@ -35,9 +35,10 @@ visitors; this file is the fuller running log.
   required "I understand the risk" checkbox. **Explicitly phase 1 of a
   two-phase plan** — this phase adds no new authentication/authorization;
   anyone who can already reach the dashboard can now also write to its
-  config through this feature when `HOMEPAGE_AUTH_ENABLED` is off (the
-  default) — see "Widget-install write path hardening" below for what
-  happens when auth is turned on.
+  config through this feature when `HOMEPAGE_AUTH_ENABLED=false` (it was the
+  default when this shipped; login is on by default as of the default-on
+  login entry below) — see "Widget-install write path hardening" below for
+  what happens when auth is on.
   - Spec: `docs/superpowers/specs/2026-08-23-widget-install-design.md`
   - Plan: `docs/superpowers/plans/2026-08-23-widget-install.md`
 - **Widget uninstall** — a trash-can icon on any live dashboard service card
@@ -133,11 +134,41 @@ visitors; this file is the fuller running log.
   (reachable from the nav menu): scan a QR code, confirm a 6-digit code,
   done. Sign-in becomes two-step — username/password, then (if 2FA is on) a
   code prompt — driven by a session-less `POST /api/auth/2fa-check`
-  pre-check. 2FA state lives in an app-managed `config/auth.json` (mode
+  pre-check (later removed — the 2FA-on flag moved server-side into the
+  sign-in page's `getServerSideProps`). 2FA state lives in an app-managed
+  `config/auth.json` (mode
   `0600`, corrupt/missing → treated as disabled); recovery from a lost
   authenticator is deleting or emptying that file. No recovery codes.
   - Spec: `docs/superpowers/specs/2026-08-31-dashboard-2fa-login-design.md`
   - Plan: `docs/superpowers/plans/2026-08-31-dashboard-2fa-login.md`
+- **Default-on login + `admin`/`admin` bootstrap + credential wizard** —
+  the dashboard login gate is now **on by default**. First server start
+  with no `config/auth.json` and no auth env vars creates a bootstrap user
+  `admin` / `admin` and auto-generates the NextAuth session signing secret
+  into `config/auth.json` (mode `0600`); the console prints a one-time box
+  telling the operator to change the credentials. Every page then shows a
+  non-dismissible red banner (`role="alert"`) until the password is
+  changed, at `/security` → a new **Account** card whose wizard verifies
+  the current password, sets a new username + password, and optionally
+  walks straight into 2FA enrolment as step 2 (the standalone 2FA card
+  stays too). `authorize()` gained an in-process progressive-delay
+  brute-force throttle (5 wrong passwords → a growing block, capped 30s, no
+  hash evaluation and no log line while blocked; a failed 2FA code does not
+  advance the counter). The session-less `POST /api/auth/2fa-check`
+  endpoint was **deleted** — the sign-in page reads the 2FA-on flag
+  server-side in `getServerSideProps` instead. Password mode no longer
+  needs `HOMEPAGE_EXTERNAL_URL` (still required for OIDC and for `Secure`
+  cookies on HTTPS). Recovery from a forgotten password: `rm
+  config/auth.json` (or delete just the `user` key) and restart.
+  **BREAKING #1:** any deployment that did *not* set
+  `HOMEPAGE_AUTH_ENABLED` now shows a login screen — set
+  `HOMEPAGE_AUTH_ENABLED=false` to keep no login. **BREAKING #2:**
+  `/api/mcp` gates its session check on `isAuthEnabled()`, so with auth
+  default-on the MCP endpoint now needs a bearer token *or* a session
+  unless `HOMEPAGE_AUTH_ENABLED=false` (the `HOMEPAGE_MCP_TOKEN` path is
+  unaffected).
+  - Spec: `docs/superpowers/specs/2026-09-01-default-admin-and-credential-wizard-design.md`
+  - Plan: `docs/superpowers/plans/2026-09-01-default-admin-and-credential-wizard.md`
 - **Card visibility/contrast pass** — the card background/shadow shared by
   Disks, Proxmox, Backups, and Widgets was subtle enough to be hard to
   distinguish from the page background; bumped background opacity and

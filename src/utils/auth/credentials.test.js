@@ -28,6 +28,7 @@ describe("verifyPassword", () => {
     const { verifyPassword } = await load();
     expect(await verifyPassword("admin", "envpw")).toBe(true);
     expect(await verifyPassword("admin", "stored")).toBe(false);
+    expect(await verifyPassword("wrong", "envpw")).toBe(false);
   });
 
   it("stored user WITH hash → scrypt; wrong username fails", async () => {
@@ -51,5 +52,13 @@ describe("verifyPassword", () => {
     const { verifyPassword } = await load();
     expect(await verifyPassword("admin", "admin")).toBe(false);
     expect(await verifyPassword(1, 2)).toBe(false);
+  });
+});
+
+describe("logFailedPasswordSignIn", () => {
+  it("warns with the fail2ban-filter message", async () => {
+    const { logFailedPasswordSignIn } = await load();
+    logFailedPasswordSignIn();
+    expect(warnMock).toHaveBeenCalledWith("Failed password sign-in attempt");
   });
 });
