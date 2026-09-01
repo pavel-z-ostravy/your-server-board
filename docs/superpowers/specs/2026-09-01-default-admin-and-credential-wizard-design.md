@@ -1,6 +1,6 @@
 # Default admin + in-app credential & 2FA wizard — design
 
-**Date:** 2026-09-01 (rev. 6)
+**Date:** 2026-09-01 (rev. 7)
 **Status:** Draft for review
 **Builds on:** `docs/superpowers/specs/2026-08-31-dashboard-2fa-login-design.md` (username + password + TOTP 2FA, shipped on `dev`)
 
@@ -232,11 +232,13 @@ startup) for this pages-router standalone build.
   `config/`), return the in-memory value + `console.warn` "secret not persisted;
   set HOMEPAGE_AUTH_SECRET or make config/ writable — sessions won't survive a
   restart".
-- Called at module load by `src/middleware.js`, `src/pages/api/auth/[...nextauth].js`,
-  and `src/instrumentation.js`. Node module init is sequential within a process
-  → whichever loads first generates + persists, the rest read it back. A
-  multi-*process* first-boot race is a microsecond window and is closed by
-  setting `HOMEPAGE_AUTH_SECRET` (documented for multi-replica).
+- Called **only when `isAuthEnabled()`** — by `src/middleware.js`,
+  `src/pages/api/auth/[...nextauth].js`, and `src/instrumentation.js`, each at
+  module load / `register()`. Node module init is sequential within a process →
+  whichever loads first generates + persists, the rest read it back. A
+  multi-*process* first-boot race is a microsecond window, closed by setting
+  `HOMEPAGE_AUTH_SECRET` (documented for multi-replica). When
+  `HOMEPAGE_AUTH_ENABLED=false` it is never called and no `secret` is written.
 
 ### `src/utils/auth/credentials-store.js`
 
@@ -269,13 +271,13 @@ startup) for this pages-router standalone build.
    username *and* password against the env values (today's `sha256` path).
 2. **Stored user** — else `readAuthFile().user` present:
    - `user.passwordHash` present → compute **both** without short-circuiting:
-     `usernameOk = constEq(username, user.username)` and `passwordOk = await
+     `usernameOk = constantTimeEquals(username, user.username)` and `passwordOk = await
      verifyHash(password, user.passwordHash)`; `return usernameOk && passwordOk`.
    - no `passwordHash` (default) → hash-first constant-time compare of `username`
      vs `user.username` **and** `password` vs `"admin"`.
 3. Neither → `false`.
 
-`constEq` is the existing hash-first helper (never throws on length). Non-string
+`constantTimeEquals` is the existing hash-first helper (never throws on length). Non-string
 input → `false`; never throws. Callers `authorize` and the new
 `/api/security/credentials` route `await` it.
 
@@ -284,10 +286,11 @@ input → `false`; never throws. Callers `authorize` and the new
 ```js
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  const { isAuthEnabled } = await import("./utils/env");
   const { ensureAuthSecret } = await import("./utils/auth/secret");
   const { ensureInitialUser } = await import("./utils/auth/credentials-store");
-  if (process.env.HOMEPAGE_AUTH_ENABLED !== "false") ensureAuthSecret();
-  const init = await ensureInitialUser();
+  if (isAuthEnabled()) ensureAuthSecret();
+  const init = await ensureInitialUser();   // internally no-ops when auth is off
   if (init.created) {
     process.stderr.write(
       "\n┌─ Login enabled with default credentials ─────\n" +
@@ -308,9 +311,11 @@ export async function register() {
 ```
 
 - `instrumentation` is **stable since Next 15** — no `experimental` flag.
-  `register()` runs once, before the server accepts requests; a throw surfaces
-  as a startup error. Traced into `output: "standalone"`. Located at
-  `src/instrumentation.js` because this project uses `src/`.
+  `register()` runs once, before the server accepts requests. Traced into
+  `output: "standalone"`. Located at `src/instrumentation.js` because this
+  project uses `src/`. **The spike (plan task 0) confirms a `throw` in
+  `register()` actually aborts startup on this build** — the docs say it "must
+  complete before the server is ready" but do not spell out the throw path.
 - Dynamic `import()` (not top-level) so the Edge invocation of `register()`
   never even loads the `node:fs` modules.
 - It runs as the **app user** inside the container (post-`su-exec`), in an
@@ -330,15 +335,25 @@ export async function register() {
 ### `src/middleware.js`
 
 - `const authEnabled = isAuthEnabled();` — unchanged in form, now default-true.
-- `const authSecret = ensureAuthSecret();` (import from `utils/auth/secret`) —
-  replaces the `process.env.NEXTAUTH_SECRET || …` line. Node runtime, `fs` fine.
+- `const authSecret = authEnabled ? ensureAuthSecret() : undefined;` (import
+  from `utils/auth/secret`) — replaces the `process.env.NEXTAUTH_SECRET || …`
+  line. Node runtime, `fs` fine.
+- **Map `HOMEPAGE_EXTERNAL_URL` → `NEXTAUTH_URL` at module load too**
+  (`if (!process.env.NEXTAUTH_URL && process.env.HOMEPAGE_EXTERNAL_URL)
+  process.env.NEXTAUTH_URL = process.env.HOMEPAGE_EXTERNAL_URL;`). `getToken`
+  reads `NEXTAUTH_URL` at request time to decide the `__Secure-` cookie prefix;
+  without this, a first request handled by middleware before `[...nextauth].js`
+  has loaded would look for the wrong cookie name on an https deployment.
 - Everything else — matcher, host check, redirect/401 logic — unchanged.
 
 ### `src/pages/api/auth/[...nextauth].js`
 
-- `const NEXTAUTH_SECRET = ensureAuthSecret();` near the top; use it for
-  `authOptions.secret` and drop the old `HOMEPAGE_AUTH_SECRET → NEXTAUTH_SECRET`
-  env mapping (the helper covers env + file).
+- Near the top: `const NEXTAUTH_SECRET = authEnabled ? ensureAuthSecret() :
+  undefined;`. Use the **local const** for `authOptions.secret`. Also
+  `if (authEnabled && !process.env.NEXTAUTH_SECRET) process.env.NEXTAUTH_SECRET
+  = NEXTAUTH_SECRET;` — belt-and-braces for the few next-auth v4 internals
+  (CSRF, `/api/auth/_log`) that read the env var directly. Drop the old
+  `HOMEPAGE_AUTH_SECRET → NEXTAUTH_SECRET` mapping (the helper covers env + file).
 - `NEXTAUTH_URL` mapping from `HOMEPAGE_EXTERNAL_URL` unchanged.
 - In `if (authEnabled)`:
   - Parse + validate the URL **only when `process.env.NEXTAUTH_URL` is set**
@@ -346,13 +361,15 @@ export async function register() {
   - Keep `if (hasOidcConfig && !process.env.NEXTAUTH_URL) throw` ("OIDC requires
     HOMEPAGE_EXTERNAL_URL").
   - Password branch: drop `!homepageAuthPassword || !homepageAuthUsername` from
-    the throw (bootstrap / env override cover credentials). Keep the ≥32-char
-    check on `NEXTAUTH_SECRET` (a generated one is 43 base64url chars).
+    the throw (bootstrap / env override cover credentials).
+  - **The ≥32-char check now tests the local `NEXTAUTH_SECRET` const**, not
+    `process.env.NEXTAUTH_SECRET` (which is `undefined` when the secret came
+    from the file). A generated secret is 43 base64url chars.
   - **Partial env** (`HOMEPAGE_AUTH_USERNAME` xor `HOMEPAGE_AUTH_PASSWORD`) →
-    a startup `warn` "one of HOMEPAGE_AUTH_USERNAME / HOMEPAGE_AUTH_PASSWORD is
-    set without the other — ignoring both; using stored / default credentials",
-    then proceed (`managedByEnv()` is already `false`, so it falls through
-    cleanly). No throw — a half-set env should not brick the login.
+    `createLogger("nextauth").warn("HOMEPAGE_AUTH_USERNAME / HOMEPAGE_AUTH_PASSWORD:
+    one is set without the other — ignoring both; using stored / default
+    credentials")`, then proceed (`managedByEnv()` is already `false`, so it
+    falls through cleanly). No throw — a half-set env should not brick the login.
 - `useSecureCookies: parsedAuthUrl?.protocol === "https:"` — **unchanged**
   (already shipped). `false` when no URL → plain-http LAN cookies work; `true`
   when `HOMEPAGE_EXTERNAL_URL` is https → `__Secure-` prefix. `getToken` in
@@ -368,7 +385,9 @@ export async function register() {
   let blockedUntil = 0;
 
   async authorize(credentials) {
-    if (Date.now() < blockedUntil) { logFailedPasswordSignIn(); return null; }
+    // during a block, reject without logging — the pre-block failures already
+    // gave fail2ban enough to ban, and a hammering client shouldn't flood logs
+    if (Date.now() < blockedUntil) return null;
     const { username, password, token } = credentials ?? {};
 
     if (!(await verifyPassword(username, password))) {
@@ -514,9 +533,12 @@ default-on behaviour.
 
 **No `Dockerfile` change, no `package.json` script change, no
 `docker-entrypoint.sh` change** — `instrumentation.js` handles bootstrap
-in-process, and `secret.js` / `credentials-store.js` / `auth-file.js` /
-`password-hash.js` are all traced into `output: "standalone"` (imported by the
-NextAuth route, the security routes, *and* now middleware).
+in-process. `secret.js` / `credentials-store.js` / `auth-file.js` /
+`password-hash.js` are ordinary `src/` modules reachable from
+`instrumentation.js`, `middleware.js`, and the API routes — all of which Next
+traces into `output: "standalone"`. (The spike double-checks that the standalone
+build actually includes `instrumentation.js` and that middleware's `fs` import
+survives tracing.)
 
 ## Data flow
 
@@ -607,7 +629,7 @@ New / reworked:
   box only when `created`; throws on `reason:"readonly"`; does not call
   `ensureAuthSecret` when `HOMEPAGE_AUTH_ENABLED="false"`.
 - `src/__tests__/pages/api/auth/[...nextauth].test.js` (rework) — mock
-  `utils/auth/secret` (`ensureAuthSecret → "<44 chars>"`), `utils/auth/credentials`
+  `utils/auth/secret` (`ensureAuthSecret →` a ≥32-char string), `utils/auth/credentials`
   (`verifyPassword` `mockResolvedValue`), `utils/auth/totp-store`, `utils/auth/totp`.
   `authEnabled` defaults true → the disabled-path tests set `HOMEPAGE_AUTH_ENABLED="false"`.
   The "throws without external URL" test becomes OIDC-scoped; the malformed-URL
@@ -615,9 +637,10 @@ New / reworked:
   without URL, `true` with https; credentials build no longer needs
   `HOMEPAGE_AUTH_USERNAME`/`PASSWORD`.
   **Throttle** (fake timers): the 5th consecutive wrong-password call sets a
-  block; a call while blocked returns `null` without invoking `verifyPassword`;
-  time past the window → a correct password logs in and resets; correct password
-  + failing `verifyToken` returns `null` but leaves the counter untouched.
+  block; a call while blocked returns `null` without invoking `verifyPassword`
+  and **without logging**; time past the window → a correct password logs in and
+  resets; correct password + failing `verifyToken` returns `null` but leaves the
+  counter untouched.
 - `src/middleware.test.js` (**broad rework**) — mock `utils/auth/secret`
   (`ensureAuthSecret`). `isAuthEnabled()` now defaults true → **every existing
   test that assumed auth-off by absence changes**: those asserting unauthenticated
