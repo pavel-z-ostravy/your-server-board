@@ -141,6 +141,46 @@ describe("pages/api/auth/[...nextauth]", () => {
     expect(JSON.stringify(debugMock.mock.calls)).not.toContain("sensitive");
   });
 
+  describe("redirect callback", () => {
+    const load = async () => {
+      process.env.HOMEPAGE_AUTH_ENABLED = "false";
+      const mod = await import("pages/api/auth/[...nextauth]");
+      return mod.authOptions.callbacks.redirect;
+    };
+    const baseUrl = "http://localhost:3000";
+
+    it("resolves a relative path against baseUrl", async () => {
+      const redirect = await load();
+      expect(redirect({ url: "/security", baseUrl })).toBe("http://localhost:3000/security");
+    });
+
+    it("keeps an absolute URL whose host is in HOMEPAGE_ALLOWED_HOSTS", async () => {
+      process.env.HOMEPAGE_ALLOWED_HOSTS = "homelab.vault1922.xyz,10.0.1.104:3050";
+      const redirect = await load();
+      expect(redirect({ url: "https://homelab.vault1922.xyz/", baseUrl })).toBe("https://homelab.vault1922.xyz/");
+      expect(redirect({ url: "http://10.0.1.104:3050/auth/signin", baseUrl })).toBe(
+        "http://10.0.1.104:3050/auth/signin",
+      );
+    });
+
+    it("falls back to baseUrl for an absolute URL on an untrusted host", async () => {
+      process.env.HOMEPAGE_ALLOWED_HOSTS = "homelab.vault1922.xyz";
+      const redirect = await load();
+      expect(redirect({ url: "https://evil.example/phish", baseUrl })).toBe(baseUrl);
+    });
+
+    it("ignores the '*' wildcard — only explicitly listed hosts are honoured", async () => {
+      process.env.HOMEPAGE_ALLOWED_HOSTS = "*";
+      const redirect = await load();
+      expect(redirect({ url: "https://evil.example/", baseUrl })).toBe(baseUrl);
+    });
+
+    it("falls back to baseUrl for a non-URL string", async () => {
+      const redirect = await load();
+      expect(redirect({ url: "not a url", baseUrl })).toBe(baseUrl);
+    });
+  });
+
   it("maps HOMEPAGE_EXTERNAL_URL to NEXTAUTH_URL and uses the ensured signing secret", async () => {
     process.env.HOMEPAGE_EXTERNAL_URL = "https://homepage.example";
 

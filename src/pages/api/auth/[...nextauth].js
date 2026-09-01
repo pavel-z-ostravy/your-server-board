@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
+import { allowedHostSet } from "utils/auth/allowed-hosts";
 import { logFailedPasswordSignIn, verifyPassword } from "utils/auth/credentials";
 import { ensureAuthSecret } from "utils/auth/secret";
 import { verifyToken } from "utils/auth/totp";
@@ -157,6 +158,24 @@ export const authOptions = {
   useSecureCookies: parsedAuthUrl?.protocol === "https:",
   pages: {
     signIn: "/auth/signin",
+  },
+  callbacks: {
+    // NextAuth builds redirect targets from NEXTAUTH_URL, which falls back to
+    // http://localhost:3000 when HOMEPAGE_EXTERNAL_URL is unset (allowed for
+    // password mode). The default callback then rejects any absolute URL whose
+    // origin != that fallback and returns the broken base — so sign-out lands
+    // on localhost:3000. Instead: keep relative paths, and accept an absolute
+    // URL when its host is one we already trust for inbound requests.
+    redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      try {
+        const target = new URL(url);
+        if (allowedHostSet().has(target.host)) return target.toString();
+      } catch {
+        // not a parseable absolute URL — fall through to the safe default
+      }
+      return baseUrl;
+    },
   },
   logger: {
     error: (code) => createLogger("nextauth").error("%s", code),

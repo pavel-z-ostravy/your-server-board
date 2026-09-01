@@ -1,6 +1,7 @@
 import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 
+import { allowAllHosts, allowedHostSet } from "utils/auth/allowed-hosts";
 import { ensureAuthSecret } from "utils/auth/secret";
 import { isAuthEnabled } from "utils/env";
 
@@ -21,15 +22,10 @@ function withPrivateCache(res) {
 }
 
 export async function middleware(req) {
-  // Check the Host header, if HOMEPAGE_ALLOWED_HOSTS is set
+  // Check the Host header against the shared allow-list (loopback + every
+  // HOMEPAGE_ALLOWED_HOSTS entry, or `*` for any).
   const host = req.headers.get("host");
-  const port = process.env.PORT || 3000;
-  let allowedHosts = [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`];
-  const allowAll = process.env.HOMEPAGE_ALLOWED_HOSTS === "*";
-  if (process.env.HOMEPAGE_ALLOWED_HOSTS) {
-    allowedHosts = allowedHosts.concat(process.env.HOMEPAGE_ALLOWED_HOSTS.split(","));
-  }
-  if (!allowAll && (!host || !allowedHosts.includes(host))) {
+  if (!allowAllHosts() && (!host || !allowedHostSet().has(host))) {
     console.error(
       `Host validation failed for: ${host}. Hint: Set the HOMEPAGE_ALLOWED_HOSTS environment variable to allow requests from this host / port.`,
     );
