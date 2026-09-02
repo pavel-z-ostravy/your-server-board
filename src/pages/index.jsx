@@ -3,6 +3,7 @@ import classNames from "classnames";
 import BookmarksGroup from "components/bookmarks/group";
 import DisksGroup from "components/disks/group";
 import ErrorBoundary from "components/errorboundry";
+import NavHeader from "components/layout/NavHeader";
 import PageBackground from "components/layout/PageBackground";
 import SortableSectionList from "components/layout/SortableSectionList";
 import ProxmoxVmsGroup from "components/proxmox-vms/group";
@@ -580,8 +581,14 @@ function Home({ initialSettings }) {
 
 export default function Wrapper({ initialSettings, fallback }) {
   return (
-    <PageBackground initialSettings={initialSettings}>
-      <Index initialSettings={initialSettings} fallback={fallback} />
-    </PageBackground>
+    <>
+      {/* Rendered as a sibling of PageBackground (not inside it) so the
+          floating hamburger stays outside the scroll container and doesn't
+          scroll away with the dashboard content. */}
+      <NavHeader />
+      <PageBackground initialSettings={initialSettings}>
+        <Index initialSettings={initialSettings} fallback={fallback} />
+      </PageBackground>
+    </>
   );
 }

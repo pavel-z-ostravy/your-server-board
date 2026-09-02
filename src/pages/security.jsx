@@ -2,6 +2,7 @@ import { useState } from "react";
 import { mutate } from "swr";
 
 import PageBackground from "components/layout/PageBackground";
+import PageHeader from "components/layout/PageHeader";
 
 import { currentUsername as readCurrentUsername, managedByEnv as readManagedByEnv } from "utils/auth/credentials-store";
 import { passwordAuthActive } from "utils/auth/mode";
@@ -233,8 +234,8 @@ export default function SecurityPage({
 
   return (
     <PageBackground initialSettings={initialSettings}>
-      <div className="flex flex-col m-4 sm:m-8 mt-16 mb-2">
-        <h1 className="text-theme-800 dark:text-theme-300 text-xl font-medium mb-4">Security</h1>
+      <div className="flex flex-col m-4 sm:m-8 mb-2">
+        <PageHeader title="Security" />
 
         <div className={`${CARD_CLASS} mb-4`}>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Account</h2>
