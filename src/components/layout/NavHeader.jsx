@@ -12,9 +12,14 @@ const NAV_ITEMS = [
   { href: "/security", label: "Security", icon: BiLockAlt },
 ];
 
-export default function NavHeader() {
+// `inline` renders the hamburger as a normal in-flow element (used by
+// PageHeader, sitting immediately left of a page's <h1> so the two never
+// overlap). The default is the dashboard's floating variant: absolutely
+// positioned in the top-left corner, outside the scroll container, so it
+// stays put as the dashboard scrolls and has no <h1> to collide with.
+export default function NavHeader({ inline = false }) {
   return (
-    <div className="absolute top-0 left-0 m-4 sm:m-8 z-20">
+    <div className={inline ? "relative z-20 shrink-0" : "absolute top-0 left-0 m-4 sm:m-8 z-20"}>
       <Menu as="div" className="relative inline-block text-left">
         <Menu.Button
           aria-label="Open menu"

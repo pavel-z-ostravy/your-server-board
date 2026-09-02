@@ -176,6 +176,18 @@ config/auth.json` (or delete just the `user` key) and restart.
   "Host" summary previously had no card background at all (just a bottom
   divider) despite sitting directly above VM/CT cards that do have one —
   given the same card treatment for visual consistency.
+- **Hamburger / page-title collision fix** — the nav hamburger used to be
+  rendered once globally in `_app.jsx`, absolutely positioned over the
+  top-left corner of every page, so each non-dashboard page had to reserve
+  clearance for it by hand (`mt-16` on the `<h1>` wrapper, duplicated across
+  `/widgets`, `/backups`, `/security`) and it still crowded or overlapped
+  the title at some widths. Now a shared `PageHeader` renders the hamburger
+  _inline_, immediately left of the `<h1>`, via a new `inline` variant on
+  `NavHeader` — the two can no longer overlap at any width and the `mt-16`
+  hand-tuning is gone. The dashboard has no `<h1>`, so it still renders
+  `NavHeader` itself (from `index.jsx`'s `Wrapper`, as a sibling of the
+  scroll container) in the original floating variant. Side effect: the
+  logged-out `/auth/signin` page no longer shows a dead hamburger menu.
 
 ## Not yet implemented — tracked as separate follow-up plans
 

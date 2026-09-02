@@ -72,4 +72,13 @@ describe("components/layout/NavHeader", () => {
     render(<NavHeader />);
     expect(screen.getByRole("link", { name: /security/i })).toHaveAttribute("href", "/security");
   });
+
+  it("floats in the top-left corner by default, but sits in flow when inline", () => {
+    const { container, rerender } = render(<NavHeader />);
+    expect(container.firstChild).toHaveClass("absolute");
+
+    rerender(<NavHeader inline />);
+    expect(container.firstChild).not.toHaveClass("absolute");
+    expect(container.firstChild).toHaveClass("relative");
+  });
 });
